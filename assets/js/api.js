@@ -3,7 +3,8 @@
 
 const API = {
     // IMPORTANT: Replace with your Apps Script Web App deployment URL
-    ENDPOINT: "https://script.google.com/macros/s/AKfycbwK0M2B7KT1xYfrzawLaRcwPOcbd5zLqPzNVD7inGJqUdQ-y-HyAFH96zZ2YglO9E2vtQ/exec",
+    ENDPOINT: "https://script.google.com/macros/s/AKfycbx7rOdjBAfXn9paeFc6H17tXsC_sMshK7oYDKtkHbwlO0fZauw6oZau2J3iCgTMchcd_g/exec",
+
     
     // Set this after deployment
     setEndpoint(url) {
