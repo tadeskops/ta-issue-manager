@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TA Issue Management - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen flex items-center justify-center px-4">
+        <div class="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+            <h1 class="text-3xl font-bold text-center text-blue-600 mb-2">TA Issue Management</h1>
+            <p class="text-center text-gray-600 mb-8">Workflow Platform for Builder Handover</p>
+            
+            <div id="loginContainer" class="space-y-4">
+                <div id="g_id_onload"
+                     data-client_id="YOUR_GOOGLE_CLIENT_ID"
+                     data-callback="handleCredentialResponse">
+                </div>
+                <div class="g_id_signin" data-type="standard"></div>
+                
+                <div id="errorMsg" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded"></div>
+            </div>
+            
+            <div id="loadingContainer" class="hidden text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p class="text-gray-600">Verifying access...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/api.js"></script>
+    <script>
+        function handleCredentialResponse(response) {
+            document.getElementById('loginContainer').classList.add('hidden');
+            document.getElementById('loadingContainer').classList.remove('hidden');
+            
+            // Decode JWT to get email
+            const base64Url = response.credential.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => 
+                '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+            ).join(''));
+            
+            const userData = JSON.parse(jsonPayload);
+            const email = userData.email;
+            
+            // Validate access
+            API.validateUserAccess(email)
+                .then(data => {
+                    if (!data.hasAccess) {
+                        showError("Unauthorized: Your email is not registered.");
+                        document.getElementById('loginContainer').classList.remove('hidden');
+                        document.getElementById('loadingContainer').classList.add('hidden');
+                        return;
+                    }
+                    
+                    sessionStorage.setItem('userEmail', email);
+                    sessionStorage.setItem('userRole', data.role);
+                    
+                    if (data.role === "COMMITTEE") {
+                        window.location.href = 'committee-dashboard.html';
+                    } else if (data.role === "BUILDER") {
+                        window.location.href = 'builder-dashboard.html';
+                    } else {
+                        showError("Unknown role.");
+                        document.getElementById('loginContainer').classList.remove('hidden');
+                        document.getElementById('loadingContainer').classList.add('hidden');
+                    }
+                })
+                .catch(error => {
+                    showError("Error: " + error.message);
+                    document.getElementById('loginContainer').classList.remove('hidden');
+                    document.getElementById('loadingContainer').classList.add('hidden');
+                });
+        }
+        
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+        
+        window.onload = function() {
+            if (google.accounts && google.accounts.id) {
+                google.accounts.id.renderButton(
+                    document.querySelector('.g_id_signin'),
+                    { theme: 'outline', size: 'large' }
+                );
+            }
+        };
+    </script>
+</body>
+</html>

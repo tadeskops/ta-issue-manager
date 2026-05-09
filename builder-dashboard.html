@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Builder Dashboard - TA Issues</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <nav class="bg-white shadow">
+        <div class="px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-blue-600">Builder Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <span class="text-gray-600" id="userEmail"></span>
+                <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto p-4">
+        <!-- Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-blue-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">Assigned to Me</p>
+                <p class="text-3xl font-bold text-blue-600" id="metricAssigned">0</p>
+            </div>
+            <div class="bg-orange-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">In Progress</p>
+                <p class="text-3xl font-bold text-orange-600" id="metricProgress">0</p>
+            </div>
+            <div class="bg-green-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">Work Completed</p>
+                <p class="text-3xl font-bold text-green-600" id="metricCompleted">0</p>
+            </div>
+            <div class="bg-red-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">SLA Breaches</p>
+                <p class="text-3xl font-bold text-red-600" id="metricSLA">0</p>
+            </div>
+        </div>
+
+        <!-- Issues Table -->
+        <div class="bg-white rounded shadow overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-200 border-b">
+                    <tr>
+                        <th class="px-4 py-2 text-left">Ticket ID</th>
+                        <th class="px-4 py-2 text-left">Resident</th>
+                        <th class="px-4 py-2 text-left">Tower/Flat</th>
+                        <th class="px-4 py-2 text-left">Category</th>
+                        <th class="px-4 py-2 text-left">Current Status</th>
+                        <th class="px-4 py-2 text-left">Days Open</th>
+                        <th class="px-4 py-2 text-left">SLA Days</th>
+                        <th class="px-4 py-2 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="issuesTableBody">
+                    <tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Update Status Modal -->
+    <div id="updateModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded shadow-lg p-6 w-full max-w-md">
+            <h3 class="text-lg font-bold mb-4">Update Issue Status</h3>
+            <p class="text-gray-600 mb-4">Ticket ID: <span id="modalTicketId"></span></p>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-2">New Status</label>
+                <select id="statusSelect" class="w-full border rounded p-2">
+                    <option>ASSIGNED</option>
+                    <option>IN_PROGRESS</option>
+                    <option>WORK_COMPLETED</option>
+                </select>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-2">Comment</label>
+                <textarea id="commentText" placeholder="Add update..." class="w-full border rounded p-2" rows="3" maxlength="500"></textarea>
+                <p class="text-xs text-gray-500 mt-1"><span id="charCount">0</span>/500</p>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-2">Assigned Vendor</label>
+                <input type="text" id="vendorText" placeholder="Vendor name..." class="w-full border rounded p-2">
+            </div>
+            
+            <div class="flex gap-4">
+                <button onclick="confirmUpdate()" class="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600">Update</button>
+                <button onclick="closeModal()" class="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white hidden"></div>
+
+    <script src="assets/js/api.js"></script>
+    <script>
+        let currentIssues = [];
+        let currentTicketId = null;
+
+        document.getElementById('userEmail').textContent = sessionStorage.getItem('userEmail');
+        document.getElementById('commentText').addEventListener('input', function() {
+            document.getElementById('charCount').textContent = this.value.length;
+        });
+
+        async function loadData() {
+            try {
+                const issues = await API.getLiveIssues('BUILDER');
+                currentIssues = issues;
+                renderTable();
+                updateMetrics();
+            } catch (error) {
+                showToast('Error loading data: ' + error.message, 'error');
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('issuesTableBody');
+            if (currentIssues.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No assigned issues</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = currentIssues.map(issue => {
+                const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
+                const breachedClass = issue.sla.breached ? 'bg-red-100' : '';
+                return `
+                    <tr class="border-b hover:bg-gray-50 ${breachedClass}">
+                        <td class="px-4 py-2 font-bold">${issue.ticketId}</td>
+                        <td class="px-4 py-2">${issue.resident.name}</td>
+                        <td class="px-4 py-2">${issue.location.tower}/${issue.location.flat}</td>
+                        <td class="px-4 py-2">${issue.issue.category}</td>
+                        <td class="px-4 py-2">
+                            <span class="px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${getStatusColor(issue.builder.status)}">
+                                ${issue.builder.status || 'ASSIGNED'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2">${daysOpen} days</td>
+                        <td class="px-4 py-2 ${issue.sla.breached ? 'text-red-600 font-bold' : ''}">${issue.sla.daysRemaining} days</td>
+                        <td class="px-4 py-2 text-center">
+                            <button onclick="openUpdateModal('${issue.ticketId}')" class="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">Update</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateMetrics() {
+            let assigned = 0, progress = 0, completed = 0, sla = 0;
+            
+            currentIssues.forEach(issue => {
+                if (issue.builder.status === 'ASSIGNED') assigned++;
+                if (issue.builder.status === 'IN_PROGRESS') progress++;
+                if (issue.builder.status === 'WORK_COMPLETED') completed++;
+                if (issue.sla.breached) sla++;
+            });
+            
+            document.getElementById('metricAssigned').textContent = assigned;
+            document.getElementById('metricProgress').textContent = progress;
+            document.getElementById('metricCompleted').textContent = completed;
+            document.getElementById('metricSLA').textContent = sla;
+        }
+
+        function getStatusColor(status) {
+            const colors = { ASSIGNED: '#3b82f6', IN_PROGRESS: '#f97316', WORK_COMPLETED: '#22c55e' };
+            return colors[status] || '#6b7280';
+        }
+
+        function openUpdateModal(ticketId) {
+            currentTicketId = ticketId;
+            const issue = currentIssues.find(i => i.ticketId === ticketId);
+            
+            document.getElementById('modalTicketId').textContent = ticketId;
+            document.getElementById('statusSelect').value = issue.builder.status || 'ASSIGNED';
+            document.getElementById('commentText').value = '';
+            document.getElementById('charCount').textContent = '0';
+            document.getElementById('vendorText').value = issue.builder.assignedVendor || '';
+            document.getElementById('updateModal').classList.remove('hidden');
+        }
+
+        async function confirmUpdate() {
+            const status = document.getElementById('statusSelect').value;
+            const comment = document.getElementById('commentText').value;
+            const vendor = document.getElementById('vendorText').value;
+            
+            try {
+                await API.updateBuilderStatus(currentTicketId, status, comment, vendor, null);
+                closeModal();
+                showToast('Status updated!', 'success');
+                loadData();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('updateModal').classList.add('hidden');
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        function logout() {
+            sessionStorage.clear();
+            window.location.href = 'index.html';
+        }
+
+        loadData();
+        setInterval(loadData, 60000);
+    </script>
+</body>
+</html>
