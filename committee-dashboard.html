@@ -9,16 +9,16 @@
 </head>
 <body class="bg-gray-50">
     <nav class="bg-white shadow">
-        <div class="px-4 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-blue-600">Committee Dashboard</h1>
+        <div class="px-3 md:px-4 py-3 md:py-4 flex flex-col md:flex-row md:justify-between md:items-center gap-2 md:gap-4">
+            <h1 class="text-xl md:text-2xl font-bold text-blue-600">Committee Dashboard</h1>
             <div class="flex items-center gap-4">
-                <span class="text-gray-600" id="userEmail"></span>
-                <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Logout</button>
+                <span class="text-gray-600 text-sm md:text-base truncate" id="userEmail"></span>
+                <button onclick="logout()" class="bg-red-500 text-white px-3 md:px-4 py-2 rounded hover:bg-red-600 text-sm md:text-base whitespace-nowrap">Logout</button>
             </div>
         </div>
     </nav>
 
-    <div class="max-w-7xl mx-auto p-4">
+    <div class="max-w-7xl mx-auto p-3 md:p-4">
         <!-- Metrics Cards -->
         <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div class="bg-green-100 p-4 rounded shadow">
@@ -44,47 +44,67 @@
         </div>
 
         <!-- Tabs -->
-        <div class="flex gap-2 mb-6 border-b">
-            <button onclick="switchTab('pending')" class="px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-bold">Pending Approval</button>
-            <button onclick="switchTab('active')" class="px-4 py-2 border-b-2 border-gray-200 text-gray-600 hover:text-blue-600">Active Issues</button>
+        <div class="flex flex-wrap gap-2 mb-6 border-b overflow-x-auto">
+            <button onclick="switchTab('reported')" class="px-3 md:px-4 py-2 border-b-2 border-gray-200 text-gray-600 hover:text-blue-600 text-sm md:text-base whitespace-nowrap">All Reported</button>
+            <button onclick="switchTab('pending')" class="px-3 md:px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-bold text-sm md:text-base whitespace-nowrap">Pending Approval</button>
+            <button onclick="switchTab('active')" class="px-3 md:px-4 py-2 border-b-2 border-gray-200 text-gray-600 hover:text-blue-600 text-sm md:text-base whitespace-nowrap">Active Issues</button>
+        </div>
+
+        <!-- Reported Issues Table -->
+        <div id="reportedTab" class="hidden bg-white rounded shadow overflow-x-auto">
+            <table class="w-full text-xs md:text-sm">
+                <thead class="bg-gray-200 border-b">
+                    <tr>
+                        <th class="px-2 md:px-4 py-2 text-left">Ticket ID</th>
+                        <th class="px-2 md:px-4 py-2 text-left hidden sm:table-cell">Resident</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Tower</th>
+                        <th class="px-2 md:px-4 py-2 text-left hidden md:table-cell">Category</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Severity</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Description</th>
+                    </tr>
+                </thead>
+                <tbody id="reportedTableBody">
+                    <tr><td colspan="6" class="px-2 md:px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- Pending Issues Table -->
-        <div id="pendingTab" class="bg-white rounded shadow overflow-hidden">
-            <table class="w-full text-sm">
+        <div id="pendingTab" class="bg-white rounded shadow overflow-x-auto">
+            <table class="w-full text-xs md:text-sm">
                 <thead class="bg-gray-200 border-b">
                     <tr>
-                        <th class="px-4 py-2 text-left">Ticket ID</th>
-                        <th class="px-4 py-2 text-left">Resident</th>
-                        <th class="px-4 py-2 text-left">Tower/Flat</th>
-                        <th class="px-4 py-2 text-left">Category</th>
-                        <th class="px-4 py-2 text-left">Severity</th>
-                        <th class="px-4 py-2 text-center">Actions</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Ticket ID</th>
+                        <th class="px-2 md:px-4 py-2 text-left hidden sm:table-cell">Resident</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Tower/Flat</th>
+                        <th class="px-2 md:px-4 py-2 text-left hidden md:table-cell">Category</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Severity</th>
+                        <th class="px-2 md:px-4 py-2 text-center text-sm">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="pendingTableBody">
-                    <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                    <tr><td colspan="6" class="px-2 md:px-4 py-8 text-center text-gray-500">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
 
         <!-- Active Issues Table -->
         <div id="activeTab" class="hidden bg-white rounded shadow overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-xs md:text-sm">
                 <thead class="bg-gray-200 border-b">
                     <tr>
-                        <th class="px-4 py-2 text-left">Ticket ID</th>
-                        <th class="px-4 py-2 text-left">Resident</th>
-                        <th class="px-4 py-2 text-left">Tower</th>
-                        <th class="px-4 py-2 text-left">Category</th>
-                        <th class="px-4 py-2 text-left">Status</th>
-                        <th class="px-4 py-2 text-left">Days Open</th>
-                        <th class="px-4 py-2 text-left">SLA Days</th>
-                        <th class="px-4 py-2 text-center">Actions</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Ticket ID</th>
+                        <th class="px-2 md:px-4 py-2 text-left hidden sm:table-cell">Resident</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Tower</th>
+                        <th class="px-2 md:px-4 py-2 text-left hidden md:table-cell">Category</th>
+                        <th class="px-2 md:px-4 py-2 text-left hidden lg:table-cell">Status</th>
+                        <th class="px-2 md:px-4 py-2 text-left">Days</th>
+                        <th class="px-2 md:px-4 py-2 text-left">SLA</th>
+                        <th class="px-2 md:px-4 py-2 text-center text-sm">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="activeTableBody">
-                    <tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                    <tr><td colspan="8" class="px-2 md:px-4 py-8 text-center text-gray-500">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -120,6 +140,11 @@
 
     <script src="assets/js/api.js"></script>
     <script>
+        // Check authentication before anything else
+        if (!sessionStorage.getItem('userEmail') || !sessionStorage.getItem('userRole')) {
+            window.location.href = 'index.html';
+        }
+
         let currentTicketId = null;
         let pendingIssues = [];
         let activeIssues = [];
@@ -127,18 +152,21 @@
         document.getElementById('userEmail').textContent = sessionStorage.getItem('userEmail');
 
         function switchTab(tab) {
+            document.getElementById('reportedTab').classList.toggle('hidden', tab !== 'reported');
             document.getElementById('pendingTab').classList.toggle('hidden', tab !== 'pending');
             document.getElementById('activeTab').classList.toggle('hidden', tab !== 'active');
         }
 
         async function loadData() {
             try {
+                // Load all data in parallel
                 const pending = await API.getPendingIssues();
                 const active = await API.getLiveIssues('ALL');
                 
                 pendingIssues = pending;
                 activeIssues = active;
                 
+                renderReported();
                 renderPending();
                 renderActive();
                 updateMetrics();
@@ -147,27 +175,51 @@
             }
         }
 
-        function renderPending() {
-            const tbody = document.getElementById('pendingTableBody');
+        function renderReported() {
+            // Reported issues are all pending issues (from form)
+            const tbody = document.getElementById('reportedTableBody');
             if (pendingIssues.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No pending issues</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="px-2 md:px-4 py-8 text-center text-gray-500">No reported issues</td></tr>';
                 return;
             }
             
             tbody.innerHTML = pendingIssues.map(issue => `
                 <tr class="border-b hover:bg-gray-50">
-                    <td class="px-4 py-2 font-bold">${issue.ticketId}</td>
-                    <td class="px-4 py-2">${issue.resident.name}</td>
-                    <td class="px-4 py-2">${issue.location.tower}/${issue.location.flat}</td>
-                    <td class="px-4 py-2">${issue.issue.category}</td>
-                    <td class="px-4 py-2">
+                    <td class="px-2 md:px-4 py-2 font-bold text-xs md:text-sm">${issue.ticketId}</td>
+                    <td class="px-2 md:px-4 py-2 hidden sm:table-cell text-xs md:text-sm">${issue.resident.name}</td>
+                    <td class="px-2 md:px-4 py-2 text-xs md:text-sm">${issue.location.tower}/${issue.location.flat}</td>
+                    <td class="px-2 md:px-4 py-2 hidden md:table-cell text-xs md:text-sm">${issue.issue.category}</td>
+                    <td class="px-2 md:px-4 py-2">
                         <span class="px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">
                             ${issue.issue.severity}
                         </span>
                     </td>
-                    <td class="px-4 py-2 text-center">
-                        <button onclick="openApproveModal('${issue.ticketId}')" class="bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600 mr-2">Approve</button>
-                        <button onclick="openRejectModal('${issue.ticketId}')" class="bg-red-500 text-white px-3 py-1 rounded text-xs hover:bg-red-600">Reject</button>
+                    <td class="px-2 md:px-4 py-2 text-xs">${(issue.issue.description || '').substring(0, 50)}...</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPending() {
+            const tbody = document.getElementById('pendingTableBody');
+            if (pendingIssues.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-2 md:px-4 py-8 text-center text-gray-500">No pending issues</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = pendingIssues.map(issue => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-2 md:px-4 py-2 font-bold text-xs md:text-sm">${issue.ticketId}</td>
+                    <td class="px-2 md:px-4 py-2 hidden sm:table-cell text-xs md:text-sm">${issue.resident.name}</td>
+                    <td class="px-2 md:px-4 py-2 text-xs md:text-sm">${issue.location.tower}/${issue.location.flat}</td>
+                    <td class="px-2 md:px-4 py-2 hidden md:table-cell text-xs md:text-sm">${issue.issue.category}</td>
+                    <td class="px-2 md:px-4 py-2">
+                        <span class="px-1 md:px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">
+                            ${issue.issue.severity}
+                        </span>
+                    </td>
+                    <td class="px-2 md:px-4 py-2 text-center">
+                        <button onclick="openApproveModal('${issue.ticketId}')" class="bg-green-500 text-white px-2 md:px-3 py-1 rounded text-xs hover:bg-green-600 mr-1 md:mr-2">✓</button>
+                        <button onclick="openRejectModal('${issue.ticketId}')" class="bg-red-500 text-white px-2 md:px-3 py-1 rounded text-xs hover:bg-red-600">✕</button>
                     </td>
                 </tr>
             `).join('');
@@ -176,7 +228,7 @@
         function renderActive() {
             const tbody = document.getElementById('activeTableBody');
             if (activeIssues.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No active issues</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="px-2 md:px-4 py-8 text-center text-gray-500">No active issues</td></tr>';
                 return;
             }
             
@@ -185,15 +237,15 @@
                 const breachedClass = issue.sla.breached ? 'bg-red-100' : '';
                 return `
                     <tr class="border-b hover:bg-gray-50 ${breachedClass}">
-                        <td class="px-4 py-2 font-bold">${issue.ticketId}</td>
-                        <td class="px-4 py-2">${issue.resident.name}</td>
-                        <td class="px-4 py-2">${issue.location.tower}</td>
-                        <td class="px-4 py-2">${issue.issue.category}</td>
-                        <td class="px-4 py-2"><span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">${issue.builder.status || 'ASSIGNED'}</span></td>
-                        <td class="px-4 py-2">${daysOpen} days</td>
-                        <td class="px-4 py-2 ${issue.sla.breached ? 'text-red-600 font-bold' : ''}">${issue.sla.daysRemaining} days</td>
-                        <td class="px-4 py-2 text-center">
-                            <button onclick="openCloseModal('${issue.ticketId}')" class="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">Close</button>
+                        <td class="px-2 md:px-4 py-2 font-bold text-xs md:text-sm">${issue.ticketId}</td>
+                        <td class="px-2 md:px-4 py-2 hidden sm:table-cell text-xs md:text-sm">${issue.resident.name}</td>
+                        <td class="px-2 md:px-4 py-2 text-xs md:text-sm">${issue.location.tower}</td>
+                        <td class="px-2 md:px-4 py-2 hidden md:table-cell text-xs md:text-sm">${issue.issue.category}</td>
+                        <td class="px-2 md:px-4 py-2 hidden lg:table-cell"><span class="px-1 md:px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">${issue.builder.status || 'ASSIGNED'}</span></td>
+                        <td class="px-2 md:px-4 py-2 text-xs md:text-sm">${daysOpen}d</td>
+                        <td class="px-2 md:px-4 py-2 ${issue.sla.breached ? 'text-red-600 font-bold' : ''} text-xs md:text-sm">${issue.sla.daysRemaining}d</td>
+                        <td class="px-2 md:px-4 py-2 text-center">
+                            <button onclick="openCloseModal('${issue.ticketId}')" class="bg-blue-500 text-white px-2 md:px-3 py-1 rounded text-xs hover:bg-blue-600">Close</button>
                         </td>
                     </tr>
                 `;
@@ -255,6 +307,24 @@
                 document.getElementById('rejectReason').value = '';
                 closeModal('rejectModal');
                 showToast('Issue rejected!', 'success');
+                loadData();
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        function openCloseModal(ticketId) {
+            currentTicketId = ticketId;
+            const reason = prompt('Enter closure reason:');
+            if (reason !== null) {
+                confirmClose(reason);
+            }
+        }
+
+        async function confirmClose(reason) {
+            try {
+                await API.closeIssue(currentTicketId, reason);
+                showToast('Issue closed!', 'success');
                 loadData();
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');
