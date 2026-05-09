@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TA Issue Management - Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-gray-50">
     <div class="min-h-screen flex items-center justify-center px-4">
@@ -14,12 +13,11 @@
             <p class="text-center text-gray-600 mb-8">Workflow Platform for Builder Handover</p>
             
             <div id="loginContainer" class="space-y-4">
-                <div id="g_id_onload"
-                     data-client_id="YOUR_GOOGLE_CLIENT_ID"
-                     data-callback="handleCredentialResponse">
-                </div>
-                <div class="g_id_signin" data-type="standard"></div>
-                
+                <input type="email" id="emailInput" placeholder="Enter your email" 
+                       class="w-full border rounded p-3 focus:outline-none focus:ring-2 focus:ring-blue-600">
+                <button onclick="handleLogin()" class="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 font-bold">
+                    Sign In
+                </button>
                 <div id="errorMsg" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded"></div>
             </div>
             
@@ -32,45 +30,50 @@
 
     <script src="assets/js/api.js"></script>
     <script>
-        function handleCredentialResponse(response) {
+        function handleLogin() {
+            const email = document.getElementById('emailInput').value.trim();
+            
+            if (!email) {
+                showError('Please enter an email');
+                return;
+            }
+            
+            // Validate email format
+            if (!email.includes('@')) {
+                showError('Please enter a valid email');
+                return;
+            }
+            
             document.getElementById('loginContainer').classList.add('hidden');
             document.getElementById('loadingContainer').classList.remove('hidden');
-            
-            // Decode JWT to get email
-            const base64Url = response.credential.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => 
-                '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-            ).join(''));
-            
-            const userData = JSON.parse(jsonPayload);
-            const email = userData.email;
             
             // Validate access
             API.validateUserAccess(email)
                 .then(data => {
                     if (!data.hasAccess) {
-                        showError("Unauthorized: Your email is not registered.");
+                        showError('Unauthorized: Your email is not registered.');
                         document.getElementById('loginContainer').classList.remove('hidden');
                         document.getElementById('loadingContainer').classList.add('hidden');
                         return;
                     }
                     
+                    // Store session
                     sessionStorage.setItem('userEmail', email);
                     sessionStorage.setItem('userRole', data.role);
                     
+                    // Redirect based on role
                     if (data.role === "COMMITTEE") {
                         window.location.href = 'committee-dashboard.html';
                     } else if (data.role === "BUILDER") {
                         window.location.href = 'builder-dashboard.html';
                     } else {
-                        showError("Unknown role.");
+                        showError('Unknown role.');
                         document.getElementById('loginContainer').classList.remove('hidden');
                         document.getElementById('loadingContainer').classList.add('hidden');
                     }
                 })
                 .catch(error => {
-                    showError("Error: " + error.message);
+                    showError('Error: ' + error.message);
                     document.getElementById('loginContainer').classList.remove('hidden');
                     document.getElementById('loadingContainer').classList.add('hidden');
                 });
@@ -82,14 +85,10 @@
             el.classList.remove('hidden');
         }
         
-        window.onload = function() {
-            if (google.accounts && google.accounts.id) {
-                google.accounts.id.renderButton(
-                    document.querySelector('.g_id_signin'),
-                    { theme: 'outline', size: 'large' }
-                );
-            }
-        };
+        // Allow Enter key to submit
+        document.getElementById('emailInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') handleLogin();
+        });
     </script>
 </body>
 </html>
