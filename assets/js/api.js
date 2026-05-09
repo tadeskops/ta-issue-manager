@@ -11,14 +11,16 @@ const API = {
     },
 
     async call(action, data = {}) {
-        const userEmail = sessionStorage.getItem('userEmail');
-        if (!userEmail) {
+        // validateUserAccess is allowed without prior authentication (for login page)
+        let userEmail = sessionStorage.getItem('userEmail');
+        
+        if (!userEmail && action !== 'validateUserAccess') {
             throw new Error('Not authenticated. Please log in.');
         }
 
         const payload = {
             action: action,
-            userEmail: userEmail,
+            userEmail: userEmail || data.userEmail || '',
             ...data
         };
 
