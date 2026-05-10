@@ -137,7 +137,7 @@
                         residentPhone: 'N/A',
                         dateReported: row['Timestamp'] || new Date().toISOString(),
                         description: row['Exact Location/Comment'] || 'No details provided',
-                        attachments: row['Upload Photos/Video'] ? [row['Upload Photos/Video']] : []
+                        attachments: parseAttachments(row['Upload Photos/Video'])
                     }));
                     displayIssues(allIssues);
                 } else {
@@ -309,15 +309,32 @@
                             <!-- Attachments -->
                             ${issue.attachments && issue.attachments.length > 0 ? `
                                 <div>
-                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent mb-2">
-                                        <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.attachments.length})
-                                    </p>
-                                    <div class="flex flex-wrap gap-2">
-                                        ${issue.attachments.map(att => `
-                                            <a href="${att}" target="_blank" class="px-3 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 hover:text-blue-100 text-xs font-semibold border border-blue-500/30 transition-all inline-flex items-center gap-2">
-                                                <i class="fas fa-file"></i>View File
-                                            </a>
-                                        `).join('')}
+                                    <div class="flex justify-between items-center mb-2">
+                                        <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">
+                                            <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.attachments.length})
+                                        </p>
+                                        <a href="https://drive.google.com/drive/folders/1oJDZT_bokWitmmgDlfulTBsjKlGdcGcPaqjJ92OEMgxQnwftLnZHWiq2NOLl7zIEq3lW53FZ?usp=sharing"
+                                           target="_blank" rel="noopener noreferrer"
+                                           class="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
+                                            <i class="fab fa-google-drive"></i> Open Drive folder
+                                        </a>
+                                    </div>
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                        ${issue.attachments.map(att => {
+                                            const fileId = extractDriveFileId(att);
+                                            const thumb = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w800` : att;
+                                            const viewer = fileId ? `https://drive.google.com/file/d/${fileId}/view` : att;
+                                            return `
+                                            <a href="${viewer}" target="_blank" rel="noopener noreferrer"
+                                               class="group relative block rounded-lg overflow-hidden border border-slate-600/40 hover:border-amber-400/60 bg-slate-800/40 transition-all aspect-square">
+                                                <img src="${thumb}" alt="Attachment" loading="lazy"
+                                                     class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                     onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\'w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs p-2 text-center\'><i class=\'fas fa-file-image text-2xl mb-2\'></i>Preview unavailable<span class=\'text-amber-400 mt-1\'>Click to open</span></div>'">
+                                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-2">
+                                                    <span class="text-white text-xs font-semibold"><i class="fas fa-external-link-alt mr-1"></i>View Full Size</span>
+                                                </div>
+                                            </a>`;
+                                        }).join('')}
                                     </div>
                                 </div>
                             ` : ''}
@@ -380,6 +397,21 @@
                 'LOW': 'bg-green-600/30 text-green-200 border border-green-500/50'
             };
             return badges[severity] || 'bg-slate-600/30 text-slate-200 border border-slate-500/50';
+        }
+
+        function parseAttachments(value) {
+            if (!value) return [];
+            // Google Forms file uploads are comma-separated URLs
+            return String(value).split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        function extractDriveFileId(url) {
+            if (!url) return null;
+            // Match formats: ?id=FILE_ID  or  /file/d/FILE_ID/  or  /d/FILE_ID
+            const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+                      url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+                      url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            return m ? m[1] : null;
         }
 
         function formatDate(dateStr) {
