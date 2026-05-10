@@ -20,30 +20,18 @@ const API = {
     },
 
     async call(action, data = {}) {
-        let userEmail = sessionStorage.getItem('userEmail');
-        
-        // If login is disabled, use default test user
-        if (!this.LOGIN_ENABLED) {
-            if (!userEmail) {
-                userEmail = this.DEFAULT_TEST_USER;
-                sessionStorage.setItem('userEmail', userEmail);
-            }
-        } else {
-            // Login is enabled - validateUserAccess is allowed without prior authentication (for login page)
-            if (!userEmail && action !== 'validateUserAccess') {
-                throw new Error('Not authenticated. Please log in.');
-            }
-        }
+        const userEmail = this.DEFAULT_TEST_USER;
 
         const payload = {
             action: action,
-            userEmail: userEmail || data.userEmail || '',
+            userEmail: userEmail,
             ...data
         };
 
         try {
             const response = await fetch(this.ENDPOINT, {
                 method: 'POST',
+                mode: 'cors',
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -55,7 +43,7 @@ const API = {
             }
 
             const result = await response.json();
-            
+
             if (!result.success) {
                 throw new Error(result.error || 'Unknown API error');
             }
@@ -63,7 +51,12 @@ const API = {
             return result.data;
 
         } catch (error) {
-            console.error('API Error:', error);
+            console.error('API Error:', {
+                action,
+                payload,
+                error
+            });
+
             throw error;
         }
     },
