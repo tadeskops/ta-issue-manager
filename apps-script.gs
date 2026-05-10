@@ -29,45 +29,71 @@ const ALLOWED_STATUSES = [
 ];
 // ===== END CONFIG =====
 
-// Get Spreadsheet
+// Get Spreadsheet with error handling
 function getSpreadsheet() {
-    return SpreadsheetApp.openById(SHEET_ID);
+    try {
+        return SpreadsheetApp.openById(SHEET_ID);
+    } catch (error) {
+        Logger.log("Error opening spreadsheet: " + error.toString());
+        throw new Error("Cannot access spreadsheet with ID: " + SHEET_ID);
+    }
 }
 
+// Get Sheet with enhanced error handling
 function getSheet(sheetName) {
-    return getSpreadsheet().getSheetByName(sheetName);
+    try {
+        const ss = getSpreadsheet();
+        const sheet = ss.getSheetByName(sheetName);
+        if (!sheet) {
+            const allSheets = ss.getSheets().map(s => s.getName());
+            throw new Error(`Sheet "${sheetName}" not found. Available sheets: ${allSheets.join(", ")}`);
+        }
+        return sheet;
+    } catch (error) {
+        Logger.log("Error getting sheet: " + error.toString());
+        throw error;
+    }
 }
 
 // Generate Ticket ID
 function generateTicketID() {
-    const ss = getSpreadsheet();
-    const liveSheet = ss.getSheetByName(SHEETS.LIVE_ISSUES);
-    const closedSheet = ss.getSheetByName(SHEETS.CLOSED_ISSUES);
-    
-    let maxNum = 0;
-    
-    // Get max from LIVE_ISSUES
-    const liveData = liveSheet.getDataRange().getValues();
-    for (let i = 1; i < liveData.length; i++) {
-        const ticketId = liveData[i][0];
-        if (ticketId && ticketId.toString().startsWith("TA-")) {
-            const num = parseInt(ticketId.toString().substring(3));
-            if (num > maxNum) maxNum = num;
+    try {
+        const ss = getSpreadsheet();
+        const liveSheet = ss.getSheetByName(SHEETS.LIVE_ISSUES);
+        const closedSheet = ss.getSheetByName(SHEETS.CLOSED_ISSUES);
+        
+        let maxNum = 0;
+        
+        // Get max from LIVE_ISSUES
+        if (liveSheet) {
+            const liveData = liveSheet.getDataRange().getValues();
+            for (let i = 1; i < liveData.length; i++) {
+                const ticketId = liveData[i][0];
+                if (ticketId && ticketId.toString().startsWith("TA-")) {
+                    const num = parseInt(ticketId.toString().substring(3));
+                    if (num > maxNum) maxNum = num;
+                }
+            }
         }
-    }
-    
-    // Get max from CLOSED_ISSUES
-    const closedData = closedSheet.getDataRange().getValues();
-    for (let i = 1; i < closedData.length; i++) {
-        const ticketId = closedData[i][0];
-        if (ticketId && ticketId.toString().startsWith("TA-")) {
-            const num = parseInt(ticketId.toString().substring(3));
-            if (num > maxNum) maxNum = num;
+        
+        // Get max from CLOSED_ISSUES
+        if (closedSheet) {
+            const closedData = closedSheet.getDataRange().getValues();
+            for (let i = 1; i < closedData.length; i++) {
+                const ticketId = closedData[i][0];
+                if (ticketId && ticketId.toString().startsWith("TA-")) {
+                    const num = parseInt(ticketId.toString().substring(3));
+                    if (num > maxNum) maxNum = num;
+                }
+            }
         }
+        
+        const nextNum = String(maxNum + 1).padStart(4, '0');
+        return `TA-${nextNum}`;
+    } catch (error) {
+        Logger.log("Error generating ticket ID: " + error.toString());
+        throw error;
     }
-    
-    const nextNum = String(maxNum + 1).padStart(4, '0');
-    return `TA-${nextNum}`;
 }
 
 // Calculate SLA Date
@@ -111,6 +137,44 @@ function onFormSubmit(e) {
         
     } catch (error) {
         Logger.log("Form submission error: " + error.toString());
+    }
+}
+
+// Get Form Responses (Direct from Google Sheet)
+function getFormResponses() {
+    try {
+        const sheet = getSheet(SHEETS.FORM_RESPONSES);
+        const data = sheet.getDataRange().getValues();
+        const responses = [];
+        
+        // Get header row to map column names
+        const headers = data[0];
+        
+        // Process each row (skip header)
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            const response = {};
+            
+            // Map each column to header name
+            for (let j = 0; j < headers.length; j++) {
+                response[headers[j]] = row[j];
+            }
+            
+            responses.push(response);
+        }
+        
+        return {
+            success: true,
+            responses: responses,
+            count: responses.length,
+            error: null
+        };
+    } catch (error) {
+        return {
+            success: false,
+            responses: null,
+            error: "Error fetching form responses: " + error.toString()
+        };
     }
 }
 
@@ -193,14 +257,19 @@ function syncFormResponses() {
 
 // Validate User Access
 function validateUserAccess(email) {
-    // BYPASS AUTHENTICATION FOR NOW - Allow all emails
-    if (COMMITTEE_EMAILS.includes(email)) {
-        return { email: email, role: "COMMITTEE", hasAccess: true, accessLevel: "FULL" };
-    } else if (email === BUILDER_EMAIL) {
-        return { email: email, role: "BUILDER", hasAccess: true, accessLevel: "LIMITED" };
-    } else {
-        // Temporarily allow all other emails as COMMITTEE for testing
-        return { email: email, role: "COMMITTEE", hasAccess: true, accessLevel: "FULL" };
+    try {
+        // BYPASS AUTHENTICATION FOR NOW - Allow all emails
+        if (COMMITTEE_EMAILS.includes(email)) {
+            return { email: email, role: "COMMITTEE", hasAccess: true, accessLevel: "FULL" };
+        } else if (email === BUILDER_EMAIL) {
+            return { email: email, role: "BUILDER", hasAccess: true, accessLevel: "LIMITED" };
+        } else {
+            // Temporarily allow all other emails as COMMITTEE for testing
+            return { email: email, role: "COMMITTEE", hasAccess: true, accessLevel: "FULL" };
+        }
+    } catch (error) {
+        Logger.log("Error validating user access: " + error.toString());
+        throw error;
     }
 }
 
@@ -327,7 +396,7 @@ function getLiveIssues(filterOption) {
             const row = data[i];
             
             if (filterOption === "CRITICAL" && row[9] !== "Critical") continue;
-            if (filterOption === "AGING" && (new Date() - new Date(row[19])) < 7 * 24 * 60 * 60 * 1000) continue;
+            if (filterOption === "AGING" && (new Date() - new Date(row[20])) < 7 * 24 * 60 * 60 * 1000) continue;
             
             const slaDate = new Date(row[18]);
             const today = new Date();
@@ -339,6 +408,7 @@ function getLiveIssues(filterOption) {
                 dateReported: row[1],
                 resident: {
                     name: row[4],
+                    email: row[3],
                     phone: row[6]
                 },
                 location: {
@@ -591,7 +661,10 @@ function doPost(e) {
         }
         
         const action = payload.action;
-        const userEmail = payload.userEmail;
+        const userEmail = payload.userEmail || "anonymous@test.com";
+        
+        // Log request for debugging
+        Logger.log(`API Request: action=${action}, user=${userEmail}`);
         
         const userRole = validateUserAccess(userEmail);
         if (!userRole || !userRole.hasAccess) {
@@ -606,6 +679,9 @@ function doPost(e) {
         
         let result;
         switch(action) {
+            case "getFormResponses":
+                result = getFormResponses();
+                break;
             case "getPendingIssues":
                 result = getPendingIssues();
                 break;
@@ -637,7 +713,7 @@ function doPost(e) {
                 result = syncFormResponses();
                 break;
             default:
-                result = { success: false, error: "Unknown action" };
+                result = { success: false, error: "Unknown action: " + action };
         }
         
         return HtmlService.createHtmlOutput(JSON.stringify(result))
@@ -646,6 +722,7 @@ function doPost(e) {
             .addHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
         
     } catch (error) {
+        Logger.log("API Error: " + error.toString());
         return HtmlService.createHtmlOutput(JSON.stringify({
             success: false,
             error: error.toString()
