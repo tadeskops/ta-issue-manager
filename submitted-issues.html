@@ -77,13 +77,56 @@
         </div>
 
         <!-- Filter Section -->
-        <div class="premium-card rounded-xl p-4 mb-6 border border-slate-700">
-            <div class="flex gap-3">
-                <input type="text" id="searchInput" placeholder="Search by ticket ID, resident name, or category..." 
-                       class="flex-1 bg-slate-700/30 border border-slate-600/50 rounded-lg px-4 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur text-sm"
+        <div class="premium-card rounded-lg px-3 py-2 mb-6 border border-slate-700">
+            <div class="flex flex-wrap items-center gap-2">
+                <input type="text" id="searchInput" placeholder="Search…"
+                       class="flex-1 min-w-[160px] bg-slate-700/30 border border-slate-600/50 rounded-md px-2.5 py-1 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs"
                        onkeyup="filterIssues()">
-                <button onclick="loadAllIssues()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30">
-                    <i class="fas fa-sync-alt mr-2"></i>Refresh
+                <select id="sortSelect" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <optgroup label="Sort">
+                        <option value="date_desc">Newest first</option>
+                        <option value="date_asc">Oldest first</option>
+                        <option value="sev_desc">Sev: Critical → Low</option>
+                        <option value="sev_asc">Sev: Low → Critical</option>
+                        <option value="cat_asc">Cat: A → Z</option>
+                        <option value="cat_desc">Cat: Z → A</option>
+                        <option value="tower_asc">Tower: A → Common</option>
+                        <option value="tower_desc">Tower: Common → A</option>
+                    </optgroup>
+                </select>
+                <select id="categoryFilter" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <option value="">All Categories</option>
+                    <option value="Civil">Civil</option>
+                    <option value="Plumbing">Plumbing</option>
+                    <option value="Electrical">Electrical</option>
+                    <option value="Fire Safety">Fire Safety</option>
+                    <option value="Lift">Lift</option>
+                    <option value="Security">Security</option>
+                    <option value="Amenities">Amenities</option>
+                    <option value="Common Area">Common Area</option>
+                    <option value="Documentation">Documentation</option>
+                </select>
+                <select id="towerFilter" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <option value="">All Towers</option>
+                    <option value="Tower A">Tower A</option>
+                    <option value="Tower B">Tower B</option>
+                    <option value="Tower C">Tower C</option>
+                    <option value="Common Area">Common Area</option>
+                </select>
+                <select id="severityFilter" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <option value="">All Severities</option>
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                </select>
+                <button onclick="loadAllIssues()" title="Refresh"
+                        class="px-2.5 py-1 rounded-md bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-semibold transition-all border border-blue-400/30">
+                    <i class="fas fa-sync-alt"></i>
                 </button>
             </div>
         </div>
@@ -132,6 +175,7 @@
                         flatNumber: row['Flat Number'] || 'N/A',
                         towerFlat: `${row['Tower'] || 'N/A'} / Flat ${row['Flat Number'] || 'N/A'}`,
                         category: row['Category'] || 'N/A',
+                        subCategory: row['Sub-Category'] || '',
                         severity: row['Severity'] || 'MEDIUM',
                         status: 'Reported',
                         residentPhone: 'N/A',
@@ -139,7 +183,7 @@
                         description: row['Exact Location/Comment'] || 'No details provided',
                         attachments: parseAttachments(row['Upload Photos/Video'])
                     }));
-                    displayIssues(allIssues);
+                    displayIssues(sortIssues(allIssues, document.getElementById('sortSelect')?.value || 'date_desc'));
                 } else {
                     // Show error - no mock data fallback
                     document.querySelector('main .mt-6 .space-y-4').innerHTML = `
@@ -282,15 +326,13 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Category</p>
-                                    <p class="text-slate-200 font-semibold">${issue.category || 'N/A'}</p>
+                                    <p class="text-slate-200 font-semibold">
+                                        ${issue.category || 'N/A'}${issue.subCategory ? ` <span class="text-amber-400">→</span> <span class="text-slate-300 font-normal">${issue.subCategory}</span>` : ''}
+                                    </p>
                                 </div>
                                 <div>
                                     <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Status</p>
                                     <p class="text-slate-200 font-semibold">${issue.status || 'Reported'}</p>
-                                </div>
-                                <div>
-                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Phone</p>
-                                    <p class="text-slate-200 font-semibold">${issue.residentPhone || 'N/A'}</p>
                                 </div>
                                 <div>
                                     <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Date Reported</p>
@@ -346,13 +388,55 @@
 
         function filterIssues() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            
+            const sortKey = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'date_desc';
+            const catFilter = document.getElementById('categoryFilter') ? document.getElementById('categoryFilter').value : '';
+            const towerFilter = document.getElementById('towerFilter') ? document.getElementById('towerFilter').value : '';
+            const sevFilter = document.getElementById('severityFilter') ? document.getElementById('severityFilter').value : '';
+
             const filtered = allIssues.filter(issue => {
-                const searchStr = `${issue.ticketID} ${issue.residentName} ${issue.category} ${issue.issueTitle} ${issue.towerFlat}`.toLowerCase();
-                return searchStr.includes(searchTerm);
+                const searchStr = `${issue.ticketID} ${issue.residentName} ${issue.category} ${issue.subCategory} ${issue.issueTitle} ${issue.towerFlat}`.toLowerCase();
+                if (!searchStr.includes(searchTerm)) return false;
+                if (catFilter && String(issue.category).trim().toLowerCase() !== catFilter.toLowerCase()) return false;
+                if (towerFilter && String(issue.tower).trim().toLowerCase() !== towerFilter.toLowerCase()) return false;
+                if (sevFilter && String(issue.severity).trim().toUpperCase() !== sevFilter.toUpperCase()) return false;
+                return true;
             });
 
-            displayIssues(filtered);
+            displayIssues(sortIssues(filtered, sortKey));
+        }
+
+        function sortIssues(issues, key) {
+            // Canonical orderings (matching the Google Form dropdowns)
+            const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+            const categoryOrder = ['Civil', 'Plumbing', 'Electrical', 'Fire Safety', 'Lift', 'Security', 'Amenities', 'Common Area', 'Documentation'];
+            const towerOrder    = ['Tower A', 'Tower B', 'Tower C', 'Common Area'];
+
+            const rankIn = (list, value, caseInsensitive = false) => {
+                if (!value) return 999;
+                const v = caseInsensitive ? String(value).toUpperCase() : String(value).trim();
+                const idx = caseInsensitive
+                    ? list.indexOf(v)
+                    : list.findIndex(x => x.toLowerCase() === v.toLowerCase());
+                return idx === -1 ? 999 : idx;  // unknown values sort to the end
+            };
+            const sevRank   = i => rankIn(severityOrder, i.severity, true);
+            const catRank   = i => rankIn(categoryOrder, i.category);
+            const towerRank = i => rankIn(towerOrder, i.tower);
+            const dateOf    = i => { const d = new Date(i.dateReported); return isNaN(d) ? 0 : d.getTime(); };
+
+            const arr = [...issues];
+            switch (key) {
+                case 'date_asc':   arr.sort((a,b) => dateOf(a) - dateOf(b)); break;
+                case 'sev_desc':   arr.sort((a,b) => sevRank(a)   - sevRank(b)   || dateOf(b) - dateOf(a)); break;
+                case 'sev_asc':    arr.sort((a,b) => sevRank(b)   - sevRank(a)   || dateOf(b) - dateOf(a)); break;
+                case 'cat_asc':    arr.sort((a,b) => catRank(a)   - catRank(b)   || dateOf(b) - dateOf(a)); break;
+                case 'cat_desc':   arr.sort((a,b) => catRank(b)   - catRank(a)   || dateOf(b) - dateOf(a)); break;
+                case 'tower_asc':  arr.sort((a,b) => towerRank(a) - towerRank(b) || dateOf(b) - dateOf(a)); break;
+                case 'tower_desc': arr.sort((a,b) => towerRank(b) - towerRank(a) || dateOf(b) - dateOf(a)); break;
+                case 'date_desc':
+                default:           arr.sort((a,b) => dateOf(b) - dateOf(a));
+            }
+            return arr;
         }
 
         function toggleIssue(index) {
