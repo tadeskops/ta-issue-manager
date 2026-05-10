@@ -101,11 +101,13 @@
                 // Fetch from Google Sheet via API endpoint
                 const response = await fetch(API.ENDPOINT, {
                     method: 'POST',
+                    mode: 'cors',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'text/plain;charset=utf-8'
                     },
                     body: JSON.stringify({
-                        action: 'getFormResponses'
+                        action: 'getFormResponses',
+                        userEmail: 'ta.deskops@gmail.com'
                     })
                 });
 
