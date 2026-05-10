@@ -3,7 +3,7 @@
 
 const API = {
     // IMPORTANT: Replace with your Apps Script Web App deployment URL
-    ENDPOINT: "https://script.google.com/macros/s/AKfycbyNgktSMgxtw-DReo3FoX14IsfId5EZiry6t4wrqtVco1ereWnhwO0FMvNbpXaBhr8lSQ/exec",
+    ENDPOINT: "https://script.google.com/macros/s/AKfycby3Og7K6JumP6jNWvPxim95Xm3T5A3Q3W6g9QOw3KXaxKza_elyUqgwWj6iZPJlb8PTeQ/exec",
     
     // Configuration
     LOGIN_ENABLED: false, // Set to true to enable login page, false to bypass and use default user
