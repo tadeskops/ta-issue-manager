@@ -130,13 +130,24 @@
                     }));
                     displayIssues(allIssues);
                 } else {
-                    // Use mock data if API fails
-                    useMockData();
+                    // Show error - no mock data fallback
+                    document.querySelector('main .mt-6 .space-y-4').innerHTML = `
+                        <div class="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400">
+                            <p>⚠️ API Error: ${data.error || 'Failed to load live data'}</p>
+                            <p class="text-xs mt-2">Check console for details. Endpoint: ${API.ENDPOINT}</p>
+                        </div>
+                    `;
                 }
             } catch (error) {
                 console.error('Error loading issues:', error);
-                // Use mock data if API fails
-                useMockData();
+                // Show error - no mock data fallback
+                document.querySelector('main .mt-6 .space-y-4').innerHTML = `
+                    <div class="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400">
+                        <p>❌ Network Error: ${error.message}</p>
+                        <p class="text-xs mt-2">Endpoint: ${API.ENDPOINT}</p>
+                        <p class="text-xs mt-1">Check browser console (F12) → Network tab for details</p>
+                    </div>
+                `;
             }
         }
 
