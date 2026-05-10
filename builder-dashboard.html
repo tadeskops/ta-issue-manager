@@ -3,207 +3,436 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Builder Dashboard - TA Issues</title>
+    <title>Builder Dashboard - The Address</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Premium branding colors */
+        :root {
+            --primary: #1a1f2e;
+            --accent: #d4af37;
+            --light: #f5f7fa;
+            --border: #2a3142;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+            color: #ffffff;
+        }
+        
+        .premium-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .gold-accent {
+            color: #d4af37;
+        }
+        
+        .gold-border {
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+    </style>
 </head>
-<body class="bg-gray-50">
-    <nav class="bg-white shadow">
-        <div class="px-4 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-blue-600">Builder Dashboard</h1>
+<body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+    <!-- Navigation -->
+    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center gap-4">
-                <span class="text-gray-600" id="userEmail"></span>
-                <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Logout</button>
+                <!-- Logo -->
+                <div class="flex items-center gap-4">
+                    <!-- Logo Only Version (Compact) -->
+                    <img src="assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <!-- Alternative: Logo with Text (Uncomment to use) -->
+                    <!-- <div><img src="assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
+                    <div>
+                        <h1 class="text-xl font-bold gold-accent">The Address</h1>
+                        <p class="text-xs text-slate-400">Builder Task Management</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <p class="text-xs text-slate-400 uppercase tracking-widest">Builder</p>
+                    <p class="font-semibold text-slate-100" id="userEmail">Loading...</p>
+                </div>
+                <button onclick="logout()" class="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white font-semibold transition-colors text-sm border border-red-500/30">
+                    <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                </button>
             </div>
         </div>
     </nav>
 
-    <div class="max-w-7xl mx-auto p-4">
-        <!-- Metrics -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-blue-100 p-4 rounded shadow">
-                <p class="text-gray-600 text-sm">Assigned to Me</p>
-                <p class="text-3xl font-bold text-blue-600" id="metricAssigned">0</p>
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- KPI Cards Row - Premium Design -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <!-- Assigned to Me Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Assigned to Me</p>
+                    <i class="fas fa-inbox text-blue-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiAssigned">0</p>
+                <p class="text-xs text-slate-500">Ready to start work</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-blue-500 to-transparent rounded-full mt-4"></div>
             </div>
-            <div class="bg-orange-100 p-4 rounded shadow">
-                <p class="text-gray-600 text-sm">In Progress</p>
-                <p class="text-3xl font-bold text-orange-600" id="metricProgress">0</p>
+            
+            <!-- In Progress Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">In Progress</p>
+                    <i class="fas fa-spinner text-orange-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiInProgress">0</p>
+                <p class="text-xs text-slate-500">Currently working on</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-orange-500 to-transparent rounded-full mt-4"></div>
             </div>
-            <div class="bg-green-100 p-4 rounded shadow">
-                <p class="text-gray-600 text-sm">Work Completed</p>
-                <p class="text-3xl font-bold text-green-600" id="metricCompleted">0</p>
+            
+            <!-- Work Completed Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Work Completed</p>
+                    <i class="fas fa-check-circle text-emerald-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiCompleted">0</p>
+                <p class="text-xs text-slate-500">Pending committee approval</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-emerald-500 to-transparent rounded-full mt-4"></div>
             </div>
-            <div class="bg-red-100 p-4 rounded shadow">
-                <p class="text-gray-600 text-sm">SLA Breaches</p>
-                <p class="text-3xl font-bold text-red-600" id="metricSLA">0</p>
+            
+            <!-- SLA Breaches Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">SLA Breaches</p>
+                    <i class="fas fa-exclamation-triangle text-red-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiBreaches">0</p>
+                <p class="text-xs text-slate-500">Overdue tasks</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-red-500 to-transparent rounded-full mt-4"></div>
             </div>
         </div>
 
         <!-- Issues Table -->
-        <div class="bg-white rounded shadow overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="bg-gray-200 border-b">
-                    <tr>
-                        <th class="px-4 py-2 text-left">Ticket ID</th>
-                        <th class="px-4 py-2 text-left">Resident</th>
-                        <th class="px-4 py-2 text-left">Tower/Flat</th>
-                        <th class="px-4 py-2 text-left">Category</th>
-                        <th class="px-4 py-2 text-left">Current Status</th>
-                        <th class="px-4 py-2 text-left">Days Open</th>
-                        <th class="px-4 py-2 text-left">SLA Days</th>
-                        <th class="px-4 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="issuesTableBody">
-                    <tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
-                </tbody>
-            </table>
+        <div class="premium-card rounded-xl overflow-hidden border border-slate-700">
+            <div class="p-6 border-b gold-border flex justify-between items-center">
+                <h2 class="text-xl font-bold text-slate-100 gold-accent"><i class="fas fa-tasks mr-3"></i>My Tasks</h2>
+                <div class="flex gap-2">
+                    <select id="statusFilter" onchange="filterByStatus(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                        <option value="">All Issues</option>
+                        <option value="ASSIGNED">Assigned</option>
+                        <option value="IN_PROGRESS">In Progress</option>
+                        <option value="WORK_COMPLETED">Work Completed</option>
+                    </select>
+                    <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-800/30">
+                        <tr class="border-b gold-border">
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Ticket ID</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Tower/Flat</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Severity</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Current Status</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest text-center">Days Open</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest text-center">SLA Days</th>
+                            <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="issuesTableBody">
+                        <tr><td colspan="9" class="p-4 text-center text-slate-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
-    <!-- Update Status Modal -->
-    <div id="updateModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded shadow-lg p-6 w-full max-w-md">
-            <h3 class="text-lg font-bold mb-4">Update Issue Status</h3>
-            <p class="text-gray-600 mb-4">Ticket ID: <span id="modalTicketId"></span></p>
+    <!-- Modal: Update Issue Status -->
+    <div id="statusModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4 text-orange-600">📝 Update Issue Status</h2>
             
+            <div id="statusModalDetails" class="bg-gray-50 p-4 rounded mb-4 space-y-2 text-sm">
+                <!-- Details populated by JS -->
+            </div>
+
             <div class="mb-4">
-                <label class="block text-sm font-bold mb-2">New Status</label>
-                <select id="statusSelect" class="w-full border rounded p-2">
-                    <option>ASSIGNED</option>
-                    <option>IN_PROGRESS</option>
-                    <option>WORK_COMPLETED</option>
+                <label class="block text-sm font-bold mb-2">Current Status</label>
+                <div id="currentStatusDisplay" class="bg-blue-100 p-3 rounded text-blue-700 font-bold"></div>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-bold mb-2">Update Status To</label>
+                <select id="newStatus" class="w-full border rounded p-3 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                    <option value="">-- Select New Status --</option>
+                    <option value="IN_PROGRESS">🟡 IN PROGRESS</option>
+                    <option value="WORK_COMPLETED">✅ WORK COMPLETED</option>
                 </select>
             </div>
-            
+
             <div class="mb-4">
-                <label class="block text-sm font-bold mb-2">Comment</label>
-                <textarea id="commentText" placeholder="Add update..." class="w-full border rounded p-2" rows="3" maxlength="500"></textarea>
-                <p class="text-xs text-gray-500 mt-1"><span id="charCount">0</span>/500</p>
+                <label class="block text-sm font-bold mb-2">Assigned Vendor (optional)</label>
+                <input type="text" id="vendorName" placeholder="Enter vendor name or contractor company" 
+                    class="w-full border rounded p-3 focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
-            
+
             <div class="mb-4">
-                <label class="block text-sm font-bold mb-2">Assigned Vendor</label>
-                <input type="text" id="vendorText" placeholder="Vendor name..." class="w-full border rounded p-2">
+                <label class="block text-sm font-bold mb-2">Work Comment / Update</label>
+                <textarea id="workComment" placeholder="Describe what has been done or needs to be done..." 
+                    class="w-full border rounded p-3 focus:outline-none focus:ring-2 focus:ring-orange-500" rows="4"></textarea>
+                <p class="text-xs text-gray-500 mt-2"><span id="charCount">0</span> / 500 characters</p>
             </div>
-            
+
             <div class="flex gap-4">
-                <button onclick="confirmUpdate()" class="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600">Update</button>
-                <button onclick="closeModal()" class="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">Cancel</button>
+                <button onclick="confirmStatusUpdate()" class="flex-1 bg-orange-500 text-white py-2 rounded hover:bg-orange-600 font-bold">
+                    Update Status
+                </button>
+                <button onclick="closeModal('statusModal')" class="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400 font-bold">
+                    Cancel
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Toast -->
-    <div id="toast" class="fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white hidden"></div>
+    <!-- Modal: View Issue Details -->
+    <div id="detailsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">📄 Issue Details</h2>
+            <div id="detailsContent" class="space-y-4">
+                <!-- Details populated by JS -->
+            </div>
+            <div class="mt-6">
+                <button onclick="closeModal('detailsModal')" class="w-full bg-gray-500 text-white py-2 rounded hover:bg-gray-600 font-bold">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded shadow-lg text-white font-bold hidden z-50"></div>
 
     <script src="assets/js/api.js"></script>
     <script>
-        let currentIssues = [];
+        // Initialize auth
+        if (!sessionStorage.getItem('userEmail') || !sessionStorage.getItem('userRole')) {
+            if (!API.LOGIN_ENABLED) {
+                sessionStorage.setItem('userEmail', 'vibhumaitreya@gmail.com');
+                sessionStorage.setItem('userRole', 'BUILDER');
+            } else {
+                window.location.href = 'index.html';
+            }
+        }
+
+        let allIssues = [];
         let currentTicketId = null;
 
         document.getElementById('userEmail').textContent = sessionStorage.getItem('userEmail');
-        document.getElementById('commentText').addEventListener('input', function() {
+
+        // Auto-update character count
+        document.getElementById('workComment').addEventListener('input', function() {
             document.getElementById('charCount').textContent = this.value.length;
         });
 
         async function loadData() {
             try {
                 const issues = await API.getLiveIssues('BUILDER');
-                currentIssues = issues;
-                renderTable();
-                updateMetrics();
+                allIssues = issues || [];
+                
+                renderIssuesTable();
+                updateKPIs();
+                showToast('Data refreshed!', 'success');
             } catch (error) {
-                showToast('Error loading data: ' + error.message, 'error');
+                showToast('✕ Error: ' + error.message, 'error');
             }
         }
 
-        function renderTable() {
+        function renderIssuesTable() {
             const tbody = document.getElementById('issuesTableBody');
-            if (currentIssues.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No assigned issues</td></tr>';
+            if (!allIssues || allIssues.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="border p-4 text-center text-gray-500">No issues assigned to you</td></tr>';
                 return;
             }
-            
-            tbody.innerHTML = currentIssues.map(issue => {
+
+            tbody.innerHTML = allIssues.map(issue => {
                 const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
-                const breachedClass = issue.sla.breached ? 'bg-red-100' : '';
+                const statusColor = getStatusColor(issue.builder.status);
+                const rowClass = issue.sla.breached ? 'bg-red-50' : '';
+                
                 return `
-                    <tr class="border-b hover:bg-gray-50 ${breachedClass}">
-                        <td class="px-4 py-2 font-bold">${issue.ticketId}</td>
-                        <td class="px-4 py-2">${issue.resident.name}</td>
-                        <td class="px-4 py-2">${issue.location.tower}/${issue.location.flat}</td>
-                        <td class="px-4 py-2">${issue.issue.category}</td>
-                        <td class="px-4 py-2">
-                            <span class="px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${getStatusColor(issue.builder.status)}">
+                    <tr class="hover:bg-gray-50 border-b ${rowClass}">
+                        <td class="border p-3 font-bold text-blue-600 cursor-pointer hover:underline" onclick="openDetailsModal('${issue.ticketId}')">
+                            ${issue.ticketId}
+                        </td>
+                        <td class="border p-3 hidden sm:table-cell text-sm">${issue.resident.name}</td>
+                        <td class="border p-3 text-sm">${issue.location.tower}/${issue.location.flat}</td>
+                        <td class="border p-3 hidden md:table-cell text-sm">${issue.issue.category}</td>
+                        <td class="border p-3 text-sm">
+                            <span class="px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">
+                                ${issue.issue.severity}
+                            </span>
+                        </td>
+                        <td class="border p-3 text-sm">
+                            <span class="px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${statusColor}">
                                 ${issue.builder.status || 'ASSIGNED'}
                             </span>
                         </td>
-                        <td class="px-4 py-2">${daysOpen} days</td>
-                        <td class="px-4 py-2 ${issue.sla.breached ? 'text-red-600 font-bold' : ''}">${issue.sla.daysRemaining} days</td>
-                        <td class="px-4 py-2 text-center">
-                            <button onclick="openUpdateModal('${issue.ticketId}')" class="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600">Update</button>
+                        <td class="border p-3 text-center text-sm">${daysOpen}</td>
+                        <td class="border p-3 text-center text-sm ${issue.sla.breached ? 'font-bold text-red-600' : 'text-green-600'}">
+                            ${issue.sla.daysRemaining}
+                        </td>
+                        <td class="border p-3 text-center">
+                            <button onclick="openStatusModal('${issue.ticketId}')" class="bg-orange-500 text-white px-3 py-1 rounded text-xs hover:bg-orange-600">
+                                Update
+                            </button>
                         </td>
                     </tr>
                 `;
             }).join('');
         }
 
-        function updateMetrics() {
-            let assigned = 0, progress = 0, completed = 0, sla = 0;
-            
-            currentIssues.forEach(issue => {
-                if (issue.builder.status === 'ASSIGNED') assigned++;
-                if (issue.builder.status === 'IN_PROGRESS') progress++;
-                if (issue.builder.status === 'WORK_COMPLETED') completed++;
-                if (issue.sla.breached) sla++;
-            });
-            
-            document.getElementById('metricAssigned').textContent = assigned;
-            document.getElementById('metricProgress').textContent = progress;
-            document.getElementById('metricCompleted').textContent = completed;
-            document.getElementById('metricSLA').textContent = sla;
+        function updateKPIs() {
+            const assigned = allIssues.filter(i => i.builder.status === 'ASSIGNED').length;
+            const inProgress = allIssues.filter(i => i.builder.status === 'IN_PROGRESS').length;
+            const completed = allIssues.filter(i => i.builder.status === 'WORK_COMPLETED').length;
+            const breaches = allIssues.filter(i => i.sla.breached).length;
+
+            document.getElementById('kpiAssigned').textContent = assigned;
+            document.getElementById('kpiInProgress').textContent = inProgress;
+            document.getElementById('kpiCompleted').textContent = completed;
+            document.getElementById('kpiBreaches').textContent = breaches;
+        }
+
+        function getSeverityColor(severity) {
+            const colors = {
+                'Critical': '#dc2626',
+                'High': '#ea580c',
+                'Medium': '#eab308',
+                'Low': '#6b7280'
+            };
+            return colors[severity] || '#6b7280';
         }
 
         function getStatusColor(status) {
-            const colors = { ASSIGNED: '#3b82f6', IN_PROGRESS: '#f97316', WORK_COMPLETED: '#22c55e' };
+            const colors = {
+                'ASSIGNED': '#3b82f6',
+                'IN_PROGRESS': '#eab308',
+                'WORK_COMPLETED': '#10b981'
+            };
             return colors[status] || '#6b7280';
         }
 
-        function openUpdateModal(ticketId) {
+        function openStatusModal(ticketId) {
+            const issue = allIssues.find(i => i.ticketId === ticketId);
             currentTicketId = ticketId;
-            const issue = currentIssues.find(i => i.ticketId === ticketId);
+
+            document.getElementById('statusModalDetails').innerHTML = `
+                <p><strong>Ticket ID:</strong> ${issue.ticketId}</p>
+                <p><strong>Resident:</strong> ${issue.resident.name}</p>
+                <p><strong>Location:</strong> ${issue.location.tower}/${issue.location.flat}</p>
+                <p><strong>Category:</strong> ${issue.issue.category}</p>
+                <p><strong>Description:</strong> ${issue.issue.description}</p>
+                <p><strong>Severity:</strong> ${issue.issue.severity}</p>
+            `;
+
+            document.getElementById('currentStatusDisplay').textContent = issue.builder.status || 'ASSIGNED';
+            document.getElementById('newStatus').value = '';
+            document.getElementById('vendorName').value = issue.builder.assignedVendor || '';
+            document.getElementById('workComment').value = issue.builder.comment || '';
+            document.getElementById('charCount').textContent = (issue.builder.comment || '').length;
             
-            document.getElementById('modalTicketId').textContent = ticketId;
-            document.getElementById('statusSelect').value = issue.builder.status || 'ASSIGNED';
-            document.getElementById('commentText').value = '';
-            document.getElementById('charCount').textContent = '0';
-            document.getElementById('vendorText').value = issue.builder.assignedVendor || '';
-            document.getElementById('updateModal').classList.remove('hidden');
+            document.getElementById('statusModal').classList.remove('hidden');
         }
 
-        async function confirmUpdate() {
-            const status = document.getElementById('statusSelect').value;
-            const comment = document.getElementById('commentText').value;
-            const vendor = document.getElementById('vendorText').value;
-            
+        async function confirmStatusUpdate() {
+            const newStatus = document.getElementById('newStatus').value;
+            const vendor = document.getElementById('vendorName').value.trim();
+            const comment = document.getElementById('workComment').value.trim();
+
+            if (!newStatus) {
+                showToast('✕ Please select a new status', 'error');
+                return;
+            }
+
+            if (!comment) {
+                showToast('✕ Please add a work comment', 'error');
+                return;
+            }
+
             try {
-                await API.updateBuilderStatus(currentTicketId, status, comment, vendor, null);
-                closeModal();
-                showToast('Status updated!', 'success');
+                await API.updateBuilderStatus(currentTicketId, newStatus, comment, vendor);
+                closeModal('statusModal');
+                showToast('✓ Status updated successfully!', 'success');
                 loadData();
             } catch (error) {
-                showToast('Error: ' + error.message, 'error');
+                showToast('✕ Error: ' + error.message, 'error');
             }
         }
 
-        function closeModal() {
-            document.getElementById('updateModal').classList.add('hidden');
+        function openDetailsModal(ticketId) {
+            const issue = allIssues.find(i => i.ticketId === ticketId);
+            
+            const statusTime = new Date(issue.builder.lastUpdated).toLocaleDateString('en-IN');
+            const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
+
+            document.getElementById('detailsContent').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">📍 Issue Information</h3>
+                    <p><strong>Ticket ID:</strong> <span class="font-mono text-blue-600 font-bold">${issue.ticketId}</span></p>
+                    <p><strong>Category:</strong> ${issue.issue.category}</p>
+                    <p><strong>Severity:</strong> <span style="color: ${getSeverityColor(issue.issue.severity)}" class="font-bold">${issue.issue.severity}</span></p>
+                    <p><strong>Description:</strong> ${issue.issue.description}</p>
+                </div>
+
+                <div class="bg-green-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">👤 Resident Information</h3>
+                    <p><strong>Name:</strong> ${issue.resident.name}</p>
+                    <p><strong>Email:</strong> ${issue.resident.email}</p>
+                    <p><strong>Phone:</strong> ${issue.resident.phone}</p>
+                    <p><strong>Location:</strong> ${issue.location.tower} / ${issue.location.flat}</p>
+                </div>
+
+                <div class="bg-yellow-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">⏱️ Timeline Information</h3>
+                    <p><strong>Reported:</strong> ${new Date(issue.dateReported).toLocaleDateString('en-IN')}</p>
+                    <p><strong>Days Open:</strong> ${daysOpen} days</p>
+                    <p><strong>SLA Due Date:</strong> ${new Date(issue.sla.dueDate).toLocaleDateString('en-IN')}</p>
+                    <p><strong>Days Remaining:</strong> <span class="${issue.sla.breached ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}">${issue.sla.daysRemaining} days</span></p>
+                </div>
+
+                <div class="bg-orange-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">🔧 Work Status</h3>
+                    <p><strong>Current Status:</strong> <span style="background-color: ${getStatusColor(issue.builder.status)}" class="text-white px-2 py-1 rounded font-bold">${issue.builder.status}</span></p>
+                    <p><strong>Last Updated:</strong> ${statusTime}</p>
+                    <p><strong>Assigned Vendor:</strong> ${issue.builder.assignedVendor || 'Not assigned'}</p>
+                    <p><strong>Latest Comment:</strong> ${issue.builder.comment || 'No comments yet'}</p>
+                </div>
+            `;
+
+            document.getElementById('detailsModal').classList.remove('hidden');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        function filterByStatus(status) {
+            // Would filter the table by status
+            console.log('Filter by status:', status);
         }
 
         function showToast(message, type) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.className = `fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded shadow-lg text-white font-bold z-50 ${
+                type === 'error' ? 'bg-red-500' : 'bg-green-500'
+            }`;
             toast.classList.remove('hidden');
             setTimeout(() => toast.classList.add('hidden'), 3000);
         }
@@ -213,8 +442,10 @@
             window.location.href = 'index.html';
         }
 
+        // Initial load
         loadData();
-        setInterval(loadData, 60000);
+        // Auto-refresh every 30 seconds
+        setInterval(loadData, 30000);
     </script>
 </body>
 </html>

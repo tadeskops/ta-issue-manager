@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Issue Addressal - The Address</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #1a1f2e;
+            --accent: #d4af37;
+            --light: #f5f7fa;
+            --border: #2a3142;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+            color: #ffffff;
+        }
+        
+        .premium-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .gold-accent {
+            color: #d4af37;
+        }
+        
+        .gold-border {
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+    <!-- Navigation -->
+    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <!-- Logo -->
+                <div class="flex items-center gap-4">
+                    <!-- Logo Only Version (Compact) -->
+                    <img src="assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <!-- Alternative: Logo with Text (Uncomment to use) -->
+                    <!-- <div><img src="assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
+                    <div>
+                        <h1 class="text-xl font-bold gold-accent">The Address</h1>
+                        <p class="text-xs text-slate-400">Issue Addressal</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="window.location.href='index.html'" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Login
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- Header -->
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold text-slate-100 mb-2"><i class="fas fa-list-check mr-3 gold-accent"></i>All Submitted Issues</h2>
+            <p class="text-slate-400">View all submitted issues from residents</p>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="premium-card rounded-xl p-4 mb-6 border border-slate-700">
+            <div class="flex gap-3">
+                <input type="text" id="searchInput" placeholder="Search by ticket ID, resident name, or category..." 
+                       class="flex-1 bg-slate-700/30 border border-slate-600/50 rounded-lg px-4 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all backdrop-blur text-sm"
+                       onkeyup="filterIssues()">
+                <button onclick="loadAllIssues()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30">
+                    <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Issues Container -->
+        <div id="issuesContainer" class="space-y-4">
+            <div class="premium-card rounded-xl p-8 text-center border border-slate-700">
+                <i class="fas fa-spinner fa-spin text-amber-400 text-3xl mb-4"></i>
+                <p class="text-slate-400">Loading issues...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/api.js"></script>
+    <script>
+        // Store all issues for filtering
+        let allIssues = [];
+
+        // Load all issues on page load
+        window.addEventListener('load', loadAllIssues);
+
+        async function loadAllIssues() {
+            try {
+                // Fetch from Google Sheet via API endpoint
+                const response = await fetch(API.ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'getFormResponses'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.responses) {
+                    // Map Google Sheet responses to issue format
+                    allIssues = data.responses.map((row, index) => ({
+                        ticketID: `IRP-${String(index + 1).padStart(4, '0')}`,
+                        issueTitle: row['Exact Location/Comment'] || 'Issue Report',
+                        residentName: row['Resident Name'] || 'Unknown',
+                        tower: row['Tower'] || 'N/A',
+                        flatNumber: row['Flat Number'] || 'N/A',
+                        towerFlat: `${row['Tower'] || 'N/A'} / Flat ${row['Flat Number'] || 'N/A'}`,
+                        category: row['Category'] || 'N/A',
+                        severity: row['Severity'] || 'MEDIUM',
+                        status: 'Reported',
+                        residentPhone: 'N/A',
+                        dateReported: row['Timestamp'] || new Date().toISOString(),
+                        description: row['Exact Location/Comment'] || 'No details provided',
+                        attachments: row['Upload Photos/Video'] ? [row['Upload Photos/Video']] : []
+                    }));
+                    displayIssues(allIssues);
+                } else {
+                    // Use mock data if API fails
+                    useMockData();
+                }
+            } catch (error) {
+                console.error('Error loading issues:', error);
+                // Use mock data if API fails
+                useMockData();
+            }
+        }
+
+        function useMockData() {
+            allIssues = [
+                {
+                    ticketID: 'TKT-001',
+                    issueTitle: 'AC Unit Not Cooling Properly',
+                    residentName: 'Ahmed Al Mansoori',
+                    tower: 'Tower A',
+                    flatNumber: '1502',
+                    towerFlat: 'Tower A / Flat 1502',
+                    category: 'HVAC/Cooling',
+                    severity: 'HIGH',
+                    status: 'Assigned',
+                    residentPhone: '+971-50-123-4567',
+                    dateReported: '2026-05-08',
+                    description: 'The air conditioning unit in the master bedroom is not cooling properly. The temperature is not dropping below 26°C even though it\'s set to 20°C. This issue started 3 days ago.',
+                    attachments: []
+                },
+                {
+                    ticketID: 'TKT-002',
+                    issueTitle: 'Water Leak from Ceiling',
+                    residentName: 'Fatima Al Naqbi',
+                    tower: 'Tower B',
+                    flatNumber: '2308',
+                    towerFlat: 'Tower B / Flat 2308',
+                    category: 'Plumbing',
+                    severity: 'CRITICAL',
+                    status: 'In Progress',
+                    residentPhone: '+971-50-234-5678',
+                    dateReported: '2026-05-09',
+                    description: 'Water is leaking from the ceiling in the guest bedroom. The leak appears to be coming from the apartment above. Visible water damage on the ceiling and walls.',
+                    attachments: []
+                },
+                {
+                    ticketID: 'TKT-003',
+                    issueTitle: 'Cracked Tile in Kitchen',
+                    residentName: 'Mohammed Al Mazrouei',
+                    tower: 'Tower C',
+                    flatNumber: '3102',
+                    towerFlat: 'Tower C / Flat 3102',
+                    category: 'Maintenance',
+                    severity: 'LOW',
+                    status: 'Assigned',
+                    residentPhone: '+971-50-345-6789',
+                    dateReported: '2026-05-07',
+                    description: 'There is a cracked floor tile in the kitchen near the sink. It\'s not affecting functionality but looks unsightly.',
+                    attachments: []
+                },
+                {
+                    ticketID: 'TKT-004',
+                    issueTitle: 'Broken Door Lock',
+                    residentName: 'Layla Al Suwaidi',
+                    tower: 'Tower D',
+                    flatNumber: '1805',
+                    towerFlat: 'Tower D / Flat 1805',
+                    category: 'Security/Locks',
+                    severity: 'MEDIUM',
+                    status: 'Work Completed',
+                    residentPhone: '+971-50-456-7890',
+                    dateReported: '2026-05-06',
+                    description: 'The main entrance door lock is not functioning properly. It\'s difficult to lock and unlock.',
+                    attachments: []
+                }
+            ];
+            displayIssues(allIssues);
+        }
+
+        function displayIssues(issues) {
+            const container = document.getElementById('issuesContainer');
+            
+            if (!issues || issues.length === 0) {
+                showNoIssues();
+                return;
+            }
+
+            container.innerHTML = issues.map((issue, index) => `
+                <div class="premium-card rounded-xl overflow-hidden border border-slate-700 hover:border-amber-500/50 transition-all">
+                    <!-- Collapsible Header -->
+                    <div class="bg-gradient-to-r from-slate-800/30 to-slate-700/20 p-4 border-b gold-border cursor-pointer hover:bg-slate-800/40 transition-all" onclick="toggleIssue(${index})">
+                        <div class="flex justify-between items-start gap-4">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-bold text-slate-100">${issue.issueTitle || 'No Title'}</h3>
+                                <p class="text-sm text-slate-400 mt-2">
+                                    <i class="fas fa-user mr-2"></i>${issue.residentName || 'Unknown'} | 
+                                    <i class="fas fa-building mr-2"></i>${issue.towerFlat || 'N/A'}
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="inline-block px-3 py-1 rounded-full text-xs font-bold ${getSeverityBadge(issue.severity)}">
+                                    ${issue.severity || 'N/A'}
+                                </span>
+                                <i class="fas fa-chevron-down text-amber-400 toggle-icon-${index} transition-transform" style="transform: rotate(0deg)"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible Content -->
+                    <div class="issue-content-${index} max-h-0 overflow-hidden transition-all duration-300 ease-in-out">
+                        <div class="p-5 space-y-4">
+                            <!-- Where Issue Found -->
+                            <div class="bg-slate-700/20 rounded-lg p-3 border border-slate-600/30">
+                                <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent mb-2">
+                                    <i class="fas fa-map-marker-alt mr-2"></i>Where Issue Found
+                                </p>
+                                <p class="text-slate-200 font-semibold text-lg">${issue.tower || 'N/A'}</p>
+                            </div>
+
+                            <!-- Reporter's Unit (Optional) -->
+                            ${issue.flatNumber && issue.flatNumber !== 'N/A' ? `
+                            <div class="bg-slate-700/10 rounded-lg p-3 border border-slate-600/20">
+                                <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">
+                                    <i class="fas fa-home mr-2"></i>Reporter's Unit (Optional)
+                                </p>
+                                <p class="text-slate-300 font-medium">Flat ${issue.flatNumber}</p>
+                            </div>
+                            ` : ''}
+
+                            <!-- Issue Details -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Category</p>
+                                    <p class="text-slate-200 font-semibold">${issue.category || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Status</p>
+                                    <p class="text-slate-200 font-semibold">${issue.status || 'Reported'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Phone</p>
+                                    <p class="text-slate-200 font-semibold">${issue.residentPhone || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Date Reported</p>
+                                    <p class="text-slate-200 font-semibold">${formatDate(issue.dateReported) || 'N/A'}</p>
+                                </div>
+                            </div>
+
+                            <!-- Description -->
+                            <div>
+                                <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent mb-2">Description</p>
+                                <p class="text-slate-300 leading-relaxed bg-slate-800/20 rounded-lg p-3 border border-slate-700/50">
+                                    ${issue.description || 'No description provided'}
+                                </p>
+                            </div>
+
+                            <!-- Attachments -->
+                            ${issue.attachments && issue.attachments.length > 0 ? `
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent mb-2">
+                                        <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.attachments.length})
+                                    </p>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${issue.attachments.map(att => `
+                                            <a href="${att}" target="_blank" class="px-3 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 hover:text-blue-100 text-xs font-semibold border border-blue-500/30 transition-all inline-flex items-center gap-2">
+                                                <i class="fas fa-file"></i>View File
+                                            </a>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterIssues() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            
+            const filtered = allIssues.filter(issue => {
+                const searchStr = `${issue.ticketID} ${issue.residentName} ${issue.category} ${issue.issueTitle} ${issue.towerFlat}`.toLowerCase();
+                return searchStr.includes(searchTerm);
+            });
+
+            displayIssues(filtered);
+        }
+
+        function toggleIssue(index) {
+            const content = document.querySelector(`.issue-content-${index}`);
+            const icon = document.querySelector(`.toggle-icon-${index}`);
+            
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                // Collapse
+                content.style.maxHeight = '0px';
+                icon.style.transform = 'rotate(0deg)';
+            } else {
+                // Expand
+                content.style.maxHeight = content.scrollHeight + 'px';
+                icon.style.transform = 'rotate(180deg)';
+            }
+        }
+
+        function showNoIssues() {
+            document.getElementById('issuesContainer').innerHTML = `
+                <div class="premium-card rounded-xl p-12 text-center border border-slate-700">
+                    <i class="fas fa-inbox text-slate-500 text-4xl mb-4"></i>
+                    <p class="text-slate-400 text-lg">No issues found</p>
+                    <p class="text-slate-500 text-sm mt-2">Check back later for new submitted issues</p>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            document.getElementById('issuesContainer').innerHTML = `
+                <div class="premium-card rounded-xl p-8 text-center border border-red-500/30 bg-red-500/10">
+                    <i class="fas fa-exclamation-circle text-red-400 text-3xl mb-4"></i>
+                    <p class="text-red-300">${message}</p>
+                </div>
+            `;
+        }
+
+        function getSeverityBadge(severity) {
+            const badges = {
+                'CRITICAL': 'bg-red-600/30 text-red-200 border border-red-500/50',
+                'HIGH': 'bg-orange-600/30 text-orange-200 border border-orange-500/50',
+                'MEDIUM': 'bg-yellow-600/30 text-yellow-200 border border-yellow-500/50',
+                'LOW': 'bg-green-600/30 text-green-200 border border-green-500/50'
+            };
+            return badges[severity] || 'bg-slate-600/30 text-slate-200 border border-slate-500/50';
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'N/A';
+            try {
+                return new Date(dateStr).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+    </script>
+</body>
+</html>

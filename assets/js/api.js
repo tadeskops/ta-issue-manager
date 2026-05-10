@@ -3,20 +3,36 @@
 
 const API = {
     // IMPORTANT: Replace with your Apps Script Web App deployment URL
-    ENDPOINT: "https://script.google.com/macros/s/AKfycbwH5UaL3eYxki3Q7na1v50yvh6MwnvZ32EmKzl2YWd6r2xQ-zkBxdgwbvhf_LLx4PBPNg/exec",
-
+    ENDPOINT: "https://script.google.com/macros/s/AKfycbx7rOdjBAfXn9paeFc6H17tXsC_sMshK7oYDKtkHbwlO0fZauw6oZau2J3iCgTMchcd_g/exec",
+    
+    // Configuration
+    LOGIN_ENABLED: false, // Set to true to enable login page, false to bypass and use default user
+    DEFAULT_TEST_USER: 'ta.deskops@gmail.com', // Default user when LOGIN_ENABLED is false
     
     // Set this after deployment
     setEndpoint(url) {
         this.ENDPOINT = url;
     },
+    
+    // Toggle login requirement
+    setLoginEnabled(enabled) {
+        this.LOGIN_ENABLED = enabled;
+    },
 
     async call(action, data = {}) {
-        // validateUserAccess is allowed without prior authentication (for login page)
         let userEmail = sessionStorage.getItem('userEmail');
         
-        if (!userEmail && action !== 'validateUserAccess') {
-            throw new Error('Not authenticated. Please log in.');
+        // If login is disabled, use default test user
+        if (!this.LOGIN_ENABLED) {
+            if (!userEmail) {
+                userEmail = this.DEFAULT_TEST_USER;
+                sessionStorage.setItem('userEmail', userEmail);
+            }
+        } else {
+            // Login is enabled - validateUserAccess is allowed without prior authentication (for login page)
+            if (!userEmail && action !== 'validateUserAccess') {
+                throw new Error('Not authenticated. Please log in.');
+            }
         }
 
         const payload = {
@@ -28,6 +44,9 @@ const API = {
         try {
             const response = await fetch(this.ENDPOINT, {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(payload)
             });
 
@@ -91,5 +110,9 @@ const API = {
 
     async validateUserAccess(email) {
         return await this.call('validateUserAccess', { userEmail: email });
+    },
+
+    async syncFormResponses() {
+        return await this.call('syncFormResponses');
     }
 };

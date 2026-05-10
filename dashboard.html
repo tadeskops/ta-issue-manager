@@ -10,7 +10,13 @@
 <body class="bg-gray-50">
     <nav class="bg-white shadow">
         <div class="px-4 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-blue-600">Analytics Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <!-- Logo Only Version (Compact) -->
+                <img src="assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                <!-- Alternative: Logo with Text (Uncomment to use) -->
+                <!-- <div><img src="assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
+                <h1 class="text-2xl font-bold text-blue-600">The Address - Analytics</h1>
+            </div>
             <div class="flex items-center gap-4">
                 <span class="text-gray-600" id="userEmail"></span>
                 <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Logout</button>
@@ -111,6 +117,14 @@
 
     <script src="assets/js/api.js"></script>
     <script>
+        // Initialize authentication if not set
+        if (!sessionStorage.getItem('userEmail') || !sessionStorage.getItem('userRole')) {
+            if (!API.LOGIN_ENABLED) {
+                sessionStorage.setItem('userEmail', API.DEFAULT_TEST_USER);
+                sessionStorage.setItem('userRole', 'COMMITTEE');
+            }
+        }
+
         let metrics = null;
         let allIssues = [];
         let categoryChart, towerChart, severityChart, statusChart;
