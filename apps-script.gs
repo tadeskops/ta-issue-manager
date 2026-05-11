@@ -55,6 +55,32 @@ function getSheet(sheetName) {
     }
 }
 
+// TEST FUNCTION - Run this to debug connection
+function testConnection() {
+  try {
+    Logger.log("🔍 Testing spreadsheet connection...");
+    const ss = getSpreadsheet();
+    const allSheets = ss.getSheets().map(s => s.getName());
+    
+    Logger.log("✅ Connected to spreadsheet: " + ss.getName());
+    Logger.log("📋 Available sheets: " + JSON.stringify(allSheets));
+    
+    const formSheet = ss.getSheetByName("Form Responses 1");
+    if (formSheet) {
+      const data = formSheet.getDataRange().getValues();
+      Logger.log("✅ 'Form Responses 1' sheet found with " + data.length + " rows");
+      Logger.log("📊 Headers: " + JSON.stringify(data[0]));
+      if (data.length > 1) {
+        Logger.log("📌 First data row: " + JSON.stringify(data[1]));
+      }
+    } else {
+      Logger.log("❌ 'Form Responses 1' sheet NOT found. Check sheet name spelling!");
+    }
+  } catch (e) {
+    Logger.log("❌ Connection Error: " + e.toString());
+  }
+}
+
 // Generate Ticket ID
 function generateTicketID() {
     try {
@@ -630,26 +656,18 @@ function getDashboardMetrics() {
 }
 
 // Main Post Handler
-// Handle CORS preflight requests
-function doOptions(e) {
-    return HtmlService.createHtmlOutput('')
-        .addHeader('Access-Control-Allow-Origin', '*')
-        .addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
-        .addHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        .addHeader('Access-Control-Max-Age', '86400');
-}
+// NOTE: Google Apps Script ContentService automatically sends 
+// Access-Control-Allow-Origin: * for web apps deployed as "Anyone".
+// We use text/plain Content-Type from the client to avoid CORS preflight.
 
 // Handle GET requests (for direct URL testing)
 function doGet(e) {
-    return HtmlService.createHtmlOutput(JSON.stringify({
+    return ContentService.createTextOutput(JSON.stringify({
         success: true,
         message: "TA Issue Management API is running",
         status: "Ready",
         version: "1.0"
-    }))
-        .addHeader('Access-Control-Allow-Origin', '*')
-        .addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
-        .addHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -668,13 +686,10 @@ function doPost(e) {
         
         const userRole = validateUserAccess(userEmail);
         if (!userRole || !userRole.hasAccess) {
-            return HtmlService.createHtmlOutput(JSON.stringify({
+            return ContentService.createTextOutput(JSON.stringify({
                 success: false,
                 error: "Unauthorized"
-            }))
-                .addHeader('Access-Control-Allow-Origin', '*')
-                .addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
-                .addHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            })).setMimeType(ContentService.MimeType.JSON);
         }
         
         let result;
@@ -716,19 +731,14 @@ function doPost(e) {
                 result = { success: false, error: "Unknown action: " + action };
         }
         
-        return HtmlService.createHtmlOutput(JSON.stringify(result))
-            .addHeader('Access-Control-Allow-Origin', '*')
-            .addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
-            .addHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        return ContentService.createTextOutput(JSON.stringify(result))
+            .setMimeType(ContentService.MimeType.JSON);
         
     } catch (error) {
         Logger.log("API Error: " + error.toString());
-        return HtmlService.createHtmlOutput(JSON.stringify({
+        return ContentService.createTextOutput(JSON.stringify({
             success: false,
             error: error.toString()
-        }))
-            .addHeader('Access-Control-Allow-Origin', '*')
-            .addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
-            .addHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        })).setMimeType(ContentService.MimeType.JSON);
     }
 }
