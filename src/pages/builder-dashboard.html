@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Builder Dashboard - The Address</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Premium branding colors */
+        :root {
+            --primary: #1a1f2e;
+            --accent: #d4af37;
+            --light: #f5f7fa;
+            --border: #2a3142;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+            color: #ffffff;
+        }
+        
+        .premium-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .gold-accent {
+            color: #d4af37;
+        }
+        
+        .gold-border {
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+        
+        /* Table row hover state - glowing effect on all sides */
+        #issuesTableBody tr:hover {
+            border-left: 3px solid rgb(217, 119, 6) !important;
+            box-shadow: 0 0 15px rgba(217, 119, 6, 0.6), inset 0 0 10px rgba(217, 119, 6, 0.2) !important;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+    <!-- Navigation -->
+    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <!-- Logo -->
+                <div class="flex items-center gap-4">
+                    <!-- Logo Only Version (Compact) -->
+                    <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <!-- Alternative: Logo with Text (Uncomment to use) -->
+                    <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
+                    <div>
+                        <h1 class="text-xl font-bold gold-accent">The Address</h1>
+                        <p class="text-xs text-slate-400">Builder Task Management</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <p class="text-xs text-slate-400 uppercase tracking-widest">Builder</p>
+                    <p class="font-semibold text-slate-100" id="userEmail">Loading...</p>
+                </div>
+                <button onclick="logout()" class="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white font-semibold transition-colors text-sm border border-red-500/30">
+                    <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- KPI Cards Row - Premium Design -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <!-- Assigned to Me Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Assigned to Me</p>
+                    <i class="fas fa-inbox text-blue-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiAssigned">0</p>
+                <p class="text-xs text-slate-500">Ready to start work</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-blue-500 to-transparent rounded-full mt-4"></div>
+            </div>
+            
+            <!-- In Progress Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">In Progress</p>
+                    <i class="fas fa-spinner text-orange-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiInProgress">0</p>
+                <p class="text-xs text-slate-500">Currently working on</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-orange-500 to-transparent rounded-full mt-4"></div>
+            </div>
+            
+            <!-- Work Completed Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Work Completed</p>
+                    <i class="fas fa-check-circle text-emerald-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiCompleted">0</p>
+                <p class="text-xs text-slate-500">Pending committee approval</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-emerald-500 to-transparent rounded-full mt-4"></div>
+            </div>
+            
+            <!-- SLA Breaches Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">SLA Breaches</p>
+                    <i class="fas fa-exclamation-triangle text-red-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiBreaches">0</p>
+                <p class="text-xs text-slate-500">Overdue tasks</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-red-500 to-transparent rounded-full mt-4"></div>
+            </div>
+        </div>
+
+        <!-- Issues Table -->
+        <div class="premium-card rounded-xl overflow-hidden border border-slate-700">
+            <div class="p-6 border-b gold-border flex justify-between items-center">
+                <h2 class="text-xl font-bold text-slate-100 gold-accent"><i class="fas fa-tasks mr-3"></i>My Tasks</h2>
+                <div class="flex gap-2">
+                    <select id="statusFilter" onchange="filterByStatus(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                        <option value="">All Issues</option>
+                        <option value="ASSIGNED">Assigned</option>
+                        <option value="IN_PROGRESS">In Progress</option>
+                        <option value="WORK_COMPLETED">Work Completed</option>
+                    </select>
+                    <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-800/30">
+                        <tr class="border-b gold-border">
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Ticket ID</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Tower/Flat</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Severity</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Current Status</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest text-center">Days Open</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest text-center">SLA Days</th>
+                            <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="issuesTableBody">
+                        <tr><td colspan="9" class="p-4 text-center text-slate-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Update Issue Status -->
+    <div id="statusModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-700">
+            <h2 class="text-2xl font-bold mb-6 text-orange-500 flex items-center gap-2">📝 Update Issue Status</h2>
+            
+            <div id="statusModalDetails" class="bg-slate-700/30 p-4 rounded-lg mb-6 space-y-2 text-sm border border-slate-700">
+                <!-- Details populated by JS -->
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Current Status</label>
+                <div id="currentStatusDisplay" class="bg-blue-500/20 p-3 rounded-lg text-blue-300 font-bold border border-blue-500/30 text-center"></div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Update Status To</label>
+                <select id="newStatus" class="w-full bg-slate-700/50 border border-slate-600 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-500 transition cursor-pointer">
+                    <option value="" class="bg-slate-800 text-slate-400">-- Select New Status --</option>
+                    <option value="IN_PROGRESS" class="bg-slate-800 text-white">🟡 IN PROGRESS</option>
+                    <option value="WORK_COMPLETED" class="bg-slate-800 text-white">✅ WORK COMPLETED</option>
+                </select>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Assigned Vendor (optional)</label>
+                <input type="text" id="vendorName" placeholder="Enter vendor name or contractor company" 
+                    class="w-full bg-slate-700/50 border border-slate-600 text-white placeholder-slate-500 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-500 transition">
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Work Comment / Update</label>
+                <textarea id="workComment" placeholder="Describe what has been done or needs to be done..." 
+                    class="w-full bg-slate-700/50 border border-slate-600 text-white placeholder-slate-500 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-500 transition" rows="4"></textarea>
+                <p class="text-xs text-slate-400 mt-2"><span id="charCount">0</span> / 500 characters</p>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="confirmStatusUpdate()" class="flex-1 bg-gradient-to-r from-orange-600 to-orange-500 text-white py-3 rounded-lg hover:from-orange-700 hover:to-orange-600 font-bold transition shadow-lg">
+                    Update Status
+                </button>
+                <button onclick="closeModal('statusModal')" class="flex-1 bg-slate-700 text-slate-100 py-3 rounded-lg hover:bg-slate-600 font-bold transition border border-slate-600">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: View Issue Details -->
+    <div id="detailsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">📄 Issue Details</h2>
+            <div id="detailsContent" class="space-y-4">
+                <!-- Details populated by JS -->
+            </div>
+            <div class="mt-6">
+                <button onclick="closeModal('detailsModal')" class="w-full bg-gray-500 text-white py-2 rounded hover:bg-gray-600 font-bold">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Delete Issue -->
+    <div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded shadow-lg p-6 w-full max-w-md">
+            <div class="mb-4 text-center">
+                <i class="fas fa-exclamation-triangle text-5xl text-red-500 mb-2"></i>
+                <h2 class="text-2xl font-bold text-red-600">Delete Issue?</h2>
+            </div>
+            <div id="deleteModalDetails" class="bg-gray-50 p-4 rounded mb-4 space-y-2 text-sm">
+                <!-- Details populated by JS -->
+            </div>
+            <p class="text-gray-600 mb-4 text-center">This action cannot be undone. The issue and all associated data will be permanently deleted.</p>
+            <div class="flex gap-3">
+                <button onclick="confirmDelete()" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded font-bold transition-colors">
+                    <i class="fas fa-trash mr-2"></i>Delete Issue
+                </button>
+                <button onclick="closeModal('deleteModal')" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded font-bold transition-colors">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded shadow-lg text-white font-bold hidden z-50"></div>
+
+    <?!= include('src/partials/api') ?>
+    <script src="../../assets/js/api.js"></script>
+    <script>
+        // === Auth (server-trusted via Google sign-in) ===
+        // No client-typed email, no sessionStorage. window.IRP_USER is
+        // populated from api_whoAmI(). The page is gated server-side by
+        // Router.gs; this is a UX safety net for fetch-fallback mode.
+        (async function ensureAuthorized() {
+            try {
+                const u = await API.whoAmI();
+                window.IRP_USER = u;
+                if (!u.email || u.role === 'UNKNOWN') {
+                    location.href = 'index.html';
+                    return;
+                }
+                // Committee members may view this page too (read-only intent).
+                const el = document.getElementById('userEmail');
+                if (el) el.textContent = u.email;
+            } catch (e) {
+                console.error('Auth check failed:', e);
+                location.href = 'index.html';
+            }
+        })();
+
+        let allIssues = [];
+        let currentTicketId = null;
+        let builderStatusFilter = '';
+
+        // Mock data for local testing
+        const mockBuilderIssues = [
+            {
+                ticketId: 'TKT-00001',
+                resident: { name: 'Mohammed Al Mazrouei', email: 'mohammed.mazrouei@example.com' },
+                location: { tower: 'Tower C', flat: '3102' },
+                issue: { category: 'Civil', severity: 'MEDIUM', description: 'Cracks in bathroom tiles' },
+                dateReported: '2026-04-28',
+                builder: { status: 'ASSIGNED' },
+                sla: { daysRemaining: 8, breached: false }
+            },
+            {
+                ticketId: 'TKT-00002',
+                resident: { name: 'Layla Al Suwaidi', email: 'layla.suwaidi@example.com' },
+                location: { tower: 'Tower D', flat: '1805' },
+                issue: { category: 'Security/Locks', severity: 'HIGH', description: 'Main door lock not functioning' },
+                dateReported: '2026-04-15',
+                builder: { status: 'IN_PROGRESS' },
+                sla: { daysRemaining: -3, breached: true }
+            },
+            {
+                ticketId: 'TKT-00003',
+                resident: { name: 'Sara Al Dhaheri', email: 'sara.dhaheri@example.com' },
+                location: { tower: 'Tower A', flat: '501' },
+                issue: { category: 'Plumbing', severity: 'MEDIUM', description: 'Slow drainage in master bathroom' },
+                dateReported: '2026-05-02',
+                builder: { status: 'WORK_COMPLETED' },
+                sla: { daysRemaining: 12, breached: false }
+            }
+        ];
+
+        document.getElementById('userEmail').textContent = (window.IRP_USER && window.IRP_USER.email) || '…';
+        
+        // Load initial data
+        window.addEventListener('load', loadData);
+
+        // Auto-update character count
+        document.getElementById('workComment').addEventListener('input', function() {
+            document.getElementById('charCount').textContent = this.value.length;
+        });
+
+        // Normalize data to nested structure
+        function normalizeIssueData(data) {
+            if (!data) return null;
+            // If already normalized, return as-is
+            if (data.resident && typeof data.resident === 'object' && data.location && typeof data.location === 'object') {
+                return data;
+            }
+            // Normalize flat structure to nested
+            return {
+                ticketId: data.ticketId || data.ticketID || '',
+                resident: {
+                    name: data.resident?.name || data.residentName || '',
+                    email: data.resident?.email || data.residentEmail || '',
+                    phone: data.resident?.phone || data.residentPhone || ''
+                },
+                location: {
+                    tower: data.location?.tower || data.tower || '',
+                    flat: data.location?.flat || data.flatNumber || data.flat || ''
+                },
+                issue: {
+                    category: data.issue?.category || data.category || '',
+                    subcategory: data.issue?.subcategory || data.subCategory || '',
+                    severity: data.issue?.severity || data.severity || '',
+                    description: data.issue?.description || data.description || ''
+                },
+                status: data.status || 'ASSIGNED',
+                dateReported: data.dateReported || '',
+                builder: data.builder || { status: 'ASSIGNED' },
+                sla: data.sla || { daysRemaining: 0, breached: false }
+            };
+        }
+
+        async function loadData() {
+            try {
+                const issues = await API.getLiveIssues('BUILDER');
+                allIssues = (issues || []).map(normalizeIssueData);
+                
+                renderIssuesTable();
+                updateKPIs();
+                showToast('✓ Data refreshed!', 'success');
+            } catch (error) {
+                console.warn('API Error, loading mock data:', error.message);
+                // Fallback to mock data for local testing
+                allIssues = mockBuilderIssues.map(normalizeIssueData);
+                
+                renderIssuesTable();
+                updateKPIs();
+                showToast('📋 Using mock data (API unavailable)', 'success');
+            }
+        }
+
+        function renderIssuesTable() {
+            const tbody = document.getElementById('issuesTableBody');
+            const filtered = builderStatusFilter
+                ? allIssues.filter(i => String(i.builder.status || 'ASSIGNED').toUpperCase() === builderStatusFilter)
+                : allIssues;
+            if (!filtered || filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="border p-4 text-center text-gray-500">No issues to show</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(issue => {
+                const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
+                const statusColor = getStatusColor(issue.builder.status);
+                const rowClass = issue.sla.breached ? 'bg-red-50' : '';
+                
+                return `
+                    <tr class="border-b issue-row ${rowClass}" id="row-${issue.ticketId}" style="border-left: 3px solid transparent; transition: border-color 0.2s;">
+                        <td class="border p-3 font-bold text-blue-600 cursor-pointer hover:underline" onclick="selectBuilderRow('${issue.ticketId}'); openDetailsModal('${issue.ticketId}')">
+                            ${issue.ticketId}
+                        </td>
+                        <td class="border p-3 hidden sm:table-cell text-sm">${issue.resident.name}</td>
+                        <td class="border p-3 text-sm">${issue.location.tower}/${issue.location.flat}</td>
+                        <td class="border p-3 hidden md:table-cell text-sm">${issue.issue.category}</td>
+                        <td class="border p-3 text-sm">
+                            <span class="px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">
+                                ${issue.issue.severity}
+                            </span>
+                        </td>
+                        <td class="border p-3 text-sm">
+                            <span class="px-2 py-1 rounded text-white text-xs font-bold" style="background-color: ${statusColor}">
+                                ${issue.builder.status || 'ASSIGNED'}
+                            </span>
+                        </td>
+                        <td class="border p-3 text-center text-sm">${daysOpen}</td>
+                        <td class="border p-3 text-center text-sm ${issue.sla.breached ? 'font-bold text-red-600' : 'text-green-600'}">
+                            ${issue.sla.daysRemaining}
+                        </td>
+                        <td class="border p-3 text-center">
+                            <button onclick="openStatusModal('${issue.ticketId}')" class="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs transition-colors" title="Update Status">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateKPIs() {
+            const assigned = allIssues.filter(i => i.builder.status === 'ASSIGNED').length;
+            const inProgress = allIssues.filter(i => i.builder.status === 'IN_PROGRESS').length;
+            const completed = allIssues.filter(i => i.builder.status === 'WORK_COMPLETED').length;
+            const breaches = allIssues.filter(i => i.sla.breached).length;
+
+            document.getElementById('kpiAssigned').textContent = assigned;
+            document.getElementById('kpiInProgress').textContent = inProgress;
+            document.getElementById('kpiCompleted').textContent = completed;
+            document.getElementById('kpiBreaches').textContent = breaches;
+        }
+
+        function getSeverityColor(severity) {
+            const colors = {
+                'CRITICAL': '#dc2626',
+                'HIGH':     '#ea580c',
+                'MEDIUM':   '#eab308',
+                'LOW':      '#6b7280'
+            };
+            return colors[String(severity || '').toUpperCase()] || '#6b7280';
+        }
+
+        function getStatusColor(status) {
+            const colors = {
+                'ASSIGNED': '#3b82f6',
+                'IN_PROGRESS': '#eab308',
+                'WORK_COMPLETED': '#10b981'
+            };
+            return colors[status] || '#6b7280';
+        }
+
+        function openStatusModal(ticketId) {
+            const issue = allIssues.find(i => i.ticketId === ticketId);
+            currentTicketId = ticketId;
+
+            document.getElementById('statusModalDetails').innerHTML = `
+                <p><strong>Ticket ID:</strong> ${issue.ticketId}</p>
+                <p><strong>Resident:</strong> ${issue.resident.name}</p>
+                <p><strong>Location:</strong> ${issue.location.tower}/${issue.location.flat}</p>
+                <p><strong>Category:</strong> ${issue.issue.category}</p>
+                <p><strong>Description:</strong> ${issue.issue.description}</p>
+                <p><strong>Severity:</strong> ${issue.issue.severity}</p>
+            `;
+
+            document.getElementById('currentStatusDisplay').textContent = issue.builder.status || 'ASSIGNED';
+            document.getElementById('newStatus').value = '';
+            document.getElementById('vendorName').value = issue.builder.assignedVendor || '';
+            document.getElementById('workComment').value = issue.builder.comment || '';
+            document.getElementById('charCount').textContent = (issue.builder.comment || '').length;
+            
+            document.getElementById('statusModal').classList.remove('hidden');
+        }
+
+        async function confirmStatusUpdate() {
+            const newStatus = document.getElementById('newStatus').value;
+            const vendor = document.getElementById('vendorName').value.trim();
+            const comment = document.getElementById('workComment').value.trim();
+
+            if (!newStatus) {
+                showToast('✕ Please select a new status', 'error');
+                return;
+            }
+
+            if (!comment) {
+                showToast('✕ Please add a work comment', 'error');
+                return;
+            }
+
+            try {
+                await API.updateBuilderStatus(currentTicketId, newStatus, comment, vendor);
+                closeModal('statusModal');
+                showToast('✓ Status updated successfully!', 'success');
+                loadData();
+            } catch (error) {
+                showToast('✕ Error: ' + error.message, 'error');
+            }
+        }
+
+        function selectBuilderRow(ticketId) {
+            // Clear previous selection
+            document.querySelectorAll('.issue-row').forEach(row => {
+                row.style.borderLeft = '3px solid transparent';
+            });
+            
+            // Apply selection to clicked row (border only)
+            const selectedRow = document.getElementById(`row-${ticketId}`);
+            if (selectedRow) {
+                selectedRow.style.borderLeft = '3px solid rgb(37, 99, 235)';
+            }
+        }
+
+        function openDetailsModal(ticketId) {
+            const issue = allIssues.find(i => i.ticketId === ticketId);
+            
+            const statusTime = new Date(issue.builder.lastUpdated).toLocaleDateString('en-IN');
+            const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
+
+            document.getElementById('detailsContent').innerHTML = `
+                <div class="bg-blue-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">📍 Issue Information</h3>
+                    <p><strong>Ticket ID:</strong> <span class="font-mono text-blue-600 font-bold">${issue.ticketId}</span></p>
+                    <p><strong>Category:</strong> ${issue.issue.category}</p>
+                    <p><strong>Sub-Category:</strong> ${issue.issue.subcategory || '—'}</p>
+                    <p><strong>Severity:</strong> <span style="color: ${getSeverityColor(issue.issue.severity)}" class="font-bold">${issue.issue.severity}</span></p>
+                    <p><strong>Description:</strong> ${issue.issue.description}</p>
+                </div>
+
+                <div class="bg-green-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">👤 Resident Information</h3>
+                    <p><strong>Name:</strong> ${issue.resident.name}</p>
+                    <p><strong>Location:</strong> ${issue.location.tower} / ${issue.location.flat}</p>
+                </div>
+
+                <div class="bg-yellow-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">⏱️ Timeline Information</h3>
+                    <p><strong>Reported:</strong> ${new Date(issue.dateReported).toLocaleDateString('en-IN')}</p>
+                    <p><strong>Days Open:</strong> ${daysOpen} days</p>
+                    <p><strong>SLA Due Date:</strong> ${new Date(issue.sla.dueDate).toLocaleDateString('en-IN')}</p>
+                    <p><strong>Days Remaining:</strong> <span class="${issue.sla.breached ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}">${issue.sla.daysRemaining} days</span></p>
+                </div>
+
+                <div class="bg-orange-50 p-4 rounded">
+                    <h3 class="font-bold text-lg mb-2">🔧 Work Status</h3>
+                    <p><strong>Current Status:</strong> <span style="background-color: ${getStatusColor(issue.builder.status)}" class="text-white px-2 py-1 rounded font-bold">${issue.builder.status}</span></p>
+                    <p><strong>Last Updated:</strong> ${statusTime}</p>
+                    <p><strong>Assigned Vendor:</strong> ${issue.builder.assignedVendor || 'Not assigned'}</p>
+                    <p><strong>Latest Comment:</strong> ${issue.builder.comment || 'No comments yet'}</p>
+                </div>
+            `;
+
+            document.getElementById('detailsModal').classList.remove('hidden');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        function openDeleteModal(ticketId, ticketDisplay) {
+            const issue = allIssues.find(i => i.ticketId === ticketId);
+            currentTicketId = ticketId;
+
+            document.getElementById('deleteModalDetails').innerHTML = `
+                <p class="text-gray-800"><strong>Ticket ID:</strong> <span class="text-blue-600 font-bold">${ticketDisplay}</span></p>
+                <p class="text-gray-800"><strong>Resident:</strong> ${issue.resident.name}</p>
+                <p class="text-gray-800"><strong>Location:</strong> ${issue.location.tower}/${issue.location.flat}</p>
+                <p class="text-gray-800"><strong>Category:</strong> ${issue.issue.category}</p>
+            `;
+
+            document.getElementById('deleteModal').classList.remove('hidden');
+        }
+
+        async function confirmDelete() {
+            try {
+                await API.call('deleteIssue', {
+                    ticketId: currentTicketId,
+                    sheet: 'LIVE_ISSUES'
+                });
+                closeModal('deleteModal');
+                showToast('✓ Issue deleted successfully!', 'success');
+                loadData();
+            } catch (error) {
+                showToast('✕ Error: ' + error.message, 'error');
+            }
+        }
+
+        function filterByStatus(status) {
+            builderStatusFilter = String(status || '').toUpperCase();
+            renderIssuesTable();
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            const palette = {
+                error: 'bg-red-500',
+                warning: 'bg-amber-500',
+                success: 'bg-green-500'
+            };
+            const bg = palette[type] || palette.success;
+            toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded shadow-lg text-white font-bold z-50 ${bg}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        // Surface any redirect notices (e.g. from a committee-only page) as a
+        // non-blocking toast, then strip the param so reloads stay clean.
+        (function showRedirectNotice() {
+            const params = new URLSearchParams(location.search);
+            const notice = params.get('notice');
+            if (!notice) return;
+            const messages = {
+                committee_only: 'That page is restricted to Technical Committee members.'
+            };
+            const msg = messages[notice];
+            if (msg) showToast(msg, 'warning');
+            params.delete('notice');
+            const qs = params.toString();
+            history.replaceState({}, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+        })();
+
+        function logout() {
+            API.signOut();
+        }
+
+        // Initial load
+        loadData();
+        // Auto-refresh every 30 seconds
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>

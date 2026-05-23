@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Address - IRP Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #1a1f2e;
+            --accent: #d4af37;
+            --light: #f5f7fa;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+        }
+        
+        .premium-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .gold-accent {
+            color: #d4af37;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 min-h-screen flex items-center justify-center px-4">
+    <div class="premium-card rounded-2xl p-10 w-full max-w-md border border-slate-700">
+        <!-- Logo Section -->
+        <div class="text-center mb-8">
+            <!-- Logo Only (Compact) -->
+            <div class="mb-6">
+                <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-16 mx-auto drop-shadow-lg">
+            </div>
+            <!-- Alternative: Logo with Text (Uncomment to use) -->
+            <!-- <div class="mb-6"><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-20 mx-auto drop-shadow-lg"></div> -->
+            <h2 class="text-xl font-bold text-slate-100 mb-2">Issue Addressal Portal</h2>
+        </div>
+        
+        <!-- Submit New Issue (Primary for residents) -->
+        <button id="submitBtn" onclick="goSubmit()" class="hidden w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-bold py-4 rounded-lg transition-all border border-amber-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider mb-3">
+            <i class="fas fa-pen-to-square mr-2"></i>Submit New Issue
+        </button>
+
+        <!-- View Submitted Issues Button (Primary Action) -->
+        <button onclick="goSubmitted()" class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold py-4 rounded-lg transition-all border border-blue-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider mb-6">
+            <i class="fas fa-eye mr-2"></i>View Submitted Issues (Read Only)
+        </button>
+
+        <!-- OR Divider -->
+        <div class="flex items-center gap-4 my-6">
+            <div class="flex-1 h-px bg-gradient-to-r from-slate-700 to-transparent"></div>
+            <span class="text-amber-400 font-bold">OR</span>
+            <div class="flex-1 h-px bg-gradient-to-l from-slate-700 to-transparent"></div>
+        </div>
+
+        <!-- Sign-in / access status -->
+        <div id="authBox" class="space-y-4">
+            <div id="authStatus" class="text-center text-slate-300 text-sm">
+                <i class="fas fa-spinner fa-spin mr-2 text-amber-400"></i>Checking Google sign-in…
+            </div>
+            <button id="primaryAction" onclick="goDashboard()" class="hidden w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-bold py-3 rounded-lg transition-all border border-amber-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider">
+                <i class="fas fa-sign-in-alt mr-2"></i><span id="primaryLabel">Open Dashboard</span>
+            </button>
+            <button id="switchAcct" onclick="switchAccount()" class="hidden w-full bg-slate-700/40 hover:bg-slate-700/70 text-slate-200 font-semibold py-2 rounded-lg transition-all border border-slate-600/40 text-xs uppercase tracking-wider">
+                <i class="fas fa-exchange-alt mr-2"></i>Switch Google account
+            </button>
+        </div>
+
+        <!-- Footer -->
+        <p class="text-center text-xs text-slate-500 mt-6">
+            Sign in with your authorized Google account to access the platform.
+        </p>
+    </div>
+
+    <?!= include('src/partials/api') ?>
+    <script src="../../assets/js/api.js"></script>
+    <script>
+        function goSubmitted() { location.href = 'submitted-issues.html'; }
+        function goSubmit()    { location.href = 'submit-issue.html'; }
+        function switchAccount() { API.signOut(); }
+        function goDashboard() {
+            const u = window.IRP_USER || {};
+            if (u.role === 'COMMITTEE') location.href = 'committee-dashboard.html';
+            else if (u.role === 'BUILDER') location.href = 'builder-dashboard.html';
+            else location.reload();
+        }
+
+        (async function init() {
+            const statusEl = document.getElementById('authStatus');
+            const btn = document.getElementById('primaryAction');
+            const label = document.getElementById('primaryLabel');
+            const switchBtn = document.getElementById('switchAcct');
+            const submitBtn = document.getElementById('submitBtn');
+            try {
+                const u = await API.whoAmI();
+                window.IRP_USER = u;
+                if (u.role === 'COMMITTEE') {
+                    statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Technical Committee)';
+                    label.textContent = 'Open Committee Dashboard';
+                    btn.classList.remove('hidden');
+                    switchBtn.classList.remove('hidden');
+                } else if (u.role === 'BUILDER') {
+                    statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Builder)';
+                    label.textContent = 'Open Builder Dashboard';
+                    btn.classList.remove('hidden');
+                    switchBtn.classList.remove('hidden');
+                } else if (u.role === 'RESIDENT') {
+                    statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Resident)';
+                    // Feature flag gate \u2014 hide submit CTA if disabled.
+                    let canSubmit = true;
+                    try {
+                        const cc = await API.getClientConfig();
+                        window.IRP_CLIENT_CONFIG = cc || {};
+                        canSubmit = !((cc && cc.features && cc.features.FEATURE_IN_PORTAL_SUBMIT) === false);
+                    } catch (e) { /* default to enabled */ }
+                    if (canSubmit) submitBtn.classList.remove('hidden');
+                    switchBtn.classList.remove('hidden');
+                } else if (u.email) {
+                    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-400 mr-2"></i>' +
+                        '<b>' + u.email + '</b> is not authorized. Contact the committee to be added to the CONFIG list, then reload.';
+                    switchBtn.classList.remove('hidden');
+                } else {
+                    statusEl.innerHTML = '<i class="fab fa-google mr-2 text-amber-400"></i>Please open this app from the deployed Apps Script URL and sign in with Google.';
+                }
+            } catch (e) {
+                console.error(e);
+                statusEl.innerHTML = '<i class="fas fa-times-circle text-red-400 mr-2"></i>Sign-in check failed. Reload to retry.';
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1321 @@
+// ===== CONFIG (Update these values) =====
+// NOTE: COMMITTEE_EMAILS and BUILDER_EMAIL are now defined in `config.gs`.
+//       Update committee / builder email IDs there.
+const SHEET_ID = "1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU"; // Get from Sheets URL
+const SHEETS = {
+    FORM_RESPONSES: "Form Responses 1",
+    PENDING_QUEUE: "PENDING_REVIEW",  // Updated to match actual sheet name
+    LIVE_ISSUES: "LIVE_ISSUES",
+    CLOSED_ISSUES: "CLOSED_ISSUES",
+    CATEGORY_MASTER: "CATEGORY_MASTER",
+    DASHBOARD: "DASHBOARD",
+    WEEKLY_REVIEW: "WEEKLY_REVIEW"
+};
+
+const SLA_RULES = {
+    "Critical": 1,
+    "High": 3,
+    "Medium": 7,
+    "Low": 15
+};
+
+const ALLOWED_STATUSES = [
+    "PENDING_APPROVAL", "APPROVED", "ASSIGNED",
+    "IN_PROGRESS", "WORK_COMPLETED", "CLOSED", "REOPENED", "REJECTED"
+];
+
+// ===== CANONICAL SHEET SCHEMAS =====
+// These constants are the single source of truth for which column holds
+// which field. They mirror the actual layout of the bound Google Sheet
+// (see the *.csv exports in repo for evidence). All read/write code MUST
+// use these constants instead of magic numbers.
+
+// Form Responses 1 (auto-created by Google Forms; 9 columns).
+const FORM_COL = {
+    TIMESTAMP:    0,
+    RESIDENT:     1,
+    FLAT:         2,
+    CATEGORY:     3,
+    SUBCATEGORY:  4,
+    SEVERITY:     5,
+    TOWER:        6,
+    LOCATION:     7,  // "Exact Location/Comment"
+    PHOTO:        8
+};
+
+// PENDING_REVIEW (17 columns).
+const PENDING_COL = {
+    TICKET_ID:        0,
+    DATE_REPORTED:    1,
+    RESIDENT:         2,
+    FLAT:             3,
+    CATEGORY:         4,
+    SUBCATEGORY:      5,
+    SEVERITY:         6,
+    TOWER:            7,
+    PHOTO:            8,
+    DESCRIPTION:      9,   // free-text location/details
+    SUBMITTED_BY:    10,   // approver / sync operator (optional)
+    ACTION_DATE:     11,   // approve/reject timestamp
+    ACTION_BY:       12,   // approve/reject by email
+    REJECTION_REASON:13,
+    RESERVED1:       14,
+    RESERVED2:       15,
+    STATE:           16    // PENDING_APPROVAL | APPROVED | REJECTED
+};
+const PENDING_WIDTH = 17;
+
+// LIVE_ISSUES (23 columns).
+const LIVE_COL = {
+    TICKET_ID:            0,
+    DATE_REPORTED:        1,
+    RESIDENT:             2,
+    FLAT:                 3,
+    CATEGORY:             4,
+    SEVERITY:             5,
+    TOWER:                6,
+    SUBCATEGORY:          7,
+    PHOTO:                8,
+    DESCRIPTION:          9,
+    BUILDER_STATUS:      10,
+    BUILDER_COMMENT:     11,
+    ASSIGNED_VENDOR:     12,
+    DATE_ASSIGNED:       13,
+    RESIDENT_CONFIRM:    14,
+    REOPENED_FLAG:       15,
+    REMARKS:             16,
+    RESERVED1:           17,
+    SLA_DATE:            18,   // Target Closure
+    CLOSURE_DATE:        19,
+    STATUS:              20,   // APPROVED | IN_PROGRESS | WORK_COMPLETED | REOPENED
+    ACTION_BY:           21,   // last actor email
+    LAST_UPDATED:        22
+};
+const LIVE_WIDTH = 23;
+
+// Build a row array of given width filled with empty strings.
+function newRow_(width) { return new Array(width).fill(""); }
+// ===== END CONFIG =====
+
+// Get Spreadsheet with error handling
+function getSpreadsheet() {
+    try {
+        return SpreadsheetApp.openById(SHEET_ID);
+    } catch (error) {
+        Logger.log("Error opening spreadsheet: " + error.toString());
+        throw new Error("Cannot access spreadsheet with ID: " + SHEET_ID);
+    }
+}
+
+// Get Sheet with enhanced error handling
+function getSheet(sheetName) {
+    try {
+        const ss = getSpreadsheet();
+        const sheet = ss.getSheetByName(sheetName);
+        if (!sheet) {
+            const allSheets = ss.getSheets().map(s => s.getName());
+            throw new Error(`Sheet "${sheetName}" not found. Available sheets: ${allSheets.join(", ")}`);
+        }
+        return sheet;
+    } catch (error) {
+        Logger.log("Error getting sheet: " + error.toString());
+        throw error;
+    }
+}
+
+// TEST FUNCTION - Run this to debug connection
+function testConnection() {
+  try {
+    Logger.log("🔍 Testing spreadsheet connection...");
+    const ss = getSpreadsheet();
+    const allSheets = ss.getSheets().map(s => s.getName());
+    
+    Logger.log("✅ Connected to spreadsheet: " + ss.getName());
+    Logger.log("📋 Available sheets: " + JSON.stringify(allSheets));
+    
+    const formSheet = ss.getSheetByName("Form Responses 1");
+    if (formSheet) {
+      const data = formSheet.getDataRange().getValues();
+      Logger.log("✅ 'Form Responses 1' sheet found with " + data.length + " rows");
+      Logger.log("📊 Headers: " + JSON.stringify(data[0]));
+      if (data.length > 1) {
+        Logger.log("📌 First data row: " + JSON.stringify(data[1]));
+      }
+    } else {
+      Logger.log("❌ 'Form Responses 1' sheet NOT found. Check sheet name spelling!");
+    }
+  } catch (e) {
+    Logger.log("❌ Connection Error: " + e.toString());
+  }
+}
+
+// Generate Ticket ID
+function generateTicketID() {
+    try {
+        const ss = getSpreadsheet();
+        const liveSheet = ss.getSheetByName(SHEETS.LIVE_ISSUES);
+        const closedSheet = ss.getSheetByName(SHEETS.CLOSED_ISSUES);
+        
+        let maxNum = 0;
+        
+        // Get max from LIVE_ISSUES
+        if (liveSheet) {
+            const liveData = liveSheet.getDataRange().getValues();
+            for (let i = 1; i < liveData.length; i++) {
+                const ticketId = liveData[i][0];
+                if (ticketId && ticketId.toString().startsWith("TA-")) {
+                    const num = parseInt(ticketId.toString().substring(3));
+                    if (num > maxNum) maxNum = num;
+                }
+            }
+        }
+        
+        // Get max from CLOSED_ISSUES
+        if (closedSheet) {
+            const closedData = closedSheet.getDataRange().getValues();
+            for (let i = 1; i < closedData.length; i++) {
+                const ticketId = closedData[i][0];
+                if (ticketId && ticketId.toString().startsWith("TA-")) {
+                    const num = parseInt(ticketId.toString().substring(3));
+                    if (num > maxNum) maxNum = num;
+                }
+            }
+        }
+        
+        const nextNum = String(maxNum + 1).padStart(4, '0');
+        return `TA-${nextNum}`;
+    } catch (error) {
+        Logger.log("Error generating ticket ID: " + error.toString());
+        throw error;
+    }
+}
+
+// Calculate SLA Date
+function calculateSLADate(severity, reportedDate) {
+    const days = SLA_RULES[severity] || 7;
+    const slaDate = new Date(reportedDate);
+    slaDate.setDate(slaDate.getDate() + days);
+    return slaDate;
+}
+
+// On Form Submit Trigger.
+// e.values aligns 1:1 with the bound spreadsheet row -> FORM_COL constants
+// map the indices. If the form definition omits Sub-Category, the slot is
+// simply undefined and stored as "".
+function onFormSubmit(e) {
+    try {
+        const values = e.values || [];
+        const fields = {
+            residentName: values[FORM_COL.RESIDENT]    || "",
+            flat:         values[FORM_COL.FLAT]        || "",
+            category:     values[FORM_COL.CATEGORY]    || "",
+            subCategory:  values[FORM_COL.SUBCATEGORY] || "",
+            severity:     values[FORM_COL.SEVERITY]    || "Medium",
+            tower:        values[FORM_COL.TOWER]       || "",
+            description:  values[FORM_COL.LOCATION]    || "",
+            photoLinks:   values[FORM_COL.PHOTO]       || ""
+        };
+        createPendingIssue_(fields, ""); // form path has no verified email
+    } catch (error) {
+        Logger.log("Form submission error: " + error.toString());
+    }
+}
+
+/**
+ * Shared writer for both the Google Form trigger and the in-portal
+ * submitIssue API action. Generates the ticket id atomically (LockService)
+ * and writes one row into PENDING_REVIEW using PENDING_COL constants.
+ *
+ * `fields` shape:
+ *   { residentName, flat, category, subCategory, severity, tower,
+ *     description, photoLinks }   // photoLinks: string (CSV) OR string[]
+ *
+ * Returns: { ticketId, reportedDate, slaDate }
+ */
+function createPendingIssue_(fields, submittedBy) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+        const reportedDate = new Date();
+        const severity = fields.severity || "Medium";
+        const slaDate  = calculateSLADate(severity, reportedDate);
+        const ticketId = generateTicketID();
+        const photoCell = Array.isArray(fields.photoLinks)
+            ? fields.photoLinks.filter(Boolean).join(", ")
+            : (fields.photoLinks || "");
+
+        const row = newRow_(PENDING_WIDTH);
+        row[PENDING_COL.TICKET_ID]     = ticketId;
+        row[PENDING_COL.DATE_REPORTED] = reportedDate;
+        row[PENDING_COL.RESIDENT]      = fields.residentName || "";
+        row[PENDING_COL.FLAT]          = fields.flat         || "";
+        row[PENDING_COL.CATEGORY]      = fields.category     || "";
+        row[PENDING_COL.SUBCATEGORY]   = fields.subCategory  || "";
+        row[PENDING_COL.SEVERITY]      = severity;
+        row[PENDING_COL.TOWER]         = fields.tower        || "";
+        row[PENDING_COL.PHOTO]         = photoCell;
+        row[PENDING_COL.DESCRIPTION]   = fields.description  || "";
+        row[PENDING_COL.SUBMITTED_BY]  = submittedBy         || "";
+        row[PENDING_COL.STATE]         = "PENDING_APPROVAL";
+
+        getSheet(SHEETS.PENDING_QUEUE).appendRow(row);
+        Logger.log("Pending issue created: " + ticketId + " SLA=" + slaDate);
+
+        return { ticketId: ticketId, reportedDate: reportedDate, slaDate: slaDate };
+    } finally {
+        try { lock.releaseLock(); } catch (e) { /* noop */ }
+    }
+}
+
+/**
+ * In-portal submission entry point.
+ * `payload` shape:
+ *   { residentName?, flat, category, subCategory?, severity, tower,
+ *     description, photos?: [{ name, mime, b64 }, ...] }
+ * `submittedBy` is the server-trusted email from Session.
+ */
+function submitIssue(payload, submittedBy) {
+    try {
+        // Feature gate (UI is also hidden when off; this is the API
+        // safeguard so dependent helpers stay reachable while the public
+        // entry point is disabled).
+        if (!getFeatureFlag("FEATURE_IN_PORTAL_SUBMIT")) {
+            return { success: false, data: null, error: "In-portal submission is currently disabled." };
+        }
+        const p = payload || {};
+        // If photo upload is feature-disabled, silently drop photos.
+        if (!getFeatureFlag("FEATURE_PHOTO_UPLOAD")) {
+            p.photos = [];
+        }
+        const validation = validateSubmission_(p);
+        if (!validation.ok) {
+            return { success: false, data: null, error: "Validation failed: " + validation.errors.join("; ") };
+        }
+
+        // Rate limit: 1 submit / 20s per user, max 20 per UTC day.
+        const limit = checkRateLimit_(submittedBy);
+        if (!limit.ok) {
+            return { success: false, data: null, error: limit.error };
+        }
+
+        // Upload photos (if any).
+        let photoLinks = [];
+        if (Array.isArray(p.photos) && p.photos.length > 0) {
+            try {
+                photoLinks = uploadSubmissionPhotos_(p.photos, submittedBy);
+            } catch (e) {
+                Logger.log("Photo upload failed: " + e);
+                return { success: false, data: null, error: "Photo upload failed: " + e.message };
+            }
+        }
+
+        const fields = {
+            residentName: p.residentName || submittedBy || "",
+            flat:         p.flat,
+            category:     p.category,
+            subCategory:  p.subCategory || "",
+            severity:     p.severity,
+            tower:        p.tower,
+            description:  p.description,
+            photoLinks:   photoLinks
+        };
+        const result = createPendingIssue_(fields, submittedBy || "");
+
+        return {
+            success: true,
+            data: {
+                ticketId: result.ticketId,
+                reportedDate: result.reportedDate,
+                slaDate: result.slaDate,
+                photoCount: photoLinks.length
+            },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("submitIssue error: " + error);
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+/**
+ * Returns the CATEGORY_MASTER lists so the submit page can render dropdowns
+ * sourced from the sheet (not hard-coded). The sheet stores Category /
+ * Subcategory / Severity / Tower as independent columns of lists.
+ */
+function getCategoryMaster() {
+    try {
+        const sheet = getSheet(SHEETS.CATEGORY_MASTER);
+        const data = sheet.getDataRange().getValues();
+        const categories = [], subcategories = [], severities = [], towers = [];
+        for (let i = 1; i < data.length; i++) {
+            const r = data[i];
+            if (r[0]) categories.push(String(r[0]).trim());
+            if (r[1]) subcategories.push(String(r[1]).trim());
+            if (r[2]) severities.push(String(r[2]).trim());
+            if (r[3]) towers.push(String(r[3]).trim());
+        }
+        return {
+            success: true,
+            data: {
+                categories: dedupe_(categories),
+                subcategories: dedupe_(subcategories),
+                severities: dedupe_(severities),
+                towers: dedupe_(towers)
+            },
+            error: null
+        };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+function dedupe_(arr) {
+    const seen = {}, out = [];
+    for (let i = 0; i < arr.length; i++) {
+        const k = arr[i];
+        if (!k || seen[k]) continue;
+        seen[k] = true;
+        out.push(k);
+    }
+    return out;
+}
+
+// Server-side validation for in-portal submissions.
+// All numeric limits come from CONFIG tunables — keep this aligned with
+// what the browser client sees via getClientConfig().
+function validateSubmission_(p) {
+    const errors = [];
+    const ALLOWED_SEVERITIES = ["Critical", "High", "Medium", "Low"];
+    const descMin   = Number(getTunable("SUBMIT_DESC_MIN"))    || 5;
+    const descMax   = Number(getTunable("SUBMIT_DESC_MAX"))    || 1000;
+    const maxPhotos = Number(getTunable("SUBMIT_MAX_PHOTOS"))  || 5;
+    const maxMB     = Number(getTunable("SUBMIT_MAX_PHOTO_MB")) || 5;
+    if (!p.category || String(p.category).trim() === "") errors.push("Category is required");
+    if (!p.tower    || String(p.tower).trim()    === "") errors.push("Tower is required");
+    if (!p.severity || ALLOWED_SEVERITIES.indexOf(p.severity) === -1) errors.push("Severity must be Critical/High/Medium/Low");
+    if (!p.description || String(p.description).trim().length < descMin) errors.push("Description must be at least " + descMin + " characters");
+    if (p.description && String(p.description).length > descMax)        errors.push("Description must be " + descMax + " characters or fewer");
+    if (p.residentName && String(p.residentName).length > 80)            errors.push("Resident name too long");
+    if (p.flat && String(p.flat).length > 20)                            errors.push("Flat number too long");
+    if (Array.isArray(p.photos)) {
+        if (p.photos.length > maxPhotos) errors.push("Maximum " + maxPhotos + " photos allowed");
+        const allowedMime = ["image/jpeg", "image/png", "image/webp"];
+        const maxBytes = maxMB * 1024 * 1024;
+        for (let i = 0; i < p.photos.length; i++) {
+            const ph = p.photos[i];
+            if (!ph || !ph.b64) { errors.push("Photo " + (i + 1) + " is empty"); continue; }
+            if (allowedMime.indexOf(ph.mime) === -1) errors.push("Photo " + (i + 1) + " must be JPEG/PNG/WEBP");
+            // Approximate decoded size: b64 length * 3/4.
+            const approxBytes = Math.floor(ph.b64.length * 0.75);
+            if (approxBytes > maxBytes) errors.push("Photo " + (i + 1) + " exceeds " + maxMB + " MB");
+        }
+    }
+    return { ok: errors.length === 0, errors: errors };
+}
+
+// Per-user rate limit using UserProperties (scoped to signed-in account).
+function checkRateLimit_(email) {
+    if (!email) return { ok: true }; // anonymous (form path)
+    const gapSec = Number(getTunable("SUBMIT_RATE_LIMIT_SECONDS")) || 20;
+    const dayCap = Number(getTunable("SUBMIT_DAILY_LIMIT"))        || 20;
+    try {
+        const props = PropertiesService.getUserProperties();
+        const now = Date.now();
+        const last = parseInt(props.getProperty("IRP_LAST_SUBMIT_TS") || "0", 10);
+        if (last && (now - last) < gapSec * 1000) {
+            return { ok: false, error: "Please wait a few seconds before submitting again." };
+        }
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const dayKey = "IRP_DAY_" + todayKey;
+        const count = parseInt(props.getProperty(dayKey) || "0", 10);
+        if (count >= dayCap) {
+            return { ok: false, error: "Daily submission limit reached (" + dayCap + ")." };
+        }
+        props.setProperty("IRP_LAST_SUBMIT_TS", String(now));
+        props.setProperty(dayKey, String(count + 1));
+        return { ok: true };
+    } catch (e) {
+        Logger.log("checkRateLimit_ noop: " + e);
+        return { ok: true };
+    }
+}
+
+// Upload base64-encoded photos to the configured Drive folder and return
+// shareable URLs. Throws if the folder is not configured/accessible.
+function uploadSubmissionPhotos_(photos, submittedBy) {
+    const folderId = getAttachmentFolderId();
+    if (!folderId) {
+        throw new Error("ATTACHMENT_FOLDER_ID not set in CONFIG sheet");
+    }
+    const folder = DriveApp.getFolderById(folderId);
+    const links = [];
+    const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "UTC", "yyyyMMdd_HHmmss");
+    for (let i = 0; i < photos.length; i++) {
+        const ph = photos[i];
+        const bytes = Utilities.base64Decode(String(ph.b64 || "").replace(/^data:[^;]+;base64,/, ""));
+        const safeName = String(ph.name || ("photo_" + (i + 1))).replace(/[^A-Za-z0-9._-]/g, "_");
+        const fileName = stamp + "_" + (submittedBy ? submittedBy.replace(/[^A-Za-z0-9._-]/g, "_") + "_" : "") + safeName;
+        const blob = Utilities.newBlob(bytes, ph.mime, fileName);
+        const file = folder.createFile(blob);
+        try {
+            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (e) { /* sharing may be restricted by domain policy — keep URL */ }
+        links.push(file.getUrl());
+    }
+    return links;
+}
+
+// Get Form Responses (Direct from Google Sheet)
+function getFormResponses() {
+    try {
+        const sheet = getSheet(SHEETS.FORM_RESPONSES);
+        const data = sheet.getDataRange().getValues();
+        const responses = [];
+        
+        // Get header row to map column names
+        const headers = data[0];
+        
+        // Process each row (skip header)
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            const response = {};
+            
+            // Map each column to header name
+            for (let j = 0; j < headers.length; j++) {
+                response[headers[j]] = row[j];
+            }
+            
+            responses.push(response);
+        }
+        
+        return {
+            success: true,
+            responses: responses,
+            count: responses.length,
+            error: null
+        };
+    } catch (error) {
+        return {
+            success: false,
+            responses: null,
+            error: "Error fetching form responses: " + error.toString()
+        };
+    }
+}
+
+// Sync Form Responses to PENDING_REVIEW (manual data sync). Idempotent
+// via {Timestamp|ResidentName|Flat} signature compared across both sheets.
+function syncFormResponses() {
+    try {
+        const formSheet = getSheet(SHEETS.FORM_RESPONSES);
+        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+
+        const formData = formSheet.getDataRange().getValues();
+        const pendingData = pendingSheet.getDataRange().getValues();
+
+        const sigOf = function (ts, name, flat) {
+            const t = ts instanceof Date ? ts.toISOString() : String(ts);
+            return t + "|" + String(name || "") + "|" + String(flat || "");
+        };
+
+        const processedKeys = new Set();
+        for (let i = 1; i < pendingData.length; i++) {
+            const p = pendingData[i];
+            processedKeys.add(sigOf(
+                p[PENDING_COL.DATE_REPORTED],
+                p[PENDING_COL.RESIDENT],
+                p[PENDING_COL.FLAT]
+            ));
+        }
+
+        let synced = 0;
+        let skipped = 0;
+
+        for (let i = 1; i < formData.length; i++) {
+            const row = formData[i];
+            const uniqueKey = sigOf(
+                row[FORM_COL.TIMESTAMP],
+                row[FORM_COL.RESIDENT],
+                row[FORM_COL.FLAT]
+            );
+
+            if (processedKeys.has(uniqueKey)) {
+                skipped++;
+                continue;
+            }
+
+            createPendingIssue_({
+                residentName: row[FORM_COL.RESIDENT]    || "",
+                flat:         row[FORM_COL.FLAT]        || "",
+                category:     row[FORM_COL.CATEGORY]    || "",
+                subCategory:  row[FORM_COL.SUBCATEGORY] || "",
+                severity:     row[FORM_COL.SEVERITY]    || "Medium",
+                tower:        row[FORM_COL.TOWER]       || "",
+                description:  row[FORM_COL.LOCATION]    || "",
+                photoLinks:   row[FORM_COL.PHOTO]       || ""
+            }, "");
+            processedKeys.add(uniqueKey);
+            synced++;
+        }
+        
+        return {
+            success: true,
+            data: {
+                synced: synced,
+                skipped: skipped,
+                message: `Synced ${synced} new issues, skipped ${skipped} already processed`
+            },
+            error: null
+        };
+    } catch (error) {
+        return {
+            success: false,
+            data: null,
+            error: "Sync error: " + error.toString()
+        };
+    }
+}
+
+// Validate User Access
+// Authoritative source is the CONFIG sheet (see config.gs). Email MUST be
+// a server-trusted address obtained from Session.getActiveUser() - never
+// from a client-supplied payload field.
+function validateUserAccess(email) {
+    try {
+        const role = getUserRole(email);
+        if (role === "COMMITTEE") {
+            return { email: email, role: "COMMITTEE", hasAccess: true, accessLevel: "FULL" };
+        }
+        if (role === "BUILDER") {
+            return { email: email, role: "BUILDER", hasAccess: true, accessLevel: "LIMITED" };
+        }
+        return { email: email, role: "UNKNOWN", hasAccess: false, accessLevel: "NONE" };
+    } catch (error) {
+        Logger.log("Error validating user access: " + error.toString());
+        throw error;
+    }
+}
+
+// Get Pending Issues
+function getPendingIssues() {
+    try {
+        const sheet = getSheet(SHEETS.PENDING_QUEUE);
+        const data = sheet.getDataRange().getValues();
+        const issues = [];
+
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            // Include PENDING_APPROVAL + REJECTED (UI filters); skip APPROVED (already on LIVE).
+            const state = row[PENDING_COL.STATE] || "PENDING_APPROVAL";
+            if (state === "APPROVED") continue;
+
+            const photo = row[PENDING_COL.PHOTO];
+            issues.push({
+                ticketId: row[PENDING_COL.TICKET_ID],
+                dateReported: row[PENDING_COL.DATE_REPORTED],
+                resident: {
+                    name:  row[PENDING_COL.RESIDENT] || "",
+                    email: "",   // not collected by form
+                    phone: ""
+                },
+                location: {
+                    tower: row[PENDING_COL.TOWER] || "",
+                    flat:  row[PENDING_COL.FLAT]  || ""
+                },
+                issue: {
+                    category:    row[PENDING_COL.CATEGORY]    || "",
+                    subcategory: row[PENDING_COL.SUBCATEGORY] || "",
+                    severity:    row[PENDING_COL.SEVERITY]    || "",
+                    location:    row[PENDING_COL.DESCRIPTION] || "",
+                    description: row[PENDING_COL.DESCRIPTION] || "",
+                    photoLinks:  photo ? [photo] : []
+                },
+                state: state,
+                rejectionReason: row[PENDING_COL.REJECTION_REASON] || "",
+                actionDate:      row[PENDING_COL.ACTION_DATE]      || "",
+                actionBy:        row[PENDING_COL.ACTION_BY]        || ""
+            });
+        }
+
+        return { success: true, data: issues, error: null };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Approve Issue: copy PENDING row into LIVE_ISSUES with status=APPROVED,
+// then remove from PENDING.
+function approveIssue(ticketId, userEmail) {
+    try {
+        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
+        const pendingData  = pendingSheet.getDataRange().getValues();
+
+        for (let i = 1; i < pendingData.length; i++) {
+            const row = pendingData[i];
+            if (row[PENDING_COL.TICKET_ID] !== ticketId) continue;
+
+            const reportedDate = new Date(row[PENDING_COL.DATE_REPORTED]);
+            const severity     = row[PENDING_COL.SEVERITY] || "Medium";
+            const slaDate      = calculateSLADate(severity, reportedDate);
+            const now          = new Date();
+
+            const live = newRow_(LIVE_WIDTH);
+            live[LIVE_COL.TICKET_ID]      = ticketId;
+            live[LIVE_COL.DATE_REPORTED]  = reportedDate;
+            live[LIVE_COL.RESIDENT]       = row[PENDING_COL.RESIDENT]    || "";
+            live[LIVE_COL.FLAT]           = row[PENDING_COL.FLAT]        || "";
+            live[LIVE_COL.CATEGORY]       = row[PENDING_COL.CATEGORY]    || "";
+            live[LIVE_COL.SEVERITY]       = severity;
+            live[LIVE_COL.TOWER]          = row[PENDING_COL.TOWER]       || "";
+            live[LIVE_COL.SUBCATEGORY]    = row[PENDING_COL.SUBCATEGORY] || "";
+            live[LIVE_COL.PHOTO]          = row[PENDING_COL.PHOTO]       || "";
+            live[LIVE_COL.DESCRIPTION]    = row[PENDING_COL.DESCRIPTION] || "";
+            live[LIVE_COL.BUILDER_STATUS] = "ASSIGNED";
+            live[LIVE_COL.DATE_ASSIGNED]  = now;
+            live[LIVE_COL.SLA_DATE]       = slaDate;
+            live[LIVE_COL.STATUS]         = "APPROVED";
+            live[LIVE_COL.ACTION_BY]      = userEmail || "";
+            live[LIVE_COL.LAST_UPDATED]   = now;
+
+            liveSheet.appendRow(live);
+            pendingSheet.deleteRow(i + 1);
+
+            return {
+                success: true,
+                data: {
+                    ticketId: ticketId,
+                    state: "APPROVED",
+                    approvedBy: userEmail,
+                    approvedDate: now,
+                    slaDate: slaDate
+                },
+                error: null
+            };
+        }
+
+        return { success: false, data: null, error: "Ticket not found" };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Reject Issue: mark PENDING row as REJECTED (kept for audit).
+function rejectIssue(ticketId, reason, userEmail) {
+    try {
+        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const data = pendingSheet.getDataRange().getValues();
+
+        for (let i = 1; i < data.length; i++) {
+            if (data[i][PENDING_COL.TICKET_ID] !== ticketId) continue;
+            const rowNum = i + 1;
+            const now = new Date();
+            pendingSheet.getRange(rowNum, PENDING_COL.ACTION_DATE + 1).setValue(now);
+            pendingSheet.getRange(rowNum, PENDING_COL.ACTION_BY + 1).setValue(userEmail || "");
+            pendingSheet.getRange(rowNum, PENDING_COL.REJECTION_REASON + 1).setValue(reason || "");
+            pendingSheet.getRange(rowNum, PENDING_COL.STATE + 1).setValue("REJECTED");
+
+            return {
+                success: true,
+                data: {
+                    ticketId: ticketId,
+                    state: "REJECTED",
+                    rejectionReason: reason,
+                    rejectedBy: userEmail,
+                    rejectedDate: now
+                },
+                error: null
+            };
+        }
+
+        return { success: false, data: null, error: "Ticket not found" };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Get Live Issues
+function getLiveIssues(filterOption) {
+    try {
+        const sheet = getSheet(SHEETS.LIVE_ISSUES);
+        const data = sheet.getDataRange().getValues();
+        const issues = [];
+        const today = new Date();
+
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            const sevRaw = String(row[LIVE_COL.SEVERITY] || "");
+            const slaDateRaw = row[LIVE_COL.SLA_DATE] ? new Date(row[LIVE_COL.SLA_DATE]) : null;
+            const isBreached = slaDateRaw ? today > slaDateRaw : false;
+
+            if (filterOption === "CRITICAL" && sevRaw.toUpperCase() !== "CRITICAL") continue;
+            if (filterOption === "AGING" && (today - new Date(row[LIVE_COL.DATE_REPORTED])) < 7 * 24 * 60 * 60 * 1000) continue;
+            if (filterOption === "BREACHED" && !isBreached) continue;
+
+            const slaDate = slaDateRaw;
+            const breached = isBreached;
+            const daysRemaining = slaDate ? Math.ceil((slaDate - today) / (1000 * 60 * 60 * 24)) : null;
+            const photo = row[LIVE_COL.PHOTO];
+
+            issues.push({
+                ticketId: row[LIVE_COL.TICKET_ID],
+                dateReported: row[LIVE_COL.DATE_REPORTED],
+                resident: {
+                    name: row[LIVE_COL.RESIDENT] || "",
+                    email: "",
+                    phone: ""
+                },
+                location: {
+                    tower: row[LIVE_COL.TOWER] || "",
+                    flat:  row[LIVE_COL.FLAT]  || ""
+                },
+                issue: {
+                    category:    row[LIVE_COL.CATEGORY]    || "",
+                    subcategory: row[LIVE_COL.SUBCATEGORY] || "",
+                    severity:    sevRaw,
+                    description: row[LIVE_COL.DESCRIPTION] || "",
+                    photoLinks:  photo ? [photo] : []
+                },
+                builder: {
+                    status:        row[LIVE_COL.BUILDER_STATUS]  || "ASSIGNED",
+                    comment:       row[LIVE_COL.BUILDER_COMMENT] || "",
+                    assignedVendor:row[LIVE_COL.ASSIGNED_VENDOR] || "",
+                    lastUpdated:   row[LIVE_COL.LAST_UPDATED]    || ""
+                },
+                sla: {
+                    dueDate: slaDate,
+                    breached: breached,
+                    daysRemaining: daysRemaining
+                },
+                state:       row[LIVE_COL.STATUS]       || "",
+                approvedBy:  row[LIVE_COL.ACTION_BY]    || "",
+                lastUpdated: row[LIVE_COL.LAST_UPDATED] || ""
+            });
+        }
+
+        return { success: true, data: issues, error: null };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Update Builder Status. Column indices come from LIVE_COL; getRange() is
+// 1-based so we add 1.
+function updateBuilderStatus(ticketId, status, comment, vendor, closureDate) {
+    try {
+        const sheet = getSheet(SHEETS.LIVE_ISSUES);
+        const data = sheet.getDataRange().getValues();
+
+        for (let i = 1; i < data.length; i++) {
+            if (data[i][LIVE_COL.TICKET_ID] !== ticketId) continue;
+            const rowNum = i + 1;
+            const now = new Date();
+
+            sheet.getRange(rowNum, LIVE_COL.BUILDER_STATUS  + 1).setValue(status || "");
+            sheet.getRange(rowNum, LIVE_COL.BUILDER_COMMENT + 1).setValue(comment || "");
+            sheet.getRange(rowNum, LIVE_COL.ASSIGNED_VENDOR + 1).setValue(vendor || "");
+            sheet.getRange(rowNum, LIVE_COL.STATUS          + 1).setValue(status || "");
+            sheet.getRange(rowNum, LIVE_COL.LAST_UPDATED    + 1).setValue(now);
+            if (closureDate) {
+                sheet.getRange(rowNum, LIVE_COL.CLOSURE_DATE + 1).setValue(new Date(closureDate));
+            }
+
+            return {
+                success: true,
+                data: {
+                    ticketId: ticketId,
+                    builderStatus: status,
+                    builderComment: comment,
+                    assignedVendor: vendor,
+                    lastUpdated: now
+                },
+                error: null
+            };
+        }
+
+        return { success: false, data: null, error: "Ticket not found" };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Close Issue: move LIVE row -> CLOSED_ISSUES, append [reason, closedDate,
+// closedBy, resolutionDays] at the tail (indices LIVE_WIDTH..LIVE_WIDTH+3).
+function closeIssue(ticketId, reason, userEmail) {
+    try {
+        const liveSheet   = getSheet(SHEETS.LIVE_ISSUES);
+        const closedSheet = getSheet(SHEETS.CLOSED_ISSUES);
+        const liveData    = liveSheet.getDataRange().getValues();
+
+        for (let i = 1; i < liveData.length; i++) {
+            if (liveData[i][LIVE_COL.TICKET_ID] !== ticketId) continue;
+            const row = liveData[i];
+            const reportedDate = new Date(row[LIVE_COL.DATE_REPORTED]);
+            const closedDate   = new Date();
+            const resolutionTime = Math.ceil((closedDate - reportedDate) / (1000 * 60 * 60 * 24));
+
+            // Normalise width so closure metadata always lands at fixed offsets.
+            const base = row.slice(0, LIVE_WIDTH);
+            while (base.length < LIVE_WIDTH) base.push("");
+            base[LIVE_COL.STATUS]       = "CLOSED";
+            base[LIVE_COL.CLOSURE_DATE] = closedDate;
+            base[LIVE_COL.ACTION_BY]    = userEmail || "";
+            base[LIVE_COL.LAST_UPDATED] = closedDate;
+            const closedRow = base.concat([reason || "", closedDate, userEmail || "", resolutionTime]);
+            closedSheet.appendRow(closedRow);
+            liveSheet.deleteRow(i + 1);
+
+            return {
+                success: true,
+                data: {
+                    ticketId: ticketId,
+                    state: "CLOSED",
+                    closedDate: closedDate,
+                    closedBy: userEmail,
+                    closureReason: reason,
+                    resolutionTime: resolutionTime
+                },
+                error: null
+            };
+        }
+
+        return { success: false, data: null, error: "Ticket not found" };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Reopen Issue: move row back from CLOSED to LIVE, status=REOPENED.
+function reopenIssue(ticketId, reason, userEmail) {
+    try {
+        const closedSheet = getSheet(SHEETS.CLOSED_ISSUES);
+        const liveSheet   = getSheet(SHEETS.LIVE_ISSUES);
+        const closedData  = closedSheet.getDataRange().getValues();
+
+        for (let i = 1; i < closedData.length; i++) {
+            if (closedData[i][LIVE_COL.TICKET_ID] !== ticketId) continue;
+            const row = closedData[i];
+            const reopenedRow = row.slice(0, LIVE_WIDTH);
+            while (reopenedRow.length < LIVE_WIDTH) reopenedRow.push("");
+            const now = new Date();
+            reopenedRow[LIVE_COL.BUILDER_STATUS] = "ASSIGNED";
+            reopenedRow[LIVE_COL.REOPENED_FLAG]  = "YES";
+            reopenedRow[LIVE_COL.REMARKS]        = reason || reopenedRow[LIVE_COL.REMARKS] || "";
+            reopenedRow[LIVE_COL.STATUS]         = "REOPENED";
+            reopenedRow[LIVE_COL.ACTION_BY]      = userEmail || "";
+            reopenedRow[LIVE_COL.LAST_UPDATED]   = now;
+
+            liveSheet.appendRow(reopenedRow);
+            closedSheet.deleteRow(i + 1);
+
+            return {
+                success: true,
+                data: {
+                    ticketId: ticketId,
+                    state: "REOPENED",
+                    reopenedDate: new Date(),
+                    reopenedBy: userEmail,
+                    reopenReason: reason
+                },
+                error: null
+            };
+        }
+
+        return { success: false, data: null, error: "Ticket not found" };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Get Form Responses with Hybrid Status — joins Form Responses 1 against
+// PENDING / LIVE / CLOSED using {ResidentName|Tower|Flat} signature.
+function getIssuesWithStatus() {
+    try {
+        const formSheet    = getSheet(SHEETS.FORM_RESPONSES);
+        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
+        const closedSheet  = getSheet(SHEETS.CLOSED_ISSUES);
+
+        const formData    = formSheet.getDataRange().getValues();
+        const pendingData = pendingSheet.getDataRange().getValues();
+        const liveData    = liveSheet.getDataRange().getValues();
+        const closedData  = closedSheet.getDataRange().getValues();
+
+        const sig = function (name, tower, flat) {
+            return String(name || "").trim() + "|" + String(tower || "").trim() + "|" + String(flat || "").trim();
+        };
+
+        const pendingMap = {};
+        const liveMap    = {};
+        const closedMap  = {};
+
+        for (let i = 1; i < pendingData.length; i++) {
+            const r = pendingData[i];
+            pendingMap[sig(r[PENDING_COL.RESIDENT], r[PENDING_COL.TOWER], r[PENDING_COL.FLAT])] = {
+                status:   r[PENDING_COL.STATE] || "PENDING_APPROVAL",
+                ticketId: r[PENDING_COL.TICKET_ID]
+            };
+        }
+        for (let i = 1; i < liveData.length; i++) {
+            const r = liveData[i];
+            liveMap[sig(r[LIVE_COL.RESIDENT], r[LIVE_COL.TOWER], r[LIVE_COL.FLAT])] = {
+                status:   r[LIVE_COL.BUILDER_STATUS] || r[LIVE_COL.STATUS] || "ASSIGNED",
+                ticketId: r[LIVE_COL.TICKET_ID]
+            };
+        }
+        for (let i = 1; i < closedData.length; i++) {
+            const r = closedData[i];
+            closedMap[sig(r[LIVE_COL.RESIDENT], r[LIVE_COL.TOWER], r[LIVE_COL.FLAT])] = {
+                status:   "CLOSED",
+                ticketId: r[LIVE_COL.TICKET_ID]
+            };
+        }
+
+        const issues = [];
+        for (let i = 1; i < formData.length; i++) {
+            const row = formData[i];
+            const key = sig(row[FORM_COL.RESIDENT], row[FORM_COL.TOWER], row[FORM_COL.FLAT]);
+
+            let hybridStatus = "NEW";
+            let ticketId = null;
+            if (closedMap[key])      { hybridStatus = closedMap[key].status;  ticketId = closedMap[key].ticketId; }
+            else if (liveMap[key])   { hybridStatus = liveMap[key].status;    ticketId = liveMap[key].ticketId; }
+            else if (pendingMap[key]){ hybridStatus = pendingMap[key].status; ticketId = pendingMap[key].ticketId; }
+
+            issues.push({
+                ticketId: ticketId || ("SUB-" + new Date().getFullYear() + "-" + String(i).padStart(4, "0")),
+                issueTitle: row[FORM_COL.LOCATION] || "Issue Report",
+                resident: {
+                    name:  row[FORM_COL.RESIDENT] || "Unknown",
+                    email: "",
+                    phone: ""
+                },
+                location: {
+                    tower: row[FORM_COL.TOWER] || "N/A",
+                    flat:  row[FORM_COL.FLAT]  || "N/A"
+                },
+                issue: {
+                    category:    row[FORM_COL.CATEGORY]    || "N/A",
+                    subcategory: row[FORM_COL.SUBCATEGORY] || "",
+                    severity:    row[FORM_COL.SEVERITY]    || "Medium",
+                    description: row[FORM_COL.LOCATION]    || "No details provided"
+                },
+                status: hybridStatus,
+                dateReported: row[FORM_COL.TIMESTAMP] || new Date().toISOString(),
+                attachments: row[FORM_COL.PHOTO] ? [row[FORM_COL.PHOTO]] : []
+            });
+        }
+
+        return { success: true, responses: issues, count: issues.length, error: null };
+    } catch (error) {
+        return { success: false, responses: null, error: "Error fetching issues with status: " + error.toString() };
+    }
+}
+
+// Delete Issue (from any sheet)
+function deleteIssue(ticketId, sheet) {
+    try {
+        const targetSheet = getSheet(sheet);
+        const data = targetSheet.getDataRange().getValues();
+        
+        for (let i = 1; i < data.length; i++) {
+            if (data[i][0] === ticketId) {
+                targetSheet.deleteRow(i + 1);
+                return {
+                    success: true,
+                    data: {
+                        ticketId: ticketId,
+                        sheet: sheet,
+                        deleted: true
+                    },
+                    error: null
+                };
+            }
+        }
+        
+        return { success: false, data: null, error: "Ticket not found in " + sheet };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Get Dashboard Metrics
+function getDashboardMetrics() {
+    try {
+        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
+        const closedSheet  = getSheet(SHEETS.CLOSED_ISSUES);
+
+        const pendingData = pendingSheet.getDataRange().getValues();
+        const liveData    = liveSheet.getDataRange().getValues();
+        const closedData  = closedSheet.getDataRange().getValues();
+
+        let totalPending      = 0;
+        let totalActive       = liveData.length - 1;
+        const totalClosed     = closedData.length - 1;
+        let criticalPending   = 0;
+        let slaBreaches       = 0;
+        let agingIssues       = 0;
+        const categoryBreakdown = {};
+        const towerBreakdown    = {};
+
+        for (let i = 1; i < pendingData.length; i++) {
+            const r = pendingData[i];
+            if ((r[PENDING_COL.STATE] || "PENDING_APPROVAL") !== "PENDING_APPROVAL") continue;
+            totalPending++;
+            if (String(r[PENDING_COL.SEVERITY] || "").toUpperCase() === "CRITICAL") criticalPending++;
+        }
+
+        const today = new Date();
+        let totalClosureTime = 0;
+
+        for (let i = 1; i < liveData.length; i++) {
+            const r = liveData[i];
+            const category = String(r[LIVE_COL.CATEGORY] || "Uncategorised");
+            const tower    = String(r[LIVE_COL.TOWER]    || "Unknown");
+            const sla      = r[LIVE_COL.SLA_DATE] ? new Date(r[LIVE_COL.SLA_DATE]) : null;
+            const updated  = r[LIVE_COL.LAST_UPDATED] ? new Date(r[LIVE_COL.LAST_UPDATED]) : null;
+
+            if (sla && today > sla) slaBreaches++;
+            if (updated && (today - updated) > 7 * 24 * 60 * 60 * 1000) agingIssues++;
+
+            categoryBreakdown[category] = (categoryBreakdown[category] || 0) + 1;
+            towerBreakdown[tower]       = (towerBreakdown[tower]    || 0) + 1;
+        }
+
+        // Closed sheet adds [reason, closedDate, closedBy, resolutionDays] at
+        // offsets LIVE_WIDTH..LIVE_WIDTH+3. Resolution days is at LIVE_WIDTH+3.
+        const resolutionIdx = LIVE_WIDTH + 3;
+        for (let i = 1; i < closedData.length; i++) {
+            totalClosureTime += Number(closedData[i][resolutionIdx]) || 0;
+        }
+        const avgClosureTime = totalClosed > 0 ? (totalClosureTime / totalClosed).toFixed(1) : 0;
+        
+        return {
+            success: true,
+            data: {
+                totalPending: totalPending,
+                totalActive: totalActive,
+                totalClosed: totalClosed,
+                criticalPending: criticalPending,
+                slaBreaches: slaBreaches,
+                categoryBreakdown: categoryBreakdown,
+                towerBreakdown: towerBreakdown,
+                agingIssues: agingIssues,
+                avgClosureTime: parseFloat(avgClosureTime),
+                builderWorkload: totalActive,
+                recentClosed: []
+            },
+            error: null
+        };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Generate Ticket ID (TKT-XXXXX format) - ensures unique ID across LIVE_ISSUES and CLOSED_ISSUES
+function generateTicketId() {
+    try {
+        const ss = getSpreadsheet();
+        const liveSheet = ss.getSheetByName(SHEETS.LIVE_ISSUES);
+        const closedSheet = ss.getSheetByName(SHEETS.CLOSED_ISSUES);
+        
+        let maxNum = 0;
+        
+        // Get max from LIVE_ISSUES
+        if (liveSheet) {
+            const liveData = liveSheet.getDataRange().getValues();
+            for (let i = 1; i < liveData.length; i++) {
+                const ticketId = liveData[i][0];
+                if (ticketId && ticketId.toString().startsWith("TKT-")) {
+                    const num = parseInt(ticketId.toString().substring(4));
+                    if (num > maxNum) maxNum = num;
+                }
+            }
+        }
+        
+        // Get max from CLOSED_ISSUES
+        if (closedSheet) {
+            const closedData = closedSheet.getDataRange().getValues();
+            for (let i = 1; i < closedData.length; i++) {
+                const ticketId = closedData[i][0];
+                if (ticketId && ticketId.toString().startsWith("TKT-")) {
+                    const num = parseInt(ticketId.toString().substring(4));
+                    if (num > maxNum) maxNum = num;
+                }
+            }
+        }
+        
+        const nextNum = String(maxNum + 1).padStart(5, '0');
+        const newTicketId = `TKT-${nextNum}`;
+        
+        return {
+            success: true,
+            data: { ticketId: newTicketId },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("Error generating ticket ID: " + error.toString());
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Approve Issue With New Ticket ID - moves pending issue to live with new TKT-ID.
+function approveIssueWithTicketId(originalTicketId, newTicketId) {
+    try {
+        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
+        const pendingData  = pendingSheet.getDataRange().getValues();
+
+        for (let i = 1; i < pendingData.length; i++) {
+            const row = pendingData[i];
+            if (row[PENDING_COL.TICKET_ID] !== originalTicketId) continue;
+
+            const reportedDate = new Date(row[PENDING_COL.DATE_REPORTED]);
+            const severity     = row[PENDING_COL.SEVERITY] || "Medium";
+            const slaDate      = calculateSLADate(severity, reportedDate);
+            const now          = new Date();
+
+            const live = newRow_(LIVE_WIDTH);
+            live[LIVE_COL.TICKET_ID]      = newTicketId;
+            live[LIVE_COL.DATE_REPORTED]  = reportedDate;
+            live[LIVE_COL.RESIDENT]       = row[PENDING_COL.RESIDENT]    || "";
+            live[LIVE_COL.FLAT]           = row[PENDING_COL.FLAT]        || "";
+            live[LIVE_COL.CATEGORY]       = row[PENDING_COL.CATEGORY]    || "";
+            live[LIVE_COL.SEVERITY]       = severity;
+            live[LIVE_COL.TOWER]          = row[PENDING_COL.TOWER]       || "";
+            live[LIVE_COL.SUBCATEGORY]    = row[PENDING_COL.SUBCATEGORY] || "";
+            live[LIVE_COL.PHOTO]          = row[PENDING_COL.PHOTO]       || "";
+            live[LIVE_COL.DESCRIPTION]    = row[PENDING_COL.DESCRIPTION] || "";
+            live[LIVE_COL.BUILDER_STATUS] = "ASSIGNED";
+            live[LIVE_COL.DATE_ASSIGNED]  = now;
+            live[LIVE_COL.SLA_DATE]       = slaDate;
+            live[LIVE_COL.STATUS]         = "APPROVED";
+            live[LIVE_COL.LAST_UPDATED]   = now;
+
+            liveSheet.appendRow(live);
+            pendingSheet.deleteRow(i + 1);
+
+            return {
+                success: true,
+                data: {
+                    originalTicketId: originalTicketId,
+                    newTicketId: newTicketId,
+                    state: "APPROVED",
+                    approvedDate: new Date(),
+                    slaDate: slaDate
+                },
+                error: null
+            };
+        }
+
+        return { success: false, data: null, error: "Original ticket ID not found: " + originalTicketId };
+    } catch (error) {
+        Logger.log("Error approving issue with ticket ID: " + error.toString());
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+// Main Post Handler
+// NOTE: Google Apps Script ContentService automatically sends 
+// Access-Control-Allow-Origin: * for web apps deployed as "Anyone".
+// We use text/plain Content-Type from the client to avoid CORS preflight.
+
+// NOTE: doGet is defined in Router.gs (renders the HtmlService dashboards).
+// doPost remains here for any external/legacy JSON callers. When the web
+// app is deployed with executeAs=USER_ACCESSING, Session.getActiveUser()
+// returns the verified email; the request body is NEVER trusted for identity.
+
+function doPost(e) {
+    try {
+        // Parse request body
+        let payload = {};
+        if (e.postData && e.postData.contents) {
+            payload = JSON.parse(e.postData.contents);
+        }
+
+        const action = payload.action;
+        // Server-trusted identity. Falls back to empty -> UNKNOWN -> denied.
+        const userEmail = (Session.getActiveUser().getEmail() || "").trim();
+
+        Logger.log(`API Request: action=${action}, user=${userEmail}`);
+
+        const userRole = validateUserAccess(userEmail);
+        if (!userRole || !userRole.hasAccess) {
+            return ContentService.createTextOutput(JSON.stringify({
+                success: false,
+                error: "Unauthorized: sign in with an authorized Google account"
+            })).setMimeType(ContentService.MimeType.JSON);
+        }
+        
+        let result;
+        switch(action) {
+            case "getFormResponses":
+                result = getFormResponses();
+                break;
+            case "getIssuesWithStatus":
+                result = getIssuesWithStatus();
+                break;
+            case "getPendingIssues":
+                result = getPendingIssues();
+                break;
+            case "approveIssue":
+                result = approveIssue(payload.ticketId, userEmail);
+                break;
+            case "rejectIssue":
+                result = rejectIssue(payload.ticketId, payload.reason, userEmail);
+                break;
+            case "getLiveIssues":
+                result = getLiveIssues(payload.filterOption || "ALL");
+                break;
+            case "updateBuilderStatus":
+                result = updateBuilderStatus(payload.ticketId, payload.status, payload.comment, payload.vendor, payload.closureDate);
+                break;
+            case "closeIssue":
+                result = closeIssue(payload.ticketId, payload.reason, userEmail);
+                break;
+            case "reopenIssue":
+                result = reopenIssue(payload.ticketId, payload.reason, userEmail);
+                break;
+            case "deleteIssue":
+                result = deleteIssue(payload.ticketId, payload.sheet || SHEETS.PENDING_QUEUE);
+                break;
+            case "generateTicketId":
+                result = generateTicketId();
+                break;
+            case "approveIssueWithTicketId":
+                result = approveIssueWithTicketId(payload.originalTicketId, payload.newTicketId);
+                break;
+            case "getDashboardMetrics":
+                result = getDashboardMetrics();
+                break;
+            case "validateUserAccess":
+                result = { success: true, data: userRole, error: null };
+                break;
+            case "syncFormResponses":
+                result = syncFormResponses();
+                break;
+            case "submitIssue":
+                result = submitIssue(payload, userEmail);
+                break;
+            case "getCategoryMaster":
+                result = getCategoryMaster();
+                break;
+            case "getClientConfig":
+                result = getClientConfig();
+                break;
+            default:
+                result = { success: false, error: "Unknown action: " + action };
+        }
+        
+        return ContentService.createTextOutput(JSON.stringify(result))
+            .setMimeType(ContentService.MimeType.JSON);
+        
+    } catch (error) {
+        Logger.log("API Error: " + error.toString());
+        return ContentService.createTextOutput(JSON.stringify({
+            success: false,
+            error: error.toString()
+        })).setMimeType(ContentService.MimeType.JSON);
+    }
+}

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Issue Addressal - The Address</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #1a1f2e;
+            --accent: #d4af37;
+            --light: #f5f7fa;
+            --border: #2a3142;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+            color: #ffffff;
+        }
+        
+        .premium-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .gold-accent {
+            color: #d4af37;
+        }
+        
+        .gold-border {
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+    <!-- Navigation -->
+    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <!-- Logo -->
+                <div class="flex items-center gap-4">
+                    <!-- Logo Only Version (Compact) -->
+                    <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <!-- Alternative: Logo with Text (Uncomment to use) -->
+                    <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
+                    <div>
+                        <h1 class="text-xl font-bold gold-accent">The Address</h1>
+                        <p class="text-xs text-slate-400">Issue Addressal</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="window.location.href='index.html'" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Login
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- Header -->
+        <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <h2 class="text-3xl font-bold text-slate-100 mb-2"><i class="fas fa-list-check mr-3 gold-accent"></i>All Submitted Issues</h2>
+                <p class="text-slate-400">View all submitted issues from residents</p>
+            </div>
+            <a href="https://docs.google.com/spreadsheets/d/1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU/edit?usp=sharing"
+               target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold text-sm transition-all border border-emerald-400/30 shadow-lg shadow-emerald-900/30">
+                <i class="fas fa-table"></i>
+                Switch to Google Sheet View
+                <i class="fas fa-external-link-alt text-xs opacity-75"></i>
+            </a>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="premium-card rounded-lg px-3 py-2 mb-6 border border-slate-700">
+            <div class="flex flex-wrap items-center gap-2">
+                <input type="text" id="searchInput" placeholder="Search…"
+                       class="flex-1 min-w-[160px] bg-slate-700/30 border border-slate-600/50 rounded-md px-2.5 py-1 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs"
+                       onkeyup="filterIssues()">
+                <select id="sortSelect" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <optgroup label="Sort">
+                        <option value="date_desc">Newest first</option>
+                        <option value="date_asc">Oldest first</option>
+                        <option value="sev_desc">Sev: Critical → Low</option>
+                        <option value="sev_asc">Sev: Low → Critical</option>
+                        <option value="cat_asc">Cat: A → Z</option>
+                        <option value="cat_desc">Cat: Z → A</option>
+                        <option value="tower_asc">Tower: A → Common</option>
+                        <option value="tower_desc">Tower: Common → A</option>
+                    </optgroup>
+                </select>
+                <select id="categoryFilter" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <option value="">All Categories</option>
+                    <option value="Civil">Civil</option>
+                    <option value="Plumbing">Plumbing</option>
+                    <option value="Electrical">Electrical</option>
+                    <option value="Fire Safety">Fire Safety</option>
+                    <option value="Lift">Lift</option>
+                    <option value="Security">Security</option>
+                    <option value="Amenities">Amenities</option>
+                    <option value="Common Area">Common Area</option>
+                    <option value="Documentation">Documentation</option>
+                </select>
+                <select id="towerFilter" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <option value="">All Towers</option>
+                    <option value="Tower A">Tower A</option>
+                    <option value="Tower B">Tower B</option>
+                    <option value="Tower C">Tower C</option>
+                    <option value="Common Area">Common Area</option>
+                </select>
+                <select id="severityFilter" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <option value="">All Severities</option>
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                </select>
+                <select id="statusFilter" onchange="filterIssues()"
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                    <option value="">All Status</option>
+                    <option value="NEW">New</option>
+                    <option value="PENDING_APPROVAL">Pending Approval</option>
+                    <option value="ASSIGNED">Assigned</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="WORK_COMPLETED">Work Completed</option>
+                    <option value="CLOSED">Closed</option>
+                    <option value="REJECTED">Rejected</option>
+                </select>
+                <button onclick="loadAllIssues()" title="Refresh"
+                        class="px-2.5 py-1 rounded-md bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-semibold transition-all border border-blue-400/30">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Issues Container -->
+        <div id="issuesContainer" class="space-y-4">
+            <div class="premium-card rounded-xl p-8 text-center border border-slate-700">
+                <i class="fas fa-spinner fa-spin text-amber-400 text-3xl mb-4"></i>
+                <p class="text-slate-400">Loading issues...</p>
+            </div>
+        </div>
+    </div>
+
+    <?!= include('src/partials/api') ?>
+    <script src="../../assets/js/api.js"></script>
+    <script>
+        // === Auth (server-trusted via Google sign-in) ===
+        (async function ensureAuthorized() {
+            try {
+                const u = await API.whoAmI();
+                window.IRP_USER = u;
+                if (!u.email || u.role === 'UNKNOWN') {
+                    location.href = 'index.html';
+                    return;
+                }
+            } catch (e) {
+                console.error('Auth check failed:', e);
+                location.href = 'index.html';
+            }
+        })();
+
+        // Store all issues for filtering
+        let allIssues = [];
+
+        // Load all issues on page load
+        window.addEventListener('load', loadAllIssues);
+
+        // ========================
+        // DATA NORMALIZATION
+        // ========================
+        
+        // Normalize data to nested structure - handles both API and mock data
+        function normalizeIssueData(data) {
+            if (!data) return null;
+            // If already normalized, return as-is
+            if (data.resident && typeof data.resident === 'object' && data.location && typeof data.location === 'object') {
+                return data;
+            }
+            // Normalize flat structure to nested
+            return {
+                ticketId: data.ticketId || data.ticketID || '',
+                issueTitle: data.issueTitle || data.issue?.description || data.description || '',
+                resident: {
+                    name: data.resident?.name || data.residentName || '',
+                    email: data.resident?.email || data.residentEmail || '',
+                    phone: data.resident?.phone || data.residentPhone || ''
+                },
+                location: {
+                    tower: data.location?.tower || data.tower || '',
+                    flat: data.location?.flat || data.flatNumber || data.flat || ''
+                },
+                issue: {
+                    category: data.issue?.category || data.category || '',
+                    subcategory: data.issue?.subcategory || data.subCategory || '',
+                    severity: data.issue?.severity || data.severity || '',
+                    description: data.issue?.description || data.description || ''
+                },
+                status: data.status || 'NEW',
+                dateReported: data.dateReported || '',
+                attachments: data.attachments || []
+            };
+        }
+
+        async function loadAllIssues() {
+            try {
+                // Identity is server-trusted via Google session (HtmlService)
+                // or via fetch fallback for local dev. No client email field.
+                const data = await API.call('getIssuesWithStatus');
+                if (data && (data.responses || Array.isArray(data))) {
+                    const responses = data.responses || data;
+                    allIssues = (responses || []).map(normalizeIssueData);
+                    displayIssues(sortIssues(allIssues, document.getElementById('sortSelect')?.value || 'date_desc'));
+                } else {
+                    console.warn('No data returned');
+                    useMockData();
+                }
+            } catch (error) {
+                console.error('Error loading issues:', error);
+                console.log('Falling back to mock data...');
+                useMockData();
+            }
+        }
+
+        function useMockData() {
+            const rawMockData = [
+                {
+                    ticketId: 'TKT-001',
+                    issueTitle: 'AC Unit Not Cooling Properly',
+                    resident: { name: 'Ahmed Al Mansoori', email: 'ahmed.mansoori@example.com', phone: '+971-50-123-4567' },
+                    location: { tower: 'Tower A', flat: '1502' },
+                    issue: { category: 'HVAC/Cooling', subcategory: 'Cooling System', severity: 'HIGH', description: 'The air conditioning unit in the master bedroom is not cooling properly. The temperature is not dropping below 26°C even though it\'s set to 20°C. This issue started 3 days ago.' },
+                    status: 'ASSIGNED',
+                    dateReported: '2026-05-08',
+                    attachments: []
+                },
+                {
+                    ticketId: 'TKT-002',
+                    issueTitle: 'Water Leak from Ceiling',
+                    resident: { name: 'Fatima Al Naqbi', email: 'fatima.naqbi@example.com', phone: '+971-50-234-5678' },
+                    location: { tower: 'Tower B', flat: '2308' },
+                    issue: { category: 'Plumbing', subcategory: 'Water Leak', severity: 'CRITICAL', description: 'Water is leaking from the ceiling in the guest bedroom. The leak appears to be coming from the apartment above. Visible water damage on the ceiling and walls.' },
+                    status: 'IN_PROGRESS',
+                    dateReported: '2026-05-09',
+                    attachments: []
+                },
+                {
+                    ticketId: 'TKT-003',
+                    issueTitle: 'Cracked Tile in Kitchen',
+                    resident: { name: 'Mohammed Al Mazrouei', email: 'mohammed.mazrouei@example.com', phone: '+971-50-345-6789' },
+                    location: { tower: 'Tower C', flat: '3102' },
+                    issue: { category: 'Maintenance', subcategory: 'Tile Repair', severity: 'LOW', description: 'There is a cracked floor tile in the kitchen near the sink. It\'s not affecting functionality but looks unsightly.' },
+                    status: 'ASSIGNED',
+                    dateReported: '2026-05-07',
+                    attachments: []
+                },
+                {
+                    ticketId: 'TKT-004',
+                    issueTitle: 'Broken Door Lock',
+                    resident: { name: 'Layla Al Suwaidi', email: 'layla.suwaidi@example.com', phone: '+971-50-456-7890' },
+                    location: { tower: 'Tower D', flat: '1805' },
+                    issue: { category: 'Security/Locks', subcategory: 'Door Lock', severity: 'MEDIUM', description: 'The main entrance door lock is not functioning properly. It\'s difficult to lock and unlock.' },
+                    status: 'WORK_COMPLETED',
+                    dateReported: '2026-05-06',
+                    attachments: []
+                }
+            ];
+            
+            // Normalize all mock data
+            allIssues = rawMockData.map(normalizeIssueData);
+            displayIssues(allIssues);
+        }
+
+        function displayIssues(issues) {
+            const container = document.getElementById('issuesContainer');
+            
+            if (!issues || issues.length === 0) {
+                showNoIssues();
+                return;
+            }
+
+            container.innerHTML = issues.map((issue, index) => `
+                <div class="premium-card rounded-xl overflow-hidden border border-slate-700 hover:border-amber-500/50 transition-all">
+                    <!-- Collapsible Header -->
+                    <div class="bg-gradient-to-r from-slate-800/30 to-slate-700/20 p-4 border-b gold-border cursor-pointer hover:bg-slate-800/40 transition-all" onclick="toggleIssue(${index})">
+                        <div class="flex justify-between items-start gap-4">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-bold text-slate-100">${issue.issueTitle || 'No Title'}</h3>
+                                <p class="text-sm text-slate-400 mt-2">
+                                    <i class="fas fa-user mr-2"></i>${issue.resident.name || 'Unknown'} | 
+                                    <i class="fas fa-building mr-2"></i>${issue.location.tower} / Flat ${issue.location.flat}
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getSeverityBadge(issue.issue.severity)}">
+                                    ${issue.issue.severity || 'N/A'}
+                                </span>
+                                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getStatusBadge(issue.status)}">
+                                    <i class="fas ${getStatusIcon(issue.status)} mr-1"></i>${issue.status || 'NEW'}
+                                </span>
+                                <i class="fas fa-chevron-down text-amber-400 toggle-icon-${index} transition-transform" style="transform: rotate(0deg)"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible Content -->
+                    <div class="issue-content-${index} max-h-0 overflow-hidden transition-all duration-300 ease-in-out">
+                        <div class="p-5 space-y-4">
+                            <!-- Where Issue Found -->
+                            <div class="bg-slate-700/20 rounded-lg p-3 border border-slate-600/30">
+                                <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent mb-2">
+                                    <i class="fas fa-map-marker-alt mr-2"></i>Where Issue Found
+                                </p>
+                                <p class="text-slate-200 font-semibold text-lg">${issue.location.tower || 'N/A'}</p>
+                            </div>
+
+                            <!-- Reporter's Unit (Optional) -->
+                            ${issue.location.flat && issue.location.flat !== 'N/A' ? `
+                            <div class="bg-slate-700/10 rounded-lg p-3 border border-slate-600/20">
+                                <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">
+                                    <i class="fas fa-home mr-2"></i>Reporter's Unit (Optional)
+                                </p>
+                                <p class="text-slate-300 font-medium">Flat ${issue.location.flat}</p>
+                            </div>
+                            ` : ''}
+
+                            <!-- Issue Details -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Category</p>
+                                    <p class="text-slate-200 font-semibold">
+                                        ${issue.issue.category || 'N/A'}${issue.issue.subcategory ? ` <span class="text-amber-400">→</span> <span class="text-slate-300 font-normal">${issue.issue.subcategory}</span>` : ''}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Status</p>
+                                    <p class="text-slate-200 font-semibold">${issue.status || 'Reported'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">Date Reported</p>
+                                    <p class="text-slate-200 font-semibold">${formatDate(issue.dateReported) || 'N/A'}</p>
+                                </div>
+                            </div>
+
+                            <!-- Description -->
+                            <div>
+                                <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent mb-2">Description</p>
+                                <p class="text-slate-300 leading-relaxed bg-slate-800/20 rounded-lg p-3 border border-slate-700/50">
+                                    ${issue.issue.description || 'No description provided'}
+                                </p>
+                            </div>
+
+                            <!-- Attachments -->
+                            ${issue.attachments && issue.attachments.length > 0 ? `
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">
+                                            <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.attachments.length})
+                                        </p>
+                                        <a href="https://drive.google.com/drive/folders/1oJDZT_bokWitmmgDlfulTBsjKlGdcGcPaqjJ92OEMgxQnwftLnZHWiq2NOLl7zIEq3lW53FZ?usp=sharing"
+                                           target="_blank" rel="noopener noreferrer"
+                                           class="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
+                                            <i class="fab fa-google-drive"></i> Open Drive folder
+                                        </a>
+                                    </div>
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                        ${issue.attachments.map(att => {
+                                            const fileId = extractDriveFileId(att);
+                                            const thumb = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w800` : att;
+                                            const viewer = fileId ? `https://drive.google.com/file/d/${fileId}/view` : att;
+                                            return `
+                                            <a href="${viewer}" target="_blank" rel="noopener noreferrer"
+                                               class="group relative block rounded-lg overflow-hidden border border-slate-600/40 hover:border-amber-400/60 bg-slate-800/40 transition-all aspect-square">
+                                                <img src="${thumb}" alt="Attachment" loading="lazy"
+                                                     class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                     onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\'w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs p-2 text-center\'><i class=\'fas fa-file-image text-2xl mb-2\'></i>Preview unavailable<span class=\'text-amber-400 mt-1\'>Click to open</span></div>'">
+                                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-2">
+                                                    <span class="text-white text-xs font-semibold"><i class="fas fa-external-link-alt mr-1"></i>View Full Size</span>
+                                                </div>
+                                            </a>`;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterIssues() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const sortKey = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'date_desc';
+            const catFilter = document.getElementById('categoryFilter') ? document.getElementById('categoryFilter').value : '';
+            const towerFilter = document.getElementById('towerFilter') ? document.getElementById('towerFilter').value : '';
+            const sevFilter = document.getElementById('severityFilter') ? document.getElementById('severityFilter').value : '';
+            const statusFilter = document.getElementById('statusFilter') ? document.getElementById('statusFilter').value : '';
+
+            const filtered = allIssues.filter(issue => {
+                const searchStr = `${issue.ticketId} ${issue.resident.name} ${issue.issue.category} ${issue.issue.subcategory} ${issue.issueTitle} ${issue.location.tower} ${issue.location.flat}`.toLowerCase();
+                if (!searchStr.includes(searchTerm)) return false;
+                if (catFilter && String(issue.issue.category).trim().toLowerCase() !== catFilter.toLowerCase()) return false;
+                if (towerFilter && String(issue.location.tower).trim().toLowerCase() !== towerFilter.toLowerCase()) return false;
+                if (sevFilter && String(issue.issue.severity).trim().toUpperCase() !== sevFilter.toUpperCase()) return false;
+                if (statusFilter && String(issue.status).trim().toUpperCase() !== statusFilter.toUpperCase()) return false;
+                return true;
+            });
+
+            displayIssues(sortIssues(filtered, sortKey));
+        }
+
+        function sortIssues(issues, key) {
+            // Canonical orderings (matching the Google Form dropdowns)
+            const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+            const categoryOrder = ['Civil', 'Plumbing', 'Electrical', 'Fire Safety', 'Lift', 'Security', 'Amenities', 'Common Area', 'Documentation'];
+            const towerOrder    = ['Tower A', 'Tower B', 'Tower C', 'Common Area'];
+
+            const rankIn = (list, value, caseInsensitive = false) => {
+                if (!value) return 999;
+                const v = caseInsensitive ? String(value).toUpperCase() : String(value).trim();
+                const idx = caseInsensitive
+                    ? list.indexOf(v)
+                    : list.findIndex(x => x.toLowerCase() === v.toLowerCase());
+                return idx === -1 ? 999 : idx;  // unknown values sort to the end
+            };
+            const sevRank   = i => rankIn(severityOrder, i.issue.severity, true);
+            const catRank   = i => rankIn(categoryOrder, i.issue.category);
+            const towerRank = i => rankIn(towerOrder, i.location.tower);
+            const dateOf    = i => { const d = new Date(i.dateReported); return isNaN(d) ? 0 : d.getTime(); };
+
+            const arr = [...issues];
+            switch (key) {
+                case 'date_asc':   arr.sort((a,b) => dateOf(a) - dateOf(b)); break;
+                case 'sev_desc':   arr.sort((a,b) => sevRank(a)   - sevRank(b)   || dateOf(b) - dateOf(a)); break;
+                case 'sev_asc':    arr.sort((a,b) => sevRank(b)   - sevRank(a)   || dateOf(b) - dateOf(a)); break;
+                case 'cat_asc':    arr.sort((a,b) => catRank(a)   - catRank(b)   || dateOf(b) - dateOf(a)); break;
+                case 'cat_desc':   arr.sort((a,b) => catRank(b)   - catRank(a)   || dateOf(b) - dateOf(a)); break;
+                case 'tower_asc':  arr.sort((a,b) => towerRank(a) - towerRank(b) || dateOf(b) - dateOf(a)); break;
+                case 'tower_desc': arr.sort((a,b) => towerRank(b) - towerRank(a) || dateOf(b) - dateOf(a)); break;
+                case 'date_desc':
+                default:           arr.sort((a,b) => dateOf(b) - dateOf(a));
+            }
+            return arr;
+        }
+
+        function toggleIssue(index) {
+            const content = document.querySelector(`.issue-content-${index}`);
+            const icon = document.querySelector(`.toggle-icon-${index}`);
+            
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                // Collapse
+                content.style.maxHeight = '0px';
+                icon.style.transform = 'rotate(0deg)';
+            } else {
+                // Expand
+                content.style.maxHeight = content.scrollHeight + 'px';
+                icon.style.transform = 'rotate(180deg)';
+            }
+        }
+
+        function showNoIssues() {
+            document.getElementById('issuesContainer').innerHTML = `
+                <div class="premium-card rounded-xl p-12 text-center border border-slate-700">
+                    <i class="fas fa-inbox text-slate-500 text-4xl mb-4"></i>
+                    <p class="text-slate-400 text-lg">No issues found</p>
+                    <p class="text-slate-500 text-sm mt-2">Check back later for new submitted issues</p>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            document.getElementById('issuesContainer').innerHTML = `
+                <div class="premium-card rounded-xl p-8 text-center border border-red-500/30 bg-red-500/10">
+                    <i class="fas fa-exclamation-circle text-red-400 text-3xl mb-4"></i>
+                    <p class="text-red-300">${message}</p>
+                </div>
+            `;
+        }
+
+        function getSeverityBadge(severity) {
+            const badges = {
+                'CRITICAL': 'bg-red-600/30 text-red-200 border border-red-500/50',
+                'HIGH': 'bg-orange-600/30 text-orange-200 border border-orange-500/50',
+                'MEDIUM': 'bg-yellow-600/30 text-yellow-200 border border-yellow-500/50',
+                'LOW': 'bg-green-600/30 text-green-200 border border-green-500/50'
+            };
+            return badges[severity] || 'bg-slate-600/30 text-slate-200 border border-slate-500/50';
+        }
+
+        function getStatusBadge(status) {
+            const badges = {
+                'NEW': 'bg-blue-600/30 text-blue-200 border border-blue-500/50',
+                'PENDING_APPROVAL': 'bg-amber-600/30 text-amber-200 border border-amber-500/50',
+                'ASSIGNED': 'bg-purple-600/30 text-purple-200 border border-purple-500/50',
+                'IN_PROGRESS': 'bg-cyan-600/30 text-cyan-200 border border-cyan-500/50',
+                'WORK_COMPLETED': 'bg-emerald-600/30 text-emerald-200 border border-emerald-500/50',
+                'CLOSED': 'bg-slate-600/30 text-slate-200 border border-slate-500/50',
+                'REJECTED': 'bg-red-600/30 text-red-200 border border-red-500/50'
+            };
+            return badges[status] || 'bg-slate-600/30 text-slate-200 border border-slate-500/50';
+        }
+
+        function getStatusIcon(status) {
+            const icons = {
+                'NEW': 'fa-circle-plus',
+                'PENDING_APPROVAL': 'fa-hourglass-half',
+                'ASSIGNED': 'fa-user-check',
+                'IN_PROGRESS': 'fa-spinner fa-pulse',
+                'WORK_COMPLETED': 'fa-check-circle',
+                'CLOSED': 'fa-lock',
+                'REJECTED': 'fa-ban'
+            };
+            return icons[status] || 'fa-circle';
+        }
+
+        function parseAttachments(value) {
+            if (!value) return [];
+            // Google Forms file uploads are comma-separated URLs
+            return String(value).split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        function extractDriveFileId(url) {
+            if (!url) return null;
+            // Match formats: ?id=FILE_ID  or  /file/d/FILE_ID/  or  /d/FILE_ID
+            const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+                      url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+                      url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            return m ? m[1] : null;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'N/A';
+            try {
+                return new Date(dateStr).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+    </script>
+</body>
+</html>

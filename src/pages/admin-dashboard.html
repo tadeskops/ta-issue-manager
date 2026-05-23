@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Analytics - TA Issues</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50">
+    <nav class="bg-white shadow">
+        <div class="px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <!-- Logo Only Version (Compact) -->
+                <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                <!-- Alternative: Logo with Text (Uncomment to use) -->
+                <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
+                <h1 class="text-2xl font-bold text-blue-600">The Address - Analytics</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-gray-600" id="userEmail"></span>
+                <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto p-4">
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <div class="bg-green-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">Total Pending</p>
+                <p class="text-3xl font-bold text-green-600" id="kpiPending">0</p>
+            </div>
+            <div class="bg-blue-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">Total Active</p>
+                <p class="text-3xl font-bold text-blue-600" id="kpiActive">0</p>
+            </div>
+            <div class="bg-gray-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">Total Closed</p>
+                <p class="text-3xl font-bold text-gray-600" id="kpiClosed">0</p>
+            </div>
+            <div class="bg-red-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">Critical Pending</p>
+                <p class="text-3xl font-bold text-red-600" id="kpiCritical">0</p>
+            </div>
+            <div class="bg-orange-100 p-4 rounded shadow">
+                <p class="text-gray-600 text-sm">SLA Breaches</p>
+                <p class="text-3xl font-bold text-orange-600" id="kpiSLA">0</p>
+            </div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-bold mb-4">Category Breakdown</h3>
+                <canvas id="categoryChart"></canvas>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-bold mb-4">Tower-wise Distribution</h3>
+                <canvas id="towerChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-bold mb-4">Severity Distribution</h3>
+                <canvas id="severityChart"></canvas>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-bold mb-4">Status Distribution</h3>
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Tables -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Aging Issues -->
+            <div class="bg-white rounded shadow overflow-hidden">
+                <div class="bg-gray-200 px-4 py-2 font-bold">Aging Issues (> 7 days)</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-100 border-b">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Ticket ID</th>
+                                <th class="px-4 py-2 text-left">Days Old</th>
+                                <th class="px-4 py-2 text-left">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agingTable">
+                            <tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SLA Breaches -->
+            <div class="bg-white rounded shadow overflow-hidden">
+                <div class="bg-red-200 px-4 py-2 font-bold text-red-700">SLA Breaches</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-100 border-b">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Ticket ID</th>
+                                <th class="px-4 py-2 text-left">Days Overdue</th>
+                                <th class="px-4 py-2 text-left">Category</th>
+                            </tr>
+                        </thead>
+                        <tbody id="slaTable">
+                            <tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <?!= include('src/partials/api') ?>
+    <script src="../../assets/js/api.js"></script>
+    <script>
+        // === Auth (server-trusted via Google sign-in) ===
+        (async function ensureAuthorized() {
+            try {
+                const u = await API.whoAmI();
+                window.IRP_USER = u;
+                if (!u.email || u.role === 'UNKNOWN') {
+                    location.href = 'index.html';
+                    return;
+                }
+                if (u.role !== 'COMMITTEE') {
+                    console.warn('Admin dashboard is for Technical Committee members only.');
+                    location.href = '?page=builder&notice=committee_only';
+                    return;
+                }
+                const el = document.getElementById('userEmail');
+                if (el) el.textContent = u.email;
+            } catch (e) {
+                console.error('Auth check failed:', e);
+                location.href = 'index.html';
+            }
+        })();
+
+        let metrics = null;
+        let allIssues = [];
+        let categoryChart, towerChart, severityChart, statusChart;
+
+        document.getElementById('userEmail').textContent = (window.IRP_USER && window.IRP_USER.email) || '…';
+
+        async function loadData() {
+            try {
+                metrics = await API.getDashboardMetrics();
+                allIssues = await API.getLiveIssues('ALL');
+                
+                updateKPIs();
+                renderCharts();
+                renderTables();
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        function updateKPIs() {
+            document.getElementById('kpiPending').textContent = metrics.totalPending;
+            document.getElementById('kpiActive').textContent = metrics.totalActive;
+            document.getElementById('kpiClosed').textContent = metrics.totalClosed;
+            document.getElementById('kpiCritical').textContent = metrics.criticalPending;
+            document.getElementById('kpiSLA').textContent = metrics.slaBreaches;
+        }
+
+        function renderCharts() {
+            // Category Chart
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            if (categoryChart) categoryChart.destroy();
+            categoryChart = new Chart(categoryCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(metrics.categoryBreakdown),
+                    datasets: [{
+                        data: Object.values(metrics.categoryBreakdown),
+                        backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: true }
+            });
+
+            // Tower Chart
+            const towerCtx = document.getElementById('towerChart').getContext('2d');
+            if (towerChart) towerChart.destroy();
+            towerChart = new Chart(towerCtx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(metrics.towerBreakdown),
+                    datasets: [{
+                        label: 'Issues',
+                        data: Object.values(metrics.towerBreakdown),
+                        backgroundColor: '#3b82f6'
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } } }
+            });
+
+            // Severity Chart
+            const severityCtx = document.getElementById('severityChart').getContext('2d');
+            if (severityChart) severityChart.destroy();
+            severityChart = new Chart(severityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [
+                            allIssues.filter(i => String(i.issue.severity || '').toUpperCase() === 'CRITICAL').length,
+                            allIssues.filter(i => String(i.issue.severity || '').toUpperCase() === 'HIGH').length,
+                            allIssues.filter(i => String(i.issue.severity || '').toUpperCase() === 'MEDIUM').length,
+                            allIssues.filter(i => String(i.issue.severity || '').toUpperCase() === 'LOW').length
+                        ],
+                        backgroundColor: ['#dc2626', '#ea580c', '#eab308', '#6b7280']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: true }
+            });
+
+            // Status Chart
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            if (statusChart) statusChart.destroy();
+            statusChart = new Chart(statusCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Assigned', 'In Progress', 'Completed'],
+                    datasets: [{
+                        label: 'Count',
+                        data: [
+                            allIssues.filter(i => i.builder.status === 'ASSIGNED').length,
+                            allIssues.filter(i => i.builder.status === 'IN_PROGRESS').length,
+                            allIssues.filter(i => i.builder.status === 'WORK_COMPLETED').length
+                        ],
+                        backgroundColor: ['#3b82f6', '#f97316', '#22c55e']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function renderTables() {
+            // Aging Issues
+            const agingIssues = allIssues.filter(i => {
+                const daysOld = Math.floor((new Date() - new Date(i.lastUpdated)) / (1000 * 60 * 60 * 24));
+                return daysOld > 7;
+            });
+
+            const agingHtml = agingIssues.length === 0 
+                ? '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">No aging issues</td></tr>'
+                : agingIssues.map(i => {
+                    const daysOld = Math.floor((new Date() - new Date(i.lastUpdated)) / (1000 * 60 * 60 * 24));
+                    return `<tr class="border-b"><td class="px-4 py-2">${i.ticketId}</td><td class="px-4 py-2">${daysOld}</td><td class="px-4 py-2">${i.builder.status}</td></tr>`;
+                }).join('');
+            document.getElementById('agingTable').innerHTML = agingHtml;
+
+            // SLA Breaches
+            const slaIssues = allIssues.filter(i => i.sla.breached);
+            const slaHtml = slaIssues.length === 0
+                ? '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">No SLA breaches</td></tr>'
+                : slaIssues.map(i => {
+                    const daysOverdue = Math.abs(i.sla.daysRemaining);
+                    return `<tr class="border-b bg-red-50"><td class="px-4 py-2 font-bold">${i.ticketId}</td><td class="px-4 py-2 text-red-600 font-bold">${daysOverdue}</td><td class="px-4 py-2">${i.issue.category}</td></tr>`;
+                }).join('');
+            document.getElementById('slaTable').innerHTML = slaHtml;
+        }
+
+        function logout() {
+            API.signOut();
+        }
+
+        loadData();
+        setInterval(loadData, 60000);
+    </script>
+</body>
+</html>

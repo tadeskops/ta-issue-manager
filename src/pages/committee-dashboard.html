@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Issues Dashboard - The Address</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Premium branding colors */
+        :root {
+            --primary: #1a1f2e;      /* Deep navy */
+            --accent: #d4af37;       /* Luxury gold */
+            --light: #f5f7fa;        /* Soft white */
+            --border: #2a3142;       /* Subtle borders */
+            --text-primary: #ffffff;
+            --text-secondary: #b0b9c8;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+            color: var(--text-primary);
+        }
+        
+        .premium-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .gold-accent {
+            color: var(--accent);
+        }
+        
+        .gold-border {
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+        
+        .premium-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .premium-hover:hover {
+            border-color: rgba(212, 175, 55, 0.6);
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+    <!-- Navigation with Premium Branding -->
+    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <!-- Logo -->
+            <div class="flex items-center gap-4">
+                    <!-- Logo Only Version (Compact) -->
+                    <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <!-- Alternative: Logo with Text (Uncomment to use) -->
+                    <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
+                    <div>
+                        <h1 class="text-xl font-bold gold-accent">The Address</h1>
+                        <p class="text-xs text-slate-400">Issue Management</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <p class="text-xs text-slate-400 uppercase tracking-widest">Logged In</p>
+                    <p class="font-semibold text-slate-100" id="userEmail">Loading...</p>
+                </div>
+                <button onclick="logout()" class="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white font-semibold transition-colors text-sm border border-red-500/30">
+                    <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- KPI Cards Row - Premium Design -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <!-- Pending Approval Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Pending Approval</p>
+                    <i class="fas fa-clock gold-accent text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiPending">0</p>
+                <p class="text-xs text-slate-500">Awaiting committee review</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-amber-500 to-transparent rounded-full mt-4"></div>
+            </div>
+            
+            <!-- Active Issues Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Active Issues</p>
+                    <i class="fas fa-tasks text-blue-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiActive">0</p>
+                <p class="text-xs text-slate-500">In progress</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-blue-500 to-transparent rounded-full mt-4"></div>
+            </div>
+            
+            <!-- Closed Issues Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Closed</p>
+                    <i class="fas fa-check-circle text-emerald-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiClosed">0</p>
+                <p class="text-xs text-slate-500">Resolved</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-emerald-500 to-transparent rounded-full mt-4"></div>
+            </div>
+            
+            <!-- Critical Issues Card -->
+            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Critical</p>
+                    <i class="fas fa-exclamation-triangle text-red-400 text-2xl opacity-60"></i>
+                </div>
+                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiCritical">0</p>
+                <p class="text-xs text-slate-500">Urgent attention</p>
+                <div class="h-1 w-16 bg-gradient-to-r from-red-500 to-transparent rounded-full mt-4"></div>
+            </div>
+        </div>
+
+        <!-- SLA Breaches - Hidden by default, configurable -->
+        <div id="slaSection" class="mb-8 hidden">
+            <div class="premium-card rounded-xl p-6 border border-orange-600/30">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-lg bg-gradient-to-br from-orange-500/20 to-orange-600/10 flex items-center justify-center">
+                        <i class="fas fa-clock text-orange-400 text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-orange-400 font-bold uppercase tracking-wider">SLA Breaches</p>
+                        <p class="text-3xl font-bold text-slate-100" id="kpiSLA">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs Navigation - Premium -->
+        <div class="premium-card rounded-xl overflow-hidden mb-6 border border-slate-700">
+            <div class="flex flex-wrap border-b gold-border">
+                <button id="pendingBtn" onclick="switchTab('pending')" class="pendingBtn tab-btn active px-6 py-4 text-amber-200 hover:text-amber-100 font-semibold text-sm uppercase tracking-widest transition-all border-b-2 border-amber-500/60 hover:border-amber-400 bg-gradient-to-b from-amber-600/20 to-transparent">
+                    <i class="fas fa-hourglass-end mr-2 gold-accent"></i>Pending Approval
+                </button>
+                <button id="activeBtn" onclick="switchTab('active')" class="activeBtn tab-btn px-6 py-4 text-slate-400 hover:text-slate-200 font-semibold text-sm uppercase tracking-widest transition-all border-b-2 border-transparent hover:border-slate-500 hover:text-blue-300">
+                    <i class="fas fa-tasks mr-2"></i>Active Issues
+                </button>
+                <button id="closedBtn" onclick="switchTab('closed')" class="closedBtn tab-btn px-6 py-4 text-slate-400 hover:text-slate-200 font-semibold text-sm uppercase tracking-widest transition-all border-b-2 border-transparent hover:border-slate-500">
+                    <i class="fas fa-archive mr-2"></i>Closed
+                </button>
+                <div class="ml-auto flex gap-2 pr-4 py-3">
+                    <button onclick="toggleAutoRefresh()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 transition-all border border-slate-500/30 hover:border-slate-400/50">
+                        <i class="fas fa-sync mr-1" id="refreshIcon"></i><span id="refreshStatus">AUTO</span>
+                    </button>
+                    <button onclick="syncData()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600/50 hover:bg-emerald-500/70 text-white transition-all border border-emerald-500/30 hover:border-emerald-400/50">
+                        <i class="fas fa-download mr-1"></i>Sync Portal
+                    </button>
+                    <button onclick="toggleSLASection()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 transition-all border border-slate-500/30 hover:border-slate-400/50" title="Toggle SLA Breaches">
+                        <i class="fas fa-eye-slash"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- PENDING APPROVAL Tab -->
+            <div id="pendingTab" class="p-6 bg-gradient-to-b from-slate-800/20 to-transparent">
+                <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
+                    <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-hourglass-end mr-3 gold-accent"></i>Issues Awaiting Approval</h3>
+                    <div class="flex gap-2">
+                        <select id="pendingFilter" onchange="setPendingFilter(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                            <option value="PENDING_APPROVAL">Pending Only</option>
+                            <option value="REJECTED">Rejected Only</option>
+                            <option value="ALL">All (Pending + Rejected)</option>
+                        </select>
+                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold text-sm transition-all border border-amber-400/30">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto rounded-lg">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b gold-border bg-slate-800/30">
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">ID</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Location</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Severity</th>
+                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingTableBody">
+                            <tr><td colspan="7" class="p-4 text-center text-slate-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ACTIVE ISSUES Tab -->
+            <div id="activeTab" class="p-6 bg-gradient-to-b from-slate-800/20 to-transparent hidden">
+                <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
+                    <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-tasks mr-3 text-blue-400"></i>Active Issues in Progress</h3>
+                    <div class="flex gap-2">
+                        <select onchange="filterActive(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                            <option value="">All Issues</option>
+                            <option value="CRITICAL">Critical Only</option>
+                            <option value="AGING">Aging (7+ days)</option>
+                            <option value="BREACHED">SLA Breached</option>
+                        </select>
+                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto rounded-lg">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b gold-border bg-slate-800/30">
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">ID</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Tower</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Severity</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden lg:table-cell">Status</th>
+                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Days</th>
+                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">SLA</th>
+                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activeTableBody">
+                            <tr><td colspan="9" class="p-4 text-center text-slate-500">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CLOSED ISSUES Tab -->
+            <div id="closedTab" class="p-6 bg-gradient-to-b from-slate-800/20 to-transparent hidden">
+                <div class="mb-6 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-archive mr-3 text-slate-400"></i>Closed & Archived Issues</h3>
+                    <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white font-semibold text-sm transition-all border border-slate-400/30">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+                
+                <div class="overflow-x-auto rounded-lg">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b gold-border bg-slate-800/30">
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">ID</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Category</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Closed Date</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Days to Resolve</th>
+                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="closedTableBody">
+                            <tr><td colspan="6" class="p-4 text-center text-slate-500">No closed issues</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Approve Issue -->
+    <div id="approveModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-amber-500/30 rounded-xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-6 gold-accent"><i class="fas fa-check-circle mr-3"></i>Approve Issue</h2>
+            <div id="approveDetails" class="bg-slate-700/40 border border-amber-500/20 rounded-lg p-5 mb-6 space-y-3 text-sm text-slate-300">
+            </div>
+            <div class="flex gap-4">
+                <button onclick="confirmApprove()" class="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-bold transition-all border border-emerald-400/30 shadow-lg">
+                    <i class="fas fa-check mr-2"></i>Approve & Assign
+                </button>
+                <button onclick="closeModal('approveModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Reject Issue -->
+    <div id="rejectModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-red-600/30 rounded-xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-6 text-red-400"><i class="fas fa-times-circle mr-3"></i>Reject Issue</h2>
+            <div id="rejectDetails" class="bg-slate-700/40 border border-red-500/20 rounded-lg p-5 mb-6 space-y-3 text-sm text-slate-300">
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-bold text-slate-300 mb-3 uppercase tracking-wide">Rejection Reason</label>
+                <textarea id="rejectReason" placeholder="Explain why this issue is being rejected..." 
+                    class="w-full border border-slate-500/50 bg-slate-700/30 text-slate-100 rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-red-500 backdrop-blur text-sm" rows="4"></textarea>
+            </div>
+            <div class="flex gap-4">
+                <button onclick="confirmReject()" class="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold transition-all border border-red-400/30 shadow-lg">
+                    <i class="fas fa-times mr-2"></i>Reject
+                </button>
+                <button onclick="closeModal('rejectModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Close Issue -->
+    <div id="closeModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-blue-600/30 rounded-xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-6 text-cyan-400"><i class="fas fa-check-double mr-3"></i>Mark as Closed</h2>
+            <div id="closeDetails" class="bg-slate-700/40 border border-blue-500/20 rounded-lg p-5 mb-6 space-y-3 text-sm text-slate-300">
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-bold text-slate-300 mb-3 uppercase tracking-wide">Closure Reason</label>
+                <textarea id="closeReason" placeholder="Describe the resolution..." 
+                    class="w-full border border-slate-500/50 bg-slate-700/30 text-slate-100 rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-cyan-500 backdrop-blur text-sm" rows="4"></textarea>
+            </div>
+            <div class="flex gap-4">
+                <button onclick="confirmClose()" class="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold transition-all border border-cyan-400/30 shadow-lg">
+                    <i class="fas fa-check mr-2"></i>Close
+                </button>
+                <button onclick="closeModal('closeModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Delete Issue -->
+    <div id="deleteModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-red-600/30 rounded-xl shadow-2xl p-8 w-full max-w-md">
+            <div class="text-center mb-6">
+                <i class="fas fa-exclamation-triangle text-5xl text-red-400 mb-3"></i>
+                <h2 class="text-2xl font-bold text-red-400">Delete Issue?</h2>
+            </div>
+            <div id="deleteDetails" class="bg-slate-700/40 border border-red-500/20 rounded-lg p-5 mb-6 space-y-2 text-sm text-slate-300">
+            </div>
+            <p class="text-slate-400 text-sm mb-6 text-center">This action cannot be undone. The issue and all associated data will be permanently deleted.</p>
+            <div class="flex gap-4">
+                <button onclick="confirmDelete()" class="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold transition-all border border-red-400/30 shadow-lg">
+                    <i class="fas fa-trash mr-2"></i>Delete Issue
+                </button>
+                <button onclick="closeModal('deleteModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Detailed View with Images -->
+    <div id="detailedViewModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-amber-500/30 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex justify-between items-center p-6 border-b border-amber-500/20">
+                <h2 class="text-2xl font-bold gold-accent"><i class="fas fa-ticket-alt mr-2"></i>Issue Details</h2>
+                <button onclick="closeModal('detailedViewModal')" class="text-slate-400 hover:text-slate-200 text-2xl transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="detailedViewContent" class="flex-1 overflow-y-auto p-6 space-y-5">
+                <!-- Content populated by JS -->
+            </div>
+            <div class="flex gap-4 p-6 border-t border-amber-500/20 bg-slate-800/50">
+                <button onclick="closeModal('detailedViewModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Quick View Details -->
+    <div id="quickViewModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-amber-500/30 rounded-xl shadow-2xl p-8 w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold gold-accent"><i class="fas fa-file-alt mr-3"></i>Full Issue Details</h2>
+                <button onclick="closeModal('quickViewModal')" class="text-slate-400 hover:text-slate-200 text-xl transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="quickViewContent" class="bg-slate-700/40 border border-amber-500/20 rounded-lg p-5 space-y-4 text-sm">
+                <!-- Content populated by JS -->
+            </div>
+            <div class="flex gap-4 mt-6">
+                <button onclick="closeModal('quickViewModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-bold hidden z-50"></div>
+
+    <?!= include('src/partials/api') ?>
+    <script src="../../assets/js/api.js"></script>
+    <script>
+        // === Auth (server-trusted via Google sign-in) ===
+        // No client-typed email, no sessionStorage. window.IRP_USER is
+        // populated from api_whoAmI(). The page is gated server-side by
+        // Router.gs; this is a UX safety net for fetch-fallback mode.
+        (async function ensureAuthorized() {
+            try {
+                const u = await API.whoAmI();
+                window.IRP_USER = u;
+                if (!u.email || u.role === 'UNKNOWN') {
+                    location.href = 'index.html';
+                    return;
+                }
+                if (u.role !== 'COMMITTEE') {
+                    console.warn('This page is for Technical Committee members only.');
+                    location.href = '?page=builder&notice=committee_only';
+                    return;
+                }
+                const el = document.getElementById('userEmail');
+                if (el) el.textContent = u.email;
+            } catch (e) {
+                console.error('Auth check failed:', e);
+                location.href = 'index.html';
+            }
+        })();
+
+        let pendingIssues = [];
+        let activeIssues = [];
+        let closedIssues = [];
+        let allIssues = [];
+        let pendingFilter = 'PENDING_APPROVAL'; // PENDING_APPROVAL | REJECTED | ALL
+        let activeFilter = ''; // '' | CRITICAL | AGING | BREACHED
+        let currentTicketId = null;
+        let currentSheet = 'PENDING_REVIEW';
+        let autoRefreshEnabled = true;
+        let autoRefreshInterval = null;
+        let showSLABreaches = false; // Configuration: default hidden
+
+        // Mock data for local testing
+        const mockPendingIssues = [
+            {
+                ticketId: 'SUB-2026-0087',
+                resident: { name: 'Ahmed Al Mansoori', email: 'ahmed.mansoori@example.com' },
+                location: { tower: 'Tower A', flat: '1502' },
+                issue: { category: 'HVAC/Cooling', subcategory: 'AC Unit', severity: 'HIGH', description: 'AC not cooling properly in master bedroom' },
+                dateReported: '2026-05-08',
+                sla: { daysRemaining: 5, breached: false }
+            },
+            {
+                ticketId: 'SUB-2026-0088',
+                resident: { name: 'Fatima Al Naqbi', email: 'fatima.naqbi@example.com' },
+                location: { tower: 'Tower B', flat: '2308' },
+                issue: { category: 'Plumbing', subcategory: 'Leak', severity: 'CRITICAL', description: 'Water leak from ceiling in guest bedroom' },
+                dateReported: '2026-05-09',
+                sla: { daysRemaining: 2, breached: false }
+            }
+        ];
+
+        const mockActiveIssues = [
+            {
+                ticketId: 'TKT-00001',
+                resident: { name: 'Mohammed Al Mazrouei', email: 'mohammed.mazrouei@example.com' },
+                location: { tower: 'Tower C', flat: '3102' },
+                issue: { category: 'Civil', subcategory: 'Cracks', severity: 'MEDIUM', description: 'Cracks in bathroom tiles' },
+                dateReported: '2026-04-28',
+                builder: { status: 'IN_PROGRESS', lastUpdated: '2026-05-10' },
+                sla: { daysRemaining: 8, breached: false }
+            },
+            {
+                ticketId: 'TKT-00002',
+                resident: { name: 'Layla Al Suwaidi', email: 'layla.suwaidi@example.com' },
+                location: { tower: 'Tower D', flat: '1805' },
+                issue: { category: 'Security/Locks', subcategory: 'Door Lock', severity: 'HIGH', description: 'Main door lock not functioning' },
+                dateReported: '2026-04-15',
+                builder: { status: 'ASSIGNED', lastUpdated: '2026-05-09' },
+                sla: { daysRemaining: -3, breached: true }
+            }
+        ];
+
+        document.getElementById('userEmail').textContent = (window.IRP_USER && window.IRP_USER.email) || '…';
+        
+        // Load initial data
+        window.addEventListener('load', loadData);
+
+        function switchTab(tab) {
+            // Hide all tabs
+            document.getElementById('pendingTab').classList.add('hidden');
+            document.getElementById('activeTab').classList.add('hidden');
+            document.getElementById('closedTab').classList.add('hidden');
+            
+            // Remove active styling from all buttons
+            document.getElementById('pendingBtn').classList.remove('text-amber-200', 'border-amber-500/60', 'bg-gradient-to-b', 'from-amber-600/20');
+            document.getElementById('activeBtn').classList.remove('text-blue-300', 'border-blue-500/60', 'bg-gradient-to-b', 'from-blue-600/20');
+            document.getElementById('closedBtn').classList.remove('text-slate-200', 'border-slate-500/60', 'bg-gradient-to-b', 'from-slate-600/20');
+            
+            // Add inactive styling to all buttons
+            document.getElementById('pendingBtn').classList.add('text-slate-400', 'border-transparent');
+            document.getElementById('activeBtn').classList.add('text-slate-400', 'border-transparent');
+            document.getElementById('closedBtn').classList.add('text-slate-400', 'border-transparent');
+            
+            // Show selected tab
+            document.getElementById(tab + 'Tab').classList.remove('hidden');
+            
+            // Add active styling to selected button
+            if (tab === 'pending') {
+                document.getElementById('pendingBtn').classList.remove('text-slate-400', 'border-transparent');
+                document.getElementById('pendingBtn').classList.add('text-amber-200', 'border-amber-500/60', 'bg-gradient-to-b', 'from-amber-600/20');
+            } else if (tab === 'active') {
+                document.getElementById('activeBtn').classList.remove('text-slate-400', 'border-transparent');
+                document.getElementById('activeBtn').classList.add('text-blue-300', 'border-blue-500/60', 'bg-gradient-to-b', 'from-blue-600/20');
+            } else if (tab === 'closed') {
+                document.getElementById('closedBtn').classList.remove('text-slate-400', 'border-transparent');
+                document.getElementById('closedBtn').classList.add('text-slate-200', 'border-slate-500/60', 'bg-gradient-to-b', 'from-slate-600/20');
+            }
+        }
+
+        function toggleSLASection() {
+            showSLABreaches = !showSLABreaches;
+            const section = document.getElementById('slaSection');
+            const btn = event.target.closest('button');
+            
+            if (showSLABreaches) {
+                section.classList.remove('hidden');
+                btn.innerHTML = '<i class="fas fa-eye"></i>';
+                showToast('SLA Breaches visible', 'success');
+            } else {
+                section.classList.add('hidden');
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                showToast('SLA Breaches hidden', 'success');
+            }
+        }
+
+        // Normalize data to nested structure
+        function normalizeIssueData(data) {
+            if (!data) return null;
+            // If already normalized, return as-is
+            if (data.resident && typeof data.resident === 'object' && data.location && typeof data.location === 'object') {
+                return data;
+            }
+            // Normalize flat structure to nested
+            return {
+                ticketId: data.ticketId || data.ticketID || '',
+                resident: {
+                    name: data.resident?.name || data.residentName || '',
+                    email: data.resident?.email || data.residentEmail || ''
+                },
+                location: {
+                    tower: data.location?.tower || data.tower || '',
+                    flat: data.location?.flat || data.flatNumber || data.flat || ''
+                },
+                issue: {
+                    category: data.issue?.category || data.category || '',
+                    subcategory: data.issue?.subcategory || data.subCategory || '',
+                    severity: data.issue?.severity || data.severity || '',
+                    description: data.issue?.description || data.description || ''
+                },
+                status: data.status || 'NEW',
+                dateReported: data.dateReported || '',
+                builder: data.builder || {},
+                sla: data.sla || { daysRemaining: 0, breached: false }
+            };
+        }
+
+        async function loadData() {
+            try {
+                const pending = await API.getPendingIssues();
+                const live = await API.getLiveIssues('ALL');
+                const metrics = await API.getDashboardMetrics();
+
+                pendingIssues = (pending || []).map(normalizeIssueData);
+                activeIssues = (live || []).map(normalizeIssueData);
+                
+                // Calculate closed issues from metrics
+                closedIssues = (metrics.recentClosed || []).map(normalizeIssueData);
+
+                renderPending();
+                renderActive();
+                renderClosed();
+                updateKPIs(metrics);
+
+                showToast('✓ Data refreshed!', 'success');
+            } catch (error) {
+                console.warn('API Error, loading mock data:', error.message);
+                // Fallback to mock data for local testing
+                pendingIssues = mockPendingIssues.map(normalizeIssueData);
+                activeIssues = mockActiveIssues.map(normalizeIssueData);
+                closedIssues = [];
+
+                renderPending();
+                renderActive();
+                renderClosed();
+                updateKPIs({ totalClosed: 0 });
+
+                showToast('📋 Using mock data (API unavailable)', 'success');
+            }
+        }
+
+        function renderPending() {
+            const tbody = document.getElementById('pendingTableBody');
+            const filtered = pendingIssues.filter(i => {
+                const st = (i.state || 'PENDING_APPROVAL').toUpperCase();
+                if (pendingFilter === 'ALL') return true;
+                return st === pendingFilter;
+            });
+            if (!filtered || filtered.length === 0) {
+                const msg = pendingFilter === 'REJECTED' ? 'No rejected issues' :
+                            pendingFilter === 'ALL'      ? 'No issues' :
+                                                           'No pending issues';
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-500">${msg}</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(issue => {
+                const isRejected = (issue.state || '').toUpperCase() === 'REJECTED';
+                const rowClass   = isRejected ? 'opacity-70 bg-red-950/20' : '';
+                const actions = isRejected ? `
+                        <button onclick="openQuickViewModal('${issue.ticketId}', 'pending')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
+                        <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                ` : `
+                        <button onclick="openApproveModal('${issue.ticketId}')" class="px-2 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-lg" title="Approve"><i class="fas fa-check"></i></button>
+                        <button onclick="openRejectModal('${issue.ticketId}')" class="px-2 py-1 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow-lg" title="Reject"><i class="fas fa-times"></i></button>
+                        <button onclick="openQuickViewModal('${issue.ticketId}', 'pending')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
+                        <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                `;
+                const idCell = isRejected
+                    ? `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors">${issue.ticketId}</button> <span class="ml-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/60 text-red-200 border border-red-700/50">REJECTED</span>`
+                    : `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors">${issue.ticketId}</button>`;
+                return `
+                <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors issue-row ${rowClass}" id="row-${issue.ticketId}">
+                    <td class="p-4 font-bold cursor-pointer">${idCell}</td>
+                    <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
+                    <td class="p-4 text-slate-300 text-sm">${issue.location.tower}/${issue.location.flat}</td>
+                    <td class="p-4 hidden md:table-cell text-slate-300 text-sm">${issue.issue.category}</td>
+                    <td class="p-4">
+                        <span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">
+                            ${issue.issue.severity}
+                        </span>
+                    </td>
+                    <td class="p-4 text-center space-x-1">${actions}</td>
+                </tr>
+            `;
+            }).join('');
+        }
+
+        function setPendingFilter(value) {
+            pendingFilter = value || 'PENDING_APPROVAL';
+            renderPending();
+        }
+
+        function renderActive() {
+            const tbody = document.getElementById('activeTableBody');
+            const nowMs = Date.now();
+            const sevOf = i => String(i.issue.severity || '').toUpperCase();
+            const filtered = activeIssues.filter(i => {
+                if (!activeFilter) return true;
+                if (activeFilter === 'CRITICAL') return sevOf(i) === 'CRITICAL';
+                if (activeFilter === 'BREACHED') return !!i.sla?.breached;
+                if (activeFilter === 'AGING') {
+                    const d = new Date(i.dateReported);
+                    return !isNaN(d) && (nowMs - d.getTime()) > 7 * 24 * 60 * 60 * 1000;
+                }
+                return true;
+            });
+            if (!filtered || filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-500">No active issues</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(issue => {
+                const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
+                const rowClass = issue.sla.breached ? 'bg-red-950/30 border-red-600/30' : '';
+                return `
+                    <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors ${rowClass} issue-row" id="row-${issue.ticketId}">
+                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'active')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors">${issue.ticketId}</button></td>
+                        <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
+                        <td class="p-4 text-slate-300 text-sm">${issue.location.tower}</td>
+                        <td class="p-4 hidden md:table-cell text-slate-300 text-sm">${issue.issue.category}</td>
+                        <td class="p-4"><span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span></td>
+                        <td class="p-4 hidden lg:table-cell text-xs"><span class="bg-blue-900/50 text-blue-200 px-2 py-1 rounded font-semibold">${issue.builder.status || 'ASSIGNED'}</span></td>
+                        <td class="p-4 text-center text-sm font-bold text-amber-300">${daysOpen} days</td>
+                        <td class="p-4 text-center text-sm font-bold ${issue.sla.breached ? 'text-red-400' : 'text-emerald-400'}">${issue.sla.daysRemaining}d ${issue.sla.breached ? '⚠️' : '✓'}</td>
+                        <td class="p-4 text-center space-x-1">
+                            <button onclick="openQuickViewModal('${issue.ticketId}', 'active')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
+                            <button onclick="openCloseModal('${issue.ticketId}')" class="px-2 py-1 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg" title="Close Issue"><i class="fas fa-check-double"></i></button>
+                            <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'LIVE_ISSUES')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderClosed() {
+            const tbody = document.getElementById('closedTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-500">No closed issues</td></tr>';
+        }
+
+        function updateKPIs(metrics) {
+            const activePending = pendingIssues.filter(i => (i.state || 'PENDING_APPROVAL').toUpperCase() === 'PENDING_APPROVAL');
+            document.getElementById('kpiPending').textContent = activePending.length;
+            document.getElementById('kpiActive').textContent = activeIssues.length;
+            document.getElementById('kpiClosed').textContent = metrics.totalClosed || 0;
+            document.getElementById('kpiCritical').textContent = activePending.filter(i => i.issue.severity === 'Critical').length;
+            document.getElementById('kpiSLA').textContent = activeIssues.filter(i => i.sla.breached).length;
+        }
+
+        function getSeverityColor(severity) {
+            const colors = {
+                'CRITICAL': '#dc2626',
+                'HIGH':     '#ea580c',
+                'MEDIUM':   '#eab308',
+                'LOW':      '#6b7280'
+            };
+            return colors[String(severity || '').toUpperCase()] || '#6b7280';
+        }
+
+        function openApproveModal(ticketId) {
+            const issue = pendingIssues.find(i => i.ticketId === ticketId);
+            currentTicketId = ticketId;
+            document.getElementById('approveDetails').innerHTML = `
+                <p class="text-slate-200"><strong class="text-amber-300">Ticket ID:</strong> <span class="text-blue-300 font-mono">${issue.ticketId}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Resident:</strong> <span class="text-slate-100">${issue.resident.name}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Location:</strong> <span class="text-slate-100">${issue.location.tower}/${issue.location.flat}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Category:</strong> <span class="text-slate-100">${issue.issue.category} / ${issue.issue.subcategory}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Severity:</strong> <span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Description:</strong> <span class="text-slate-100">${issue.issue.description}</span></p>
+            `;
+            document.getElementById('approveModal').classList.remove('hidden');
+        }
+
+        async function confirmApprove() {
+            try {
+                // Generate a new unique ticket ID when approving
+                const newTicketId = await API.generateTicketId();
+                
+                // Approve the issue with the new ticket ID
+                await API.call('approveIssueWithTicketId', { 
+                    originalTicketId: currentTicketId,
+                    newTicketId: newTicketId
+                });
+                
+                closeModal('approveModal');
+                showToast(`✓ Issue approved! New Ticket ID: ${newTicketId}`, 'success');
+                loadData();
+            } catch (error) {
+                showToast('✗ Error: ' + error.message, 'error');
+            }
+        }
+
+        function openRejectModal(ticketId) {
+            const issue = pendingIssues.find(i => i.ticketId === ticketId);
+            currentTicketId = ticketId;
+            document.getElementById('rejectDetails').innerHTML = `
+                <p class="text-slate-200"><strong class="text-amber-300">Ticket ID:</strong> <span class="text-blue-300 font-mono">${issue.ticketId}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Resident:</strong> <span class="text-slate-100">${issue.resident.name}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Category:</strong> <span class="text-slate-100">${issue.issue.category}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Severity:</strong> <span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span></p>
+            `;
+            document.getElementById('rejectReason').value = '';
+            document.getElementById('rejectModal').classList.remove('hidden');
+        }
+
+        async function confirmReject() {
+            const reason = document.getElementById('rejectReason').value.trim();
+            if (!reason) {
+                showToast('✗ Please provide a rejection reason', 'error');
+                return;
+            }
+
+            try {
+                await API.rejectIssue(currentTicketId, reason);
+                closeModal('rejectModal');
+                showToast('✓ Issue rejected', 'success');
+                loadData();
+            } catch (error) {
+                showToast('✗ Error: ' + error.message, 'error');
+            }
+        }
+
+        function openCloseModal(ticketId) {
+            const issue = activeIssues.find(i => i.ticketId === ticketId);
+            currentTicketId = ticketId;
+            document.getElementById('closeDetails').innerHTML = `
+                <p class="text-slate-200"><strong class="text-amber-300">Ticket ID:</strong> <span class="text-blue-300 font-mono">${issue.ticketId}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Category:</strong> <span class="text-slate-100">${issue.issue.category}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Status:</strong> <span class="text-slate-100">${issue.builder.status}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Last Update:</strong> <span class="text-slate-100">${new Date(issue.builder.lastUpdated).toLocaleDateString()}</span></p>
+            `;
+            document.getElementById('closeReason').value = '';
+            document.getElementById('closeModal').classList.remove('hidden');
+        }
+
+        async function confirmClose() {
+            const reason = document.getElementById('closeReason').value.trim();
+            if (!reason) {
+                showToast('✗ Please provide a closure reason', 'error');
+                return;
+            }
+
+            try {
+                await API.closeIssue(currentTicketId, reason);
+                closeModal('closeModal');
+                showToast('✓ Issue closed successfully', 'success');
+                loadData();
+            } catch (error) {
+                showToast('✗ Error: ' + error.message, 'error');
+            }
+        }
+
+        function openDeleteModal(ticketId, ticketDisplay, sheet) {
+            const issue = pendingIssues.find(i => i.ticketId === ticketId) || activeIssues.find(i => i.ticketId === ticketId);
+            currentTicketId = ticketId;
+            currentSheet = sheet;
+
+            document.getElementById('deleteDetails').innerHTML = `
+                <p class="text-slate-200"><strong class="text-amber-300">Ticket ID:</strong> <span class="text-blue-300 font-mono">${ticketDisplay}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Resident:</strong> <span class="text-slate-100">${issue.resident.name}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Location:</strong> <span class="text-slate-100">${issue.location.tower}/${issue.location.flat}</span></p>
+                <p class="text-slate-200"><strong class="text-amber-300">Category:</strong> <span class="text-slate-100">${issue.issue.category}</span></p>
+            `;
+
+            document.getElementById('deleteModal').classList.remove('hidden');
+        }
+
+        // Detailed View - Shows full issue information with images
+        function openDetailedView(ticketId, tab) {
+            // Apply subtle selection indicator (left border with gradient)
+            document.querySelectorAll('.issue-row').forEach(row => {
+                row.style.borderLeft = 'none';
+                row.classList.remove('bg-slate-700/20');
+            });
+            const selectedRow = document.getElementById(`row-${ticketId}`);
+            if (selectedRow) {
+                selectedRow.style.borderLeft = '3px solid rgb(217, 119, 6)';
+                selectedRow.classList.add('bg-slate-700/20');
+            }
+
+            const allIssuesArray = tab === 'pending' ? pendingIssues : activeIssues;
+            const issue = allIssuesArray.find(i => i.ticketId === ticketId);
+            if (!issue) return;
+
+            const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
+            
+            // Build detailed content - sleek and simple
+            let detailedContent = `
+                <div class="space-y-5">
+                    <!-- Header: Ticket ID & Severity -->
+                    <div class="flex justify-between items-baseline">
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">TICKET ID</p>
+                            <p class="text-2xl font-bold text-blue-300 font-mono">${issue.ticketId}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded text-white text-sm font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span>
+                    </div>
+
+                    <!-- Basic Info -->
+                    <div class="space-y-3 border-t border-slate-700 pt-4">
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">RESIDENT</p>
+                            <p class="text-slate-100 text-sm">${issue.resident.name}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">LOCATION</p>
+                            <p class="text-slate-100 text-sm">${issue.location.tower} / Flat ${issue.location.flat}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">CATEGORY</p>
+                            <p class="text-slate-100 text-sm">${issue.issue.category}${issue.issue.subcategory ? ' • ' + issue.issue.subcategory : ''}</p>
+                        </div>
+                    </div>
+
+                    <!-- Timeline Info -->
+                    <div class="grid grid-cols-3 gap-3 border-t border-slate-700 pt-4">
+                        <div class="text-center">
+                            <p class="text-xs text-slate-400 mb-2">REPORTED</p>
+                            <p class="text-sm text-slate-100">${new Date(issue.dateReported).toLocaleDateString()}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-xs text-slate-400 mb-2">DAYS OPEN</p>
+                            <p class="text-sm font-bold text-amber-400">${daysOpen}d</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-xs text-slate-400 mb-2">SLA STATUS</p>
+                            <p class="text-sm font-bold ${tab === 'active' && issue.sla.breached ? 'text-red-400' : 'text-emerald-400'}">${tab === 'active' ? (issue.sla.breached ? '⚠️ Breached' : '✓ On Track') : '⏳ Pending'}</p>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    <div class="border-t border-slate-700 pt-4">
+                        <p class="text-xs text-slate-400 mb-2">DESCRIPTION</p>
+                        <p class="text-slate-200 text-sm leading-relaxed">${issue.issue.description}</p>
+                    </div>
+
+                    <!-- Photos -->
+                    <div class="border-t border-slate-700 pt-4">
+                        <p class="text-xs text-slate-400 mb-3">PHOTOS</p>
+                        ${issue.issue.photoLinks && issue.issue.photoLinks.length > 0 ? `
+                            <div class="grid grid-cols-2 gap-3">
+                                ${issue.issue.photoLinks.map((link, idx) => `
+                                    <img src="${link}" alt="Photo ${idx + 1}" class="w-full h-32 object-cover rounded" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect fill=%22%23374151%22 width=%22400%22 height=%22300%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 font-size=%2220%22 fill=%22%239CA3AF%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22%3EPhoto unavailable%3C/text%3E%3C/svg%3E'">
+                                `).join('')}
+                            </div>
+                        ` : `
+                            <p class="text-xs text-slate-500 italic">No photos attached</p>
+                        `}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('detailedViewContent').innerHTML = detailedContent;
+            document.getElementById('detailedViewModal').classList.remove('hidden');
+        }
+
+        async function confirmDelete() {
+            try {
+                await API.call('deleteIssue', {
+                    ticketId: currentTicketId,
+                    sheet: currentSheet
+                });
+                closeModal('deleteModal');
+                showToast('✓ Issue deleted successfully', 'success');
+                loadData();
+            } catch (error) {
+                showToast('✗ Error: ' + error.message, 'error');
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        async function syncData() {
+            try {
+                showToast('📥 Syncing data from portal...', 'success');
+                const result = await API.syncFormResponses();
+                showToast(`✓ ${result.message}`, 'success');
+                loadData();
+            } catch (error) {
+                showToast('✗ Sync Error: ' + error.message, 'error');
+            }
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-bold z-50 ${
+                type === 'error' ? 'bg-red-600' : 'bg-emerald-600'
+            }`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+            document.getElementById('refreshStatus').textContent = autoRefreshEnabled ? 'ON' : 'OFF';
+            const icon = document.getElementById('refreshIcon');
+            icon.style.animation = autoRefreshEnabled ? 'spin 2s linear infinite' : 'none';
+            
+            if (autoRefreshEnabled) {
+                autoRefreshInterval = setInterval(loadData, 30000);
+                showToast('✓ Auto-refresh enabled', 'success');
+            } else {
+                clearInterval(autoRefreshInterval);
+                showToast('✗ Auto-refresh disabled', 'success');
+            }
+        }
+
+        function filterActive(filter) {
+            activeFilter = String(filter || '').toUpperCase();
+            renderActive();
+        }
+
+        function logout() {
+            API.signOut();
+        }
+
+        // Initial load
+        loadData();
+        autoRefreshInterval = setInterval(loadData, 30000);
+    </script>
+</body>
+</html>

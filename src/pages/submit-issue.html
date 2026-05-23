@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit Issue - The Address</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary:#1a1f2e; --accent:#d4af37; }
+        body { background: linear-gradient(135deg,#0f1419 0%,#1a1f2e 100%); color:#fff; }
+        .premium-card { background: linear-gradient(135deg,rgba(255,255,255,0.05) 0%,rgba(255,255,255,0.02) 100%); border:1px solid rgba(212,175,55,0.2); backdrop-filter: blur(10px); }
+        .gold-accent { color:#d4af37; }
+        .gold-border { border-color: rgba(212,175,55,0.3); }
+        .field-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color:#cbd5e1; margin-bottom: 0.35rem; }
+        .field-input, .field-select, .field-textarea {
+            width: 100%;
+            background: rgba(51,65,85,0.4);
+            border: 1px solid rgba(100,116,139,0.5);
+            border-radius: 0.5rem;
+            padding: 0.6rem 0.75rem;
+            color: #f1f5f9;
+            transition: all 0.15s;
+        }
+        .field-input:focus, .field-select:focus, .field-textarea:focus {
+            outline: none;
+            border-color: #d4af37;
+            box-shadow: 0 0 0 2px rgba(212,175,55,0.25);
+        }
+        .field-input[readonly] { opacity: 0.7; cursor: not-allowed; }
+        .sev-pill {
+            padding: 0.5rem 0.85rem;
+            border-radius: 0.5rem;
+            border: 1px solid rgba(100,116,139,0.5);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.15s;
+            text-align: center;
+        }
+        .sev-pill[data-active="1"] { color: #fff; }
+        .sev-pill[data-sev="Critical"][data-active="1"] { background:#dc2626; border-color:#dc2626; }
+        .sev-pill[data-sev="High"][data-active="1"]     { background:#ea580c; border-color:#ea580c; }
+        .sev-pill[data-sev="Medium"][data-active="1"]   { background:#eab308; border-color:#eab308; color:#1a1f2e; }
+        .sev-pill[data-sev="Low"][data-active="1"]      { background:#10b981; border-color:#10b981; }
+        .photo-thumb { position: relative; aspect-ratio: 1/1; background:#0f172a; border-radius: 0.5rem; overflow: hidden; border: 1px solid rgba(100,116,139,0.5); }
+        .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .photo-thumb button.rm { position: absolute; top: 4px; right: 4px; background: rgba(220,38,38,0.9); color:#fff; border:none; border-radius: 999px; width: 22px; height: 22px; font-size: 0.7rem; cursor: pointer; }
+        .drop-zone { border: 2px dashed rgba(212,175,55,0.4); border-radius: 0.5rem; padding: 1.25rem; text-align: center; color:#94a3b8; cursor: pointer; transition: all 0.15s; }
+        .drop-zone:hover { border-color:#d4af37; color:#e2e8f0; background: rgba(212,175,55,0.05); }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Navigation -->
+    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
+        <div class="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                <div>
+                    <h1 class="text-xl font-bold gold-accent">The Address</h1>
+                    <p class="text-xs text-slate-400">Submit an Issue</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="submitted-issues.html" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30">
+                    <i class="fas fa-list mr-2"></i>View Submitted
+                </a>
+                <button onclick="API.signOut()" class="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white font-semibold transition-colors text-sm border border-red-500/30" title="Sign out / switch account">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto p-6">
+        <div class="mb-6">
+            <h2 class="text-3xl font-bold"><i class="fas fa-pen-to-square mr-3 gold-accent"></i>Submit an Issue</h2>
+            <p class="text-slate-400 mt-1">All submissions go to the Technical Committee for approval.</p>
+        </div>
+
+        <form id="submitForm" class="premium-card rounded-xl p-6 space-y-5" autocomplete="off" onsubmit="return false;">
+
+            <!-- Submitter (read-only, server-trusted) -->
+            <div>
+                <label class="field-label"><i class="fas fa-user-check mr-1"></i>Signed in as</label>
+                <input id="submitterEmail" class="field-input" readonly placeholder="…">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="field-label">Resident Name <span class="text-slate-500 font-normal normal-case tracking-normal">(optional)</span></label>
+                    <input id="residentName" class="field-input" maxlength="80" placeholder="Your name as it should appear on the ticket">
+                </div>
+                <div>
+                    <label class="field-label">Flat <span class="text-slate-500 font-normal normal-case tracking-normal">(optional)</span></label>
+                    <input id="flat" class="field-input" maxlength="20" placeholder="e.g. B-805">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="field-label">Tower <span class="text-red-400">*</span></label>
+                    <select id="tower" class="field-select" required>
+                        <option value="">— Select —</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Category <span class="text-red-400">*</span></label>
+                    <select id="category" class="field-select" required>
+                        <option value="">— Select —</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="field-label">Sub-Category <span class="text-slate-500 font-normal normal-case tracking-normal">(optional)</span></label>
+                    <select id="subCategory" class="field-select">
+                        <option value="">— Select —</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Severity <span class="text-red-400">*</span></label>
+                    <div id="severityPills" class="grid grid-cols-4 gap-2">
+                        <button type="button" class="sev-pill" data-sev="Critical">Critical</button>
+                        <button type="button" class="sev-pill" data-sev="High">High</button>
+                        <button type="button" class="sev-pill" data-sev="Medium" data-active="1">Medium</button>
+                        <button type="button" class="sev-pill" data-sev="Low">Low</button>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="field-label">Describe the issue <span class="text-red-400">*</span></label>
+                <textarea id="description" class="field-textarea" rows="5" maxlength="1000" placeholder="What is the problem? Where is it located? Any other relevant details…" required></textarea>
+                <p class="text-xs text-slate-500 mt-1"><span id="descCount">0</span> / <span id="descMaxLabel">1000</span></p>
+            </div>
+
+            <div id="photoSection">
+                <label class="field-label"><i class="fas fa-camera mr-1"></i>Photos <span class="text-slate-500 font-normal normal-case tracking-normal">(optional, up to <span id="photoMaxLabel">5</span>)</span></label>
+                <label class="drop-zone block">
+                    <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+                    <i class="fas fa-cloud-upload-alt text-2xl gold-accent mb-2"></i>
+                    <p class="text-sm">Click to add photos (max <span id="photoMaxLabel2">5</span> · resized to ≤<span id="photoDimLabel">1600</span>px · ≤<span id="photoMBLabel">5</span> MB each)</p>
+                </label>
+                <div id="photoPreviews" class="grid grid-cols-3 sm:grid-cols-5 gap-3 mt-3"></div>
+            </div>
+
+            <div id="formError" class="hidden bg-red-900/40 border border-red-700/60 text-red-200 text-sm rounded-lg p-3"></div>
+
+            <div class="flex flex-wrap items-center gap-3 pt-2">
+                <button type="button" id="submitBtn" onclick="onSubmit()" class="flex-1 min-w-[180px] px-5 py-3 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-bold transition-all border border-amber-400/30 shadow-lg">
+                    <i class="fas fa-paper-plane mr-2"></i><span id="submitBtnLabel">Submit Issue</span>
+                </button>
+                <button type="button" onclick="resetDraft(true)" class="px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30">
+                    <i class="fas fa-eraser mr-2"></i>Clear
+                </button>
+            </div>
+            <p class="text-xs text-slate-500"><i class="fas fa-info-circle mr-1"></i>Your draft is auto-saved on this device.</p>
+        </form>
+    </main>
+
+    <!-- Success modal -->
+    <div id="successModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div class="premium-card rounded-xl p-8 max-w-md w-full text-center border border-emerald-500/40">
+            <i class="fas fa-circle-check text-emerald-400 text-5xl mb-4"></i>
+            <h3 class="text-2xl font-bold mb-2">Issue Submitted</h3>
+            <p class="text-slate-300 text-sm mb-4">Thank you. The Technical Committee has been notified.</p>
+            <div class="bg-slate-800/60 rounded-lg p-3 mb-5 border border-slate-700">
+                <p class="text-xs text-slate-400 mb-1">Your Ticket ID</p>
+                <p id="successTicket" class="text-2xl font-bold gold-accent">—</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeSuccess(true)" class="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 text-white font-bold border border-amber-400/30">Submit Another</button>
+                <a href="submitted-issues.html" class="flex-1 px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold border border-slate-600/30">Track Status</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="hidden fixed bottom-4 right-4 px-5 py-3 rounded-lg shadow-lg text-white font-bold z-50"></div>
+
+    <?!= include('src/partials/api') ?>
+    <script src="../../assets/js/api.js"></script>
+    <script>
+    (async function () {
+        const DRAFT_KEY = 'IRP_SUBMIT_DRAFT_V1';
+
+        // Auth — server-trusted identity.
+        let user = { email: '', role: 'UNKNOWN' };
+        try {
+            user = await API.whoAmI();
+            window.IRP_USER = user;
+        } catch (e) {
+            console.error('whoAmI failed:', e);
+        }
+        if (!user.email) {
+            location.href = 'index.html';
+            return;
+        }
+        document.getElementById('submitterEmail').value = user.email;
+
+        // Load central client config (feature flags + tunables).
+        try {
+            const cc = await API.getClientConfig();
+            window.IRP_CLIENT_CONFIG = cc || {};
+            applyClientConfig(window.IRP_CLIENT_CONFIG);
+        } catch (e) {
+            console.warn('getClientConfig failed, using defaults:', e.message);
+            window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
+        }
+
+        // If the feature itself is off (operator may still reach the page
+        // via a stale tab), redirect away.
+        const features = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.features) || {};
+        if (features.FEATURE_IN_PORTAL_SUBMIT === false) {
+            location.href = 'index.html';
+            return;
+        }
+
+        // Load master lists (CATEGORY_MASTER).
+        try {
+            const master = await API.getCategoryMaster();
+            fillSelect('tower',       master.towers       || ['Tower A','Tower B','Tower C','Common Area']);
+            fillSelect('category',    master.categories   || []);
+            fillSelect('subCategory', master.subcategories|| []);
+        } catch (e) {
+            console.warn('Category master unavailable, using fallback:', e.message);
+            fillSelect('tower',       ['Tower A','Tower B','Tower C','Common Area']);
+            fillSelect('category',    ['Civil','Plumbing','Electrical','Fire Safety','Lift','Security','Amenities','Common Area','Documentation']);
+            fillSelect('subCategory', []);
+        }
+
+        // Restore draft.
+        try {
+            const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+            if (saved && typeof saved === 'object') {
+                setVal('residentName', saved.residentName);
+                setVal('flat',         saved.flat);
+                setVal('tower',        saved.tower);
+                setVal('category',     saved.category);
+                setVal('subCategory',  saved.subCategory);
+                setVal('description',  saved.description);
+                if (saved.severity)    setSeverity(saved.severity);
+            }
+        } catch (e) { /* ignore */ }
+
+        // Autosave on input.
+        ['residentName','flat','tower','category','subCategory','description'].forEach(id => {
+            document.getElementById(id).addEventListener('input', saveDraft);
+            document.getElementById(id).addEventListener('change', saveDraft);
+        });
+        document.getElementById('description').addEventListener('input', () => {
+            document.getElementById('descCount').textContent = document.getElementById('description').value.length;
+        });
+        document.getElementById('descCount').textContent = document.getElementById('description').value.length;
+
+        // Severity pill clicks.
+        document.querySelectorAll('#severityPills .sev-pill').forEach(b => {
+            b.addEventListener('click', () => { setSeverity(b.dataset.sev); saveDraft(); });
+        });
+
+        // Photo input.
+        document.getElementById('photoInput').addEventListener('change', onPhotoSelect);
+    })();
+
+    // === Module-scope state ===
+    const photos = []; // {name, mime, b64, previewUrl}
+    // Tunables are overwritten by applyClientConfig() once the server
+    // config arrives. Defaults match the CONFIG-sheet defaults so the page
+    // is still usable if the API call fails.
+    let MAX_PHOTOS   = 5;
+    let MAX_DIM      = 1600;
+    let JPEG_QUALITY = 0.85;
+    let MAX_PHOTO_MB = 5;
+    let DESC_MAX     = 1000;
+    let DESC_MIN     = 5;
+
+    function applyClientConfig(cc) {
+        const t = (cc && cc.tunables) || {};
+        const f = (cc && cc.features) || {};
+        if (typeof t.SUBMIT_MAX_PHOTOS         === 'number') MAX_PHOTOS   = t.SUBMIT_MAX_PHOTOS;
+        if (typeof t.SUBMIT_PHOTO_MAX_DIM      === 'number') MAX_DIM      = t.SUBMIT_PHOTO_MAX_DIM;
+        if (typeof t.SUBMIT_PHOTO_JPEG_QUALITY === 'number') JPEG_QUALITY = t.SUBMIT_PHOTO_JPEG_QUALITY;
+        if (typeof t.SUBMIT_MAX_PHOTO_MB       === 'number') MAX_PHOTO_MB = t.SUBMIT_MAX_PHOTO_MB;
+        if (typeof t.SUBMIT_DESC_MAX           === 'number') DESC_MAX     = t.SUBMIT_DESC_MAX;
+        if (typeof t.SUBMIT_DESC_MIN           === 'number') DESC_MIN     = t.SUBMIT_DESC_MIN;
+
+        const desc = document.getElementById('description');
+        if (desc) desc.setAttribute('maxlength', String(DESC_MAX));
+        setText('descMaxLabel',  DESC_MAX);
+        setText('photoMaxLabel', MAX_PHOTOS);
+        setText('photoMaxLabel2',MAX_PHOTOS);
+        setText('photoDimLabel', MAX_DIM);
+        setText('photoMBLabel',  MAX_PHOTO_MB);
+
+        // Photo upload feature gate: hide whole section if disabled.
+        if (f.FEATURE_PHOTO_UPLOAD === false) {
+            const ps = document.getElementById('photoSection');
+            if (ps) ps.style.display = 'none';
+        }
+    }
+
+    function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = String(v); }
+
+    function fillSelect(id, items) {
+        const sel = document.getElementById(id);
+        const cur = sel.value;
+        const opts = ['<option value="">— Select —</option>'].concat(
+            (items || []).map(x => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`)
+        );
+        sel.innerHTML = opts.join('');
+        if (cur) sel.value = cur;
+    }
+
+    function setVal(id, v) { if (v != null) document.getElementById(id).value = v; }
+
+    function setSeverity(sev) {
+        document.querySelectorAll('#severityPills .sev-pill').forEach(b => {
+            if (b.dataset.sev === sev) b.dataset.active = '1';
+            else delete b.dataset.active;
+        });
+    }
+    function getSeverity() {
+        const el = document.querySelector('#severityPills .sev-pill[data-active="1"]');
+        return el ? el.dataset.sev : 'Medium';
+    }
+
+    function saveDraft() {
+        try {
+            const draft = {
+                residentName: document.getElementById('residentName').value,
+                flat:         document.getElementById('flat').value,
+                tower:        document.getElementById('tower').value,
+                category:     document.getElementById('category').value,
+                subCategory:  document.getElementById('subCategory').value,
+                description:  document.getElementById('description').value,
+                severity:     getSeverity()
+            };
+            localStorage.setItem('IRP_SUBMIT_DRAFT_V1', JSON.stringify(draft));
+        } catch (e) { /* ignore quota errors */ }
+    }
+
+    function resetDraft(clearForm) {
+        try { localStorage.removeItem('IRP_SUBMIT_DRAFT_V1'); } catch (e) {}
+        if (clearForm) {
+            ['residentName','flat','description'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('tower').value = '';
+            document.getElementById('category').value = '';
+            document.getElementById('subCategory').value = '';
+            setSeverity('Medium');
+            photos.length = 0;
+            renderPhotos();
+            document.getElementById('descCount').textContent = '0';
+            hideError();
+        }
+    }
+
+    async function onPhotoSelect(e) {
+        const files = Array.from(e.target.files || []);
+        e.target.value = ''; // allow re-selecting same file
+        for (const f of files) {
+            if (photos.length >= MAX_PHOTOS) { toast('Max ' + MAX_PHOTOS + ' photos', 'error'); break; }
+            if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { toast('Only JPEG/PNG/WEBP allowed', 'error'); continue; }
+            if (f.size > MAX_PHOTO_MB * 1024 * 1024 * 1.4) {
+                // Quick pre-resize reject: if raw file already grossly exceeds
+                // the cap we won't be able to shrink it under either.
+                toast(f.name + ' is much larger than ' + MAX_PHOTO_MB + ' MB', 'error');
+                continue;
+            }
+            try {
+                const { b64, mime, previewUrl } = await resizeImageToB64(f, MAX_DIM, JPEG_QUALITY);
+                photos.push({ name: f.name, mime: mime, b64: b64, previewUrl: previewUrl });
+            } catch (err) {
+                console.error('resize failed', err);
+                toast('Failed to process ' + f.name, 'error');
+            }
+        }
+        renderPhotos();
+    }
+
+    function renderPhotos() {
+        const wrap = document.getElementById('photoPreviews');
+        if (photos.length === 0) { wrap.innerHTML = ''; return; }
+        wrap.innerHTML = photos.map((p, i) => `
+            <div class="photo-thumb">
+                <img src="${p.previewUrl}" alt="photo ${i+1}">
+                <button type="button" class="rm" onclick="removePhoto(${i})" title="Remove"><i class="fas fa-times"></i></button>
+            </div>
+        `).join('');
+    }
+    function removePhoto(i) { photos.splice(i, 1); renderPhotos(); }
+
+    function resizeImageToB64(file, maxDim, quality) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(reader.error);
+            reader.onload = () => {
+                const img = new Image();
+                img.onerror = () => reject(new Error('Image decode failed'));
+                img.onload = () => {
+                    let { width, height } = img;
+                    if (width > maxDim || height > maxDim) {
+                        const k = Math.min(maxDim / width, maxDim / height);
+                        width  = Math.round(width  * k);
+                        height = Math.round(height * k);
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    // Always emit JPEG to keep payload predictable.
+                    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    const b64 = dataUrl.split(',')[1];
+                    resolve({ b64: b64, mime: 'image/jpeg', previewUrl: dataUrl });
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function onSubmit() {
+        hideError();
+        const payload = {
+            residentName: document.getElementById('residentName').value.trim(),
+            flat:         document.getElementById('flat').value.trim(),
+            tower:        document.getElementById('tower').value,
+            category:     document.getElementById('category').value,
+            subCategory:  document.getElementById('subCategory').value,
+            severity:     getSeverity(),
+            description:  document.getElementById('description').value.trim(),
+            photos:       photos.map(p => ({ name: p.name, mime: p.mime, b64: p.b64 }))
+        };
+
+        const localErrors = [];
+        if (!payload.tower)       localErrors.push('Tower is required');
+        if (!payload.category)    localErrors.push('Category is required');
+        if (!payload.severity)    localErrors.push('Severity is required');
+        if (!payload.description || payload.description.length < DESC_MIN) localErrors.push('Description must be at least ' + DESC_MIN + ' characters');
+        if (localErrors.length) { showError(localErrors.join(' · ')); return; }
+
+        const btn = document.getElementById('submitBtn');
+        const label = document.getElementById('submitBtnLabel');
+        btn.disabled = true;
+        label.textContent = 'Submitting…';
+        try {
+            const result = await API.submitIssue(payload);
+            document.getElementById('successTicket').textContent = result.ticketId || '—';
+            document.getElementById('successModal').classList.remove('hidden');
+            resetDraft(true);
+        } catch (err) {
+            console.error(err);
+            showError(err.message || 'Submission failed');
+        } finally {
+            btn.disabled = false;
+            label.textContent = 'Submit Issue';
+        }
+    }
+
+    function closeSuccess(reset) {
+        document.getElementById('successModal').classList.add('hidden');
+        if (reset) resetDraft(true);
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('formError');
+        el.textContent = msg;
+        el.classList.remove('hidden');
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    function hideError() { document.getElementById('formError').classList.add('hidden'); }
+
+    function toast(msg, type) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'fixed bottom-4 right-4 px-5 py-3 rounded-lg shadow-lg text-white font-bold z-50 ' +
+                      (type === 'error' ? 'bg-red-600' : 'bg-emerald-600');
+        t.classList.remove('hidden');
+        setTimeout(() => t.classList.add('hidden'), 2500);
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+    </script>
+</body>
+</html>
