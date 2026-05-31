@@ -10,7 +10,19 @@
  * Usage:
  *   node scripts/build-preview.js
  *   npx http-server preview -p 5173 -o /index.html
+ *
+ * Apps Script safety guard:
+ *   clasp 3.x renames every *.js it pushes to *.gs, and Apps Script V8
+ *   evaluates every .gs file at script load. If this file ever ends up
+ *   on the server (e.g. an over-permissive .claspignore), the top-level
+ *   `require()` calls below would throw `ReferenceError: require is not
+ *   defined` and brick the entire web app. The `typeof require` check
+ *   makes the file a harmless no-op in that environment.
  */
+
+if (typeof require === 'undefined') {
+    // Loaded under Google Apps Script (no CommonJS). Do nothing.
+} else {
 
 const fs = require('fs');
 const path = require('path');
@@ -247,3 +259,5 @@ function build() {
 }
 
 build();
+
+} // end Apps-Script safety guard

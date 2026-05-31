@@ -20,8 +20,13 @@
 /.github/**
 /.vscode/**
 /node_modules/**
-/scripts/**
 /assets/**
+# NOTE: /scripts/** intentionally NOT excluded. Both scripts/*.js files
+# are typeof-require-guarded so they're harmless no-ops if clasp renames
+# them to .gs on push. We deliberately push them to OVERWRITE the broken
+# scripts/build-preview.gs that's already on the Apps Script server
+# (clasp 3.x's `push -f` only overwrites — it does not delete orphans).
+# Once the server is clean you can re-enable /scripts/** here.
 
 # 3) Re-include the manifest + the source tree
 !/appsscript.json

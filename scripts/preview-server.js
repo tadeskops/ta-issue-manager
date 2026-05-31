@@ -1,7 +1,13 @@
 /**
  * Zero-dependency static file server for ./preview on http://localhost:5173.
  *   node scripts/preview-server.js
+ *
+ * Apps Script safety guard (see scripts/build-preview.js for rationale).
  */
+if (typeof require === 'undefined') {
+    // Loaded under Google Apps Script — do nothing.
+} else {
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -40,3 +46,5 @@ http.createServer(function (req, res) {
     // Open default browser (Windows).
     exec('cmd /c start "" "' + url + '"');
 });
+
+} // end Apps-Script safety guard
