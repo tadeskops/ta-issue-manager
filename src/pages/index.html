@@ -69,6 +69,9 @@
             <button id="primaryAction" onclick="goDashboard()" class="hidden w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-bold py-3 rounded-lg transition-all border border-amber-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider">
                 <i class="fas fa-sign-in-alt mr-2"></i><span id="primaryLabel">Open Dashboard</span>
             </button>
+            <button id="signInBtn" onclick="signIn()" class="hidden w-full bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 rounded-lg transition-all border border-slate-300 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider">
+                <i class="fab fa-google mr-2 text-amber-500"></i>Sign in with Google
+            </button>
             <button id="switchAcct" onclick="switchAccount()" class="hidden w-full bg-slate-700/40 hover:bg-slate-700/70 text-slate-200 font-semibold py-2 rounded-lg transition-all border border-slate-600/40 text-xs uppercase tracking-wider">
                 <i class="fas fa-exchange-alt mr-2"></i>Switch Google account
             </button>
@@ -100,6 +103,16 @@
         function goSubmitted() { location.href = pageUrl('submitted'); }
         function goSubmit()    { location.href = pageUrl('submit'); }
         function switchAccount() { API.signOut(); }
+        function signIn() {
+            // The tech-mode deployment is configured with USER_ACCESSING, so
+            // hitting it triggers Google's sign-in flow.
+            const techBase = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.tunables && window.IRP_CLIENT_CONFIG.tunables.TECH_WEBAPP_URL) || '';
+            if (techBase) { location.href = techBase; return; }
+            // Fallback: reload current URL - if the anonymous deployment is the
+            // only one configured, Google's account picker still lets the user
+            // pick an account when they revisit.
+            location.reload();
+        }
         function goDashboard() {
             const u = window.IRP_USER || {};
             if (u.role === 'COMMITTEE') location.href = pageUrl('committee');
@@ -112,7 +125,14 @@
             const btn = document.getElementById('primaryAction');
             const label = document.getElementById('primaryLabel');
             const switchBtn = document.getElementById('switchAcct');
+            const signInBtn = document.getElementById('signInBtn');
             const submitBtn = document.getElementById('submitBtn');
+            // Always fetch client config so signIn() has TECH_WEBAPP_URL even
+            // for unauthenticated visitors.
+            try {
+                const cc = await API.getClientConfig();
+                window.IRP_CLIENT_CONFIG = cc || {};
+            } catch (e) { /* non-fatal */ }
             try {
                 const u = await API.whoAmI();
                 window.IRP_USER = u;
@@ -129,24 +149,22 @@
                 } else if (u.role === 'RESIDENT') {
                     statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Resident)';
                     // Feature flag gate \u2014 hide submit CTA if disabled.
-                    let canSubmit = true;
-                    try {
-                        const cc = await API.getClientConfig();
-                        window.IRP_CLIENT_CONFIG = cc || {};
-                        canSubmit = !((cc && cc.features && cc.features.FEATURE_IN_PORTAL_SUBMIT) === false);
-                    } catch (e) { /* default to enabled */ }
-                    if (canSubmit) submitBtn.classList.remove('hidden');
+                    const cc = window.IRP_CLIENT_CONFIG || {};
+                    const canSubmit = !((cc.features && cc.features.FEATURE_IN_PORTAL_SUBMIT) === false);
+                    if (canSubmit && submitBtn) submitBtn.classList.remove('hidden');
                     switchBtn.classList.remove('hidden');
                 } else if (u.email) {
                     statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-400 mr-2"></i>' +
                         '<b>' + u.email + '</b> is not authorized. Contact the committee to be added to the CONFIG list, then reload.';
                     switchBtn.classList.remove('hidden');
                 } else {
-                    statusEl.innerHTML = '<i class="fab fa-google mr-2 text-amber-400"></i>Please open this app from the deployed Apps Script URL and sign in with Google.';
+                    statusEl.innerHTML = '<i class="fab fa-google mr-2 text-amber-400"></i>Not signed in. Click below to sign in with your authorized Google account.';
+                    signInBtn.classList.remove('hidden');
                 }
             } catch (e) {
                 console.error(e);
                 statusEl.innerHTML = '<i class="fas fa-times-circle text-red-400 mr-2"></i>Sign-in check failed. Reload to retry.';
+                signInBtn.classList.remove('hidden');
             }
         })();
     </script>
