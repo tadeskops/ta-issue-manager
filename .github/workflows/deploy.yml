@@ -92,7 +92,7 @@ jobs:
           fi
 
       - name: Publish new web-app deployment
-        if: github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true)
         run: |
           DESC="Auto-deploy $(date -u +'%Y-%m-%d %H:%M UTC') ${{ github.sha }}"
           if [ -n "${{ secrets.DEPLOYMENT_ID }}" ]; then
