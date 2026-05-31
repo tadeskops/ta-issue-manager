@@ -150,6 +150,46 @@ function api_whoAmI() {
     return { email: email, role: getUserRole(email) };
 }
 
+// Returns deployment + identity + a sample call of getPendingIssues so we
+// can verify what code the secure deployment is actually running and
+// whether the signed-in user's session can read the issues sheet. Output
+// is intentionally always a plain object (never throws) so the client
+// always sees a real diagnostic instead of an opaque null.
+function api_diag() {
+    var out = {
+        version: "diag-2026-05-31-r2",
+        when: new Date().toISOString(),
+        identity: null,
+        identityError: null,
+        webappUrl: null,
+        pendingTest: null,
+        pendingTestError: null
+    };
+    try {
+        var email = (Session.getActiveUser().getEmail() || "").trim();
+        out.identity = { email: email, role: getUserRole(email) };
+    } catch (e) {
+        out.identityError = String(e);
+    }
+    try {
+        out.webappUrl = ScriptApp.getService().getUrl();
+    } catch (e) { /* ignore */ }
+    try {
+        var r = getPendingIssues();
+        // Return a small summary, not the whole payload, to keep the
+        // diagnostic response small.
+        out.pendingTest = {
+            success: r && r.success,
+            error: r && r.error,
+            count: r && r.data ? r.data.length : null,
+            firstTicket: r && r.data && r.data.length ? r.data[0].ticketId : null
+        };
+    } catch (e) {
+        out.pendingTestError = String(e);
+    }
+    return out;
+}
+
 function api_call(action, payload) {
     payload = payload || {};
     var email = "";
@@ -165,7 +205,7 @@ function api_call(action, payload) {
         return { success: false, error: "Identity lookup failed: " + String(idErr) + ". The signed-in account may not have access to the CONFIG spreadsheet." };
     }
     // Public read-only actions are allowed for anonymous visitors (role UNKNOWN).
-    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster"];
+    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster", "diag"];
     if (role === "UNKNOWN" && PUBLIC_ACTIONS.indexOf(action) === -1) {
         return { success: false, error: "Unauthorized: " + (email || "no email") };
     }
@@ -194,6 +234,7 @@ function api_call(action, payload) {
             case "getCategoryMaster":        result = getCategoryMaster(); break;
             case "getClientConfig":          result = getClientConfig(); break;
             case "validateUserAccess":       result = { success: true, data: { email: email, role: role, hasAccess: true }, error: null }; break;
+            case "diag":                     result = { success: true, data: api_diag(), error: null }; break;
             default:
                 return { success: false, error: "Unknown action: " + action };
         }

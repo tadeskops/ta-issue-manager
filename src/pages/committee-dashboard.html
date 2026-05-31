@@ -579,6 +579,15 @@
         }
 
         async function loadData() {
+            // One-shot deployment diagnostic — surfaces version of api_call
+            // running on the secure deployment + a test of getPendingIssues
+            // as the signed-in user. Look in DevTools console.
+            try {
+                const diag = await API.diag();
+                console.log('[diag]', diag);
+            } catch (e) {
+                console.warn('[diag] failed:', e && e.message);
+            }
             try {
                 const pending = await API.getPendingIssues();
                 const live = await API.getLiveIssues('ALL');

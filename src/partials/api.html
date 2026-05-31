@@ -83,6 +83,7 @@ const API = {
     submitIssue(payload)      { return this.call("submitIssue", payload || {}); },
     getCategoryMaster()       { return this.call("getCategoryMaster"); },
     getClientConfig()         { return this.call("getClientConfig"); },
+    diag()                    { return this.call("diag"); },
 
     signOut() {
         this._user = null;
