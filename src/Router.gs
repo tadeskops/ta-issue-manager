@@ -28,7 +28,7 @@ const PAGE_MAP = {
     committee: { file: "src/pages/committee-dashboard", roles: ["COMMITTEE"] },
     builder:   { file: "src/pages/builder-dashboard",   roles: ["BUILDER", "COMMITTEE"], feature: "FEATURE_BUILDER_DASHBOARD" },
     admin:     { file: "src/pages/admin-dashboard",     roles: ["COMMITTEE"],            feature: "FEATURE_ADMIN_DASHBOARD" },
-    submitted: { file: "src/pages/submitted-issues",    roles: ["COMMITTEE", "BUILDER", "RESIDENT"], feature: "FEATURE_SUBMITTED_PAGE" },
+    submitted: { file: "src/pages/submitted-issues",    roles: ["COMMITTEE", "BUILDER", "RESIDENT", "UNKNOWN"], feature: "FEATURE_SUBMITTED_PAGE", public: true },
     submit:    { file: "src/pages/submit-issue",        roles: ["RESIDENT", "COMMITTEE", "BUILDER"], feature: "FEATURE_IN_PORTAL_SUBMIT" },
     denied:    { file: "src/pages/index",               roles: ["COMMITTEE", "BUILDER", "RESIDENT", "UNKNOWN"] }
 };
@@ -52,8 +52,12 @@ function doGet(e) {
         return renderDenied_(email, role);
     }
 
-    // Authorization check
-    if (role === "UNKNOWN" || target.roles.indexOf(role) === -1) {
+    // Authorization check. Anonymous users (role UNKNOWN) are allowed only
+    // on pages flagged public:true (e.g. the read-only submitted-issues view).
+    if (!target.public && role === "UNKNOWN") {
+        return renderDenied_(email, role);
+    }
+    if (target.roles.indexOf(role) === -1) {
         return renderDenied_(email, role);
     }
 
@@ -137,9 +141,12 @@ function api_call(action, payload) {
     payload = payload || {};
     const email = (Session.getActiveUser().getEmail() || "").trim();
     const role  = getUserRole(email);
-    if (role === "UNKNOWN") {
+    // Public read-only actions are allowed for anonymous visitors (role UNKNOWN).
+    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster"];
+    if (role === "UNKNOWN" && PUBLIC_ACTIONS.indexOf(action) === -1) {
         return { success: false, error: "Unauthorized: " + (email || "no email") };
-    }    if (!isActionAllowed_(action, role)) {
+    }
+    if (role !== "UNKNOWN" && !isActionAllowed_(action, role)) {
         return { success: false, error: "Forbidden for role " + role + ": " + action };
     }
     try {
