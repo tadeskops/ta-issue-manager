@@ -102,16 +102,25 @@
         }
         function goSubmitted() { location.href = pageUrl('submitted'); }
         function goSubmit()    { location.href = pageUrl('submit'); }
-        function switchAccount() { API.signOut(); }
+        function switchAccount() {
+            try { localStorage.removeItem('IRP_LAST_USER'); } catch(e) {}
+            API.signOut();
+        }
         function signIn() {
-            // The tech-mode deployment is configured with USER_ACCESSING, so
-            // hitting it triggers Google's sign-in flow.
+            // Preferred: redirect to the tech-mode deployment which is set to
+            // "Execute as: user accessing", so Apps Script will trigger Google
+            // sign-in and return identity to the page.
             const techBase = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.tunables && window.IRP_CLIENT_CONFIG.tunables.TECH_WEBAPP_URL) || '';
             if (techBase) { location.href = techBase; return; }
-            // Fallback: reload current URL - if the anonymous deployment is the
-            // only one configured, Google's account picker still lets the user
-            // pick an account when they revisit.
-            location.reload();
+            // Fallback: this deployment is ANONYMOUS, so Apps Script never
+            // sees identity even if Google is signed-in. Send the user to
+            // Google's account chooser so they can at least establish a
+            // session; then return here. Mark the URL so init() can warn
+            // the user that admin must still configure TECH_WEBAPP_URL.
+            const here = new URL(location.href);
+            here.searchParams.set('signedIn', '1');
+            const chooser = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(here.toString());
+            location.href = chooser;
         }
         function goDashboard() {
             const u = window.IRP_USER || {};
@@ -133,9 +142,17 @@
                 const cc = await API.getClientConfig();
                 window.IRP_CLIENT_CONFIG = cc || {};
             } catch (e) { /* non-fatal */ }
+            // Best-effort cached identity: if a previous load on this device
+            // ever resolved a real email, show it while we re-verify.
+            let cached = null;
+            try { cached = JSON.parse(localStorage.getItem('IRP_LAST_USER') || 'null'); } catch (e) {}
+            const techConfigured = !!((window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.tunables && window.IRP_CLIENT_CONFIG.tunables.TECH_WEBAPP_URL));
             try {
                 const u = await API.whoAmI();
                 window.IRP_USER = u;
+                if (u && u.email) {
+                    try { localStorage.setItem('IRP_LAST_USER', JSON.stringify({ email: u.email, role: u.role, ts: Date.now() })); } catch(e) {}
+                }
                 if (u.role === 'COMMITTEE') {
                     statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Technical Committee)';
                     label.textContent = 'Open Committee Dashboard';
@@ -157,8 +174,28 @@
                     statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-400 mr-2"></i>' +
                         '<b>' + u.email + '</b> is not authorized. Contact the committee to be added to the CONFIG list, then reload.';
                     switchBtn.classList.remove('hidden');
+                } else if (cached && cached.email) {
+                    // Anonymous deployment cannot read identity. Show the
+                    // cached identity from a previous successful sign-in so
+                    // the user knows they ARE signed in to Google.
+                    const role = cached.role || 'UNKNOWN';
+                    const roleLabel = role === 'COMMITTEE' ? 'Technical Committee' :
+                                      role === 'BUILDER'   ? 'Builder' :
+                                      role === 'RESIDENT'  ? 'Resident' : 'Account';
+                    statusEl.innerHTML = '<i class="fas fa-user-circle text-amber-400 mr-2"></i>' +
+                        'Last signed in as <b>' + cached.email + '</b> (' + roleLabel + ') \u2014 ' +
+                        '<span class="text-slate-400">this public link can\u2019t verify identity. Use the secure link to continue.</span>';
+                    if (role === 'COMMITTEE' || role === 'BUILDER') {
+                        label.textContent = role === 'COMMITTEE' ? 'Open Committee Dashboard' : 'Open Builder Dashboard';
+                        btn.classList.remove('hidden');
+                    }
+                    signInBtn.classList.remove('hidden');
+                    switchBtn.classList.remove('hidden');
                 } else {
-                    statusEl.innerHTML = '<i class="fab fa-google mr-2 text-amber-400"></i>Not signed in. Click below to sign in with your authorized Google account.';
+                    const msg = techConfigured
+                        ? 'Not signed in. Click below to sign in with your authorized Google account.'
+                        : 'This is a public link. To sign in as committee or builder, use the secure deployment link (ask admin) \u2014 the sign-in button will open Google\u2019s account chooser.';
+                    statusEl.innerHTML = '<i class="fab fa-google mr-2 text-amber-400"></i>' + msg;
                     signInBtn.classList.remove('hidden');
                 }
             } catch (e) {
