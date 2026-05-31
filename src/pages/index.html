@@ -126,11 +126,18 @@
         function signIn() {
             const want = (window.IRP_REQUESTED_PAGE || new URLSearchParams(location.search).get('page') || '').replace(/[^a-z]/gi, '');
             const url = secureUrl(want);
-            if (url) { location.href = url; return; }
+            if (url) { openTop(url); return; }
             // No secure deployment configured — last-resort account chooser so
             // the user can at least sign in to Google before retrying.
             const here = new URL(location.href);
-            location.href = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(here.toString());
+            openTop('https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(here.toString()));
+        }
+
+        // Apps Script renders inside a sandboxed iframe, so plain
+        // location.href to a different origin is silently dropped. Use
+        // window.open(url, '_top') which HtmlService whitelists.
+        function openTop(url) {
+            try { window.open(url, '_top'); } catch (e) { location.href = url; }
         }
 
         function goDashboard() {
@@ -205,7 +212,7 @@
             const secure = secureUrl(want);
             if (want && secure) {
                 statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-2 text-amber-400"></i>Redirecting to secure sign-in…';
-                location.href = secure;
+                openTop(secure);
                 return;
             }
 
