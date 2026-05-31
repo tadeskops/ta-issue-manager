@@ -84,8 +84,18 @@ jobs:
 
       - name: clasp push -f (public webapp config)
         run: |
+          # `set +e` so we can capture stderr+stdout AND clasp's exit code
+          # without bash -e killing the step before we get to print them.
+          set +e
           OUTPUT=$(clasp push -f 2>&1)
+          EC=$?
+          set -e
           echo "$OUTPUT"
+          echo "clasp exit code: $EC"
+          if [ $EC -ne 0 ]; then
+            echo "::error::clasp push failed (exit $EC). See the captured output above."
+            exit $EC
+          fi
           if echo "$OUTPUT" | grep -qE 'Pushed 0 files|Nothing to push'; then
             echo "::error::clasp push reported zero files. Check .claspignore — it may be excluding everything."
             exit 1
