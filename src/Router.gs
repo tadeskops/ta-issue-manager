@@ -152,8 +152,18 @@ function api_whoAmI() {
 
 function api_call(action, payload) {
     payload = payload || {};
-    var email = (Session.getActiveUser().getEmail() || "").trim();
-    var role  = getUserRole(email);
+    var email = "";
+    var role  = "UNKNOWN";
+    // Wrap identity lookup so a Drive/CONFIG-sheet access failure surfaces as
+    // a structured error to the client instead of an opaque "Unknown API
+    // error" via google.script.run's failure handler.
+    try {
+        email = (Session.getActiveUser().getEmail() || "").trim();
+        role  = getUserRole(email);
+    } catch (idErr) {
+        Logger.log("api_call identity error: " + idErr);
+        return { success: false, error: "Identity lookup failed: " + String(idErr) + ". The signed-in account may not have access to the CONFIG spreadsheet." };
+    }
     // Public read-only actions are allowed for anonymous visitors (role UNKNOWN).
     const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster"];
     if (role === "UNKNOWN" && PUBLIC_ACTIONS.indexOf(action) === -1) {
@@ -163,32 +173,41 @@ function api_call(action, payload) {
         return { success: false, error: "Forbidden for role " + role + ": " + action };
     }
     try {
+        var result;
         switch (action) {
-            case "getFormResponses":       return getFormResponses();
-            case "getIssuesWithStatus":    return getIssuesWithStatus();
-            case "getSubmittedIssues":     return getSubmittedIssues();
-            case "getPendingIssues":       return getPendingIssues();
-            case "approveIssue":           return approveIssue(payload.ticketId, email, payload.severity);
-            case "rejectIssue":            return rejectIssue(payload.ticketId, payload.reason, email);
-            case "getLiveIssues":          return getLiveIssues(payload.filterOption || "ALL");
-            case "updateBuilderStatus":    return updateBuilderStatus(payload.ticketId, payload.status, payload.comment, payload.vendor, payload.closureDate);
-            case "closeIssue":             return closeIssue(payload.ticketId, payload.reason, email);
-            case "reopenIssue":            return reopenIssue(payload.ticketId, payload.reason, email);
-            case "deleteIssue":            return deleteIssue(payload.ticketId, payload.sheet || SHEETS.PENDING_REVIEW);
-            case "generateTicketId":       return generateTicketId();
-            case "approveIssueWithTicketId": return approveIssueWithTicketId(payload.originalTicketId, payload.newTicketId, email, payload.severity);
-            case "getDashboardMetrics":    return getDashboardMetrics();
-            case "syncFormResponses":      return syncFormResponses();
-            case "submitIssue":            return submitIssue(payload, email);
-            case "getCategoryMaster":      return getCategoryMaster();
-            case "getClientConfig":        return getClientConfig();
-            case "validateUserAccess":     return { success: true, data: { email: email, role: role, hasAccess: true }, error: null };
+            case "getFormResponses":         result = getFormResponses(); break;
+            case "getIssuesWithStatus":      result = getIssuesWithStatus(); break;
+            case "getSubmittedIssues":       result = getSubmittedIssues(); break;
+            case "getPendingIssues":         result = getPendingIssues(); break;
+            case "approveIssue":             result = approveIssue(payload.ticketId, email, payload.severity); break;
+            case "rejectIssue":              result = rejectIssue(payload.ticketId, payload.reason, email); break;
+            case "getLiveIssues":            result = getLiveIssues(payload.filterOption || "ALL"); break;
+            case "updateBuilderStatus":      result = updateBuilderStatus(payload.ticketId, payload.status, payload.comment, payload.vendor, payload.closureDate); break;
+            case "closeIssue":               result = closeIssue(payload.ticketId, payload.reason, email); break;
+            case "reopenIssue":              result = reopenIssue(payload.ticketId, payload.reason, email); break;
+            case "deleteIssue":              result = deleteIssue(payload.ticketId, payload.sheet || SHEETS.PENDING_REVIEW); break;
+            case "generateTicketId":         result = generateTicketId(); break;
+            case "approveIssueWithTicketId": result = approveIssueWithTicketId(payload.originalTicketId, payload.newTicketId, email, payload.severity); break;
+            case "getDashboardMetrics":      result = getDashboardMetrics(); break;
+            case "syncFormResponses":        result = syncFormResponses(); break;
+            case "submitIssue":              result = submitIssue(payload, email); break;
+            case "getCategoryMaster":        result = getCategoryMaster(); break;
+            case "getClientConfig":          result = getClientConfig(); break;
+            case "validateUserAccess":       result = { success: true, data: { email: email, role: role, hasAccess: true }, error: null }; break;
             default:
                 return { success: false, error: "Unknown action: " + action };
         }
+        // Guard against handlers that returned undefined or stripped the error
+        // string — those surface to the browser as the opaque "Unknown API
+        // error" because the client falls back on a missing `error` field.
+        if (!result) return { success: false, error: action + " returned no value" };
+        if (result.success === false && !result.error) {
+            result.error = action + " failed (no error message returned)";
+        }
+        return result;
     } catch (err) {
-        Logger.log("api_call error: " + err);
-        return { success: false, error: String(err) };
+        Logger.log("api_call error (" + action + "): " + err);
+        return { success: false, error: "[" + action + "] " + String(err) };
     }
 }
 

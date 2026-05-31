@@ -57,8 +57,10 @@ const API = {
         }
         if (!result || result.success === false) {
             const msg = (result && result.error) || "Unknown API error";
-            console.error("API Error:", { action, payload, error: msg });
-            throw new Error(msg);
+            // Inline JSON in the message so the action + raw server reply are
+            // visible without expanding the collapsed Object in DevTools.
+            console.error("API Error", action, payload, "->", JSON.stringify(result));
+            throw new Error(msg + " [action=" + action + "]");
         }
         return ("data" in result) ? result.data : result;
     },
