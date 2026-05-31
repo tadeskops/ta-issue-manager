@@ -1,4 +1,4 @@
-# Issue Addressal Portal (IRP) — Requirements
+﻿# Issue Addressal Portal (IRP) — Requirements
 
 > Lightweight, serverless issue-management workflow for the residential society.
 > One Google Sheet is the database; one Apps Script project is the host (UI + API + auth).

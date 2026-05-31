@@ -166,30 +166,36 @@
        =========================================================== */
     .theme-switcher {
         position: fixed;
-        top: 10px;
-        right: 12px;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
         z-index: 9999;
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 5px 8px;
-        background: rgba(255,255,255,0.08);
-        border: 1px solid rgba(212,175,55,0.25);
+        padding: 5px 10px;
+        background: rgba(15,20,25,0.55);
+        border: 1px solid rgba(212,175,55,0.30);
         border-radius: 999px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.25);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
         font: 10.5px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
         color: #cbd5e1;
-        opacity: 0.40;
-        transition: opacity 200ms ease, transform 200ms ease, background 200ms ease, border-color 200ms ease;
+        opacity: 0.55;
+        transition: opacity 180ms ease, transform 180ms ease,
+                    background 180ms ease, border-color 180ms ease,
+                    box-shadow 180ms ease;
     }
     .theme-switcher:hover,
     .theme-switcher:focus-within {
         opacity: 1;
-        background: rgba(15,20,25,0.55);
-        border-color: rgba(212,175,55,0.55);
-        transform: translateY(1px);
+        background: rgba(15,20,25,0.85);
+        border-color: rgba(212,175,55,0.85);
+        box-shadow:
+            0 0 0 3px rgba(212,175,55,0.18),
+            0 6px 20px rgba(0,0,0,0.45);
+        transform: translateX(-50%) translateY(1px) scale(1.04);
     }
     /* Switcher styling on light/medium: warm card look */
     :is(html[data-theme="light"], html[data-theme="medium"]) .theme-switcher {
@@ -226,8 +232,13 @@
     .theme-switcher button[data-theme-value="light"]  { background: linear-gradient(135deg,#f6f1e6,#ece4d0); }
     .theme-switcher button[data-theme-value="medium"] { background: linear-gradient(135deg,#ede2c8,#d9c9a3); }
 
-    @media (max-width: 480px) {
-        .theme-switcher { top: 6px; right: 6px; padding: 4px 6px; }
+    @media (max-width: 640px) {
+        /* Stay top-center on mobile too, just slightly smaller. */
+        .theme-switcher {
+            top: 6px;
+            padding: 4px 8px;
+            opacity: 0.65;
+        }
         .theme-switcher .ts-label { display: none; }
     }
 </style>

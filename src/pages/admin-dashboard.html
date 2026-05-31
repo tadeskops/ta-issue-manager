@@ -10,21 +10,23 @@
 </head>
 <body class="bg-gray-50">
     <nav class="bg-white shadow">
-        <div class="px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center gap-4">
+        <div class="px-4 py-3 sm:py-4 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center gap-3 sm:gap-4 min-w-0">
                 <!-- Logo Only Version (Compact) -->
-                <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-10 w-10 sm:h-12 sm:w-12 drop-shadow-lg flex-shrink-0">
                 <!-- Alternative: Logo with Text (Uncomment to use) -->
                 <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
-                <h1 class="text-2xl font-bold text-blue-600">The Address - Analytics</h1>
+                <h1 class="text-lg sm:text-2xl font-bold text-blue-600 leading-tight truncate">The Address &mdash; Analytics</h1>
             </div>
-            <div class="flex items-center gap-4">
-                <span class="text-gray-600" id="userEmail"></span>
+            <div class="flex flex-wrap items-center gap-2 sm:gap-4 justify-end">
+                <span class="text-gray-600 hidden md:inline" id="userEmail"></span>
                 <a href="https://forms.gle/zFWTnLUdNEGGj7hk9" target="_blank" rel="noopener noreferrer"
-                   class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded font-semibold">
-                    <i class="fas fa-pen-to-square mr-2"></i>Submit New Issue
+                   class="bg-amber-500 hover:bg-amber-600 text-white px-3 sm:px-4 py-2 rounded font-semibold text-sm whitespace-nowrap">
+                    <i class="fas fa-pen-to-square sm:mr-2"></i><span class="hidden sm:inline">Submit New Issue</span><span class="sm:hidden ml-1">Submit</span>
                 </a>
-                <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Logout</button>
+                <button onclick="logout()" class="bg-red-500 text-white px-3 sm:px-4 py-2 rounded hover:bg-red-600 text-sm whitespace-nowrap" aria-label="Logout">
+                    <i class="fas fa-sign-out-alt sm:mr-1"></i><span class="hidden sm:inline">Logout</span>
+                </button>
             </div>
         </div>
     </nav>

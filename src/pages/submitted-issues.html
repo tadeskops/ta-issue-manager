@@ -38,27 +38,27 @@
 <body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
     <!-- Navigation -->
     <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
-        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-            <div class="flex items-center gap-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap justify-between items-center gap-3">
+            <div class="flex items-center gap-3 sm:gap-4 min-w-0">
                 <!-- Logo -->
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3 sm:gap-4 min-w-0">
                     <!-- Logo Only Version (Compact) -->
-                    <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-10 w-10 sm:h-12 sm:w-12 drop-shadow-lg flex-shrink-0">
                     <!-- Alternative: Logo with Text (Uncomment to use) -->
                     <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
-                    <div>
-                        <h1 class="text-xl font-bold gold-accent">The Address</h1>
-                        <p class="text-xs text-slate-400">Issue Addressal</p>
+                    <div class="min-w-0">
+                        <h1 class="text-lg sm:text-xl font-bold gold-accent leading-tight truncate">The Address</h1>
+                        <p class="text-[11px] sm:text-xs text-slate-400 truncate">Issue Addressal</p>
                     </div>
                 </div>
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center gap-2 sm:gap-4 justify-end">
                 <a href="https://forms.gle/zFWTnLUdNEGGj7hk9" target="_blank" rel="noopener noreferrer"
-                   class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold transition-colors text-sm border border-amber-400/30 shadow-lg">
-                    <i class="fas fa-pen-to-square mr-2"></i>Submit New Issue
+                   class="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold transition-colors text-sm border border-amber-400/30 shadow-lg whitespace-nowrap">
+                    <i class="fas fa-pen-to-square sm:mr-2"></i><span class="hidden sm:inline">Submit New Issue</span><span class="sm:hidden ml-1">Submit</span>
                 </a>
-                <button onclick="goLogin()" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30">
-                    <i class="fas fa-arrow-left mr-2"></i>Back to Login
+                <button onclick="goLogin()" class="px-3 sm:px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30 whitespace-nowrap" aria-label="Back to Login" title="Back to Login">
+                    <i class="fas fa-arrow-left sm:mr-2"></i><span class="hidden sm:inline">Back to Login</span>
                 </button>
             </div>
         </div>
@@ -75,7 +75,13 @@
             <a href="https://docs.google.com/spreadsheets/d/1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU/edit?usp=sharing"
                target="_blank" rel="noopener noreferrer"
                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold text-sm transition-all border border-emerald-400/30 shadow-lg shadow-emerald-900/30">
-                <i class="fas fa-table"></i>
+                <!-- Official Google Sheets glyph (simplified, brand-accurate) -->
+                <svg viewBox="0 0 48 48" width="16" height="16" aria-hidden="true" focusable="false">
+                    <path fill="#ffffff" d="M29.41 6H10a2 2 0 0 0-2 2v32a2 2 0 0 0 2 2h28a2 2 0 0 0 2-2V16.59L29.41 6z"/>
+                    <path fill="#cdeacd" d="M29 6v10a2 2 0 0 0 2 2h9L29 6z"/>
+                    <path fill="#0f9d58" d="M14 22h20v16H14z"/>
+                    <path fill="#ffffff" d="M16 24h6v3h-6zm0 5h6v3h-6zm0 5h6v3h-6zm8-10h8v3h-8zm0 5h8v3h-8zm0 5h8v3h-8z"/>
+                </svg>
                 Switch to Google Sheet View
                 <i class="fas fa-external-link-alt text-xs opacity-75"></i>
             </a>
@@ -325,23 +331,33 @@
                 <div class="premium-card rounded-xl overflow-hidden border border-slate-700 hover:border-amber-500/50 transition-all">
                     <!-- Collapsible Header -->
                     <div class="bg-gradient-to-r from-slate-800/30 to-slate-700/20 p-4 border-b gold-border cursor-pointer hover:bg-slate-800/40 transition-all" onclick="toggleIssue(${index})">
-                        <div class="flex justify-between items-start gap-4">
-                            <div class="flex-1">
-                                <h3 class="text-lg font-bold text-slate-100">${window.briefTitle(issue)}</h3>
-                                <p class="text-sm text-slate-400 mt-2">
-                                    <i class="fas fa-user mr-2"></i>${issue.resident.name || 'Unknown'} | 
-                                    <i class="fas fa-building mr-2"></i>${issue.location.tower} / Flat ${issue.location.flat}
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex-1 min-w-0">
+                                <h3 class="text-base sm:text-lg font-bold text-slate-100 break-words">${window.briefTitle(issue)}</h3>
+                                <p class="text-xs sm:text-sm text-slate-400 mt-2">
+                                    <i class="fas fa-user mr-1.5"></i>${issue.resident.name || 'Unknown'}
+                                    <span class="mx-1 text-slate-600">|</span>
+                                    <i class="fas fa-building mr-1.5"></i>${issue.location.tower} / Flat ${issue.location.flat}
                                 </p>
+                                <!-- Badges flow under meta on narrow screens; stay inline on >=sm. -->
+                                <div class="mt-2 flex flex-wrap items-center gap-2 sm:hidden">
+                                    ${SHOW_SEVERITY ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${getSeverityBadge(issue.issue.severity)}">
+                                        ${issue.issue.severity || 'N/A'}
+                                    </span>` : ''}
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${getStatusBadge(issue.status)}">
+                                        <i class="fas ${getStatusIcon(issue.status)}"></i>${issue.status || 'PENDING_APPROVAL'}
+                                    </span>
+                                </div>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div class="hidden sm:flex items-center gap-2 flex-shrink-0">
                                 ${SHOW_SEVERITY ? `<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getSeverityBadge(issue.issue.severity)}">
                                     ${issue.issue.severity || 'N/A'}
                                 </span>` : ''}
                                 <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getStatusBadge(issue.status)}">
                                     <i class="fas ${getStatusIcon(issue.status)} mr-1"></i>${issue.status || 'PENDING_APPROVAL'}
                                 </span>
-                                <i class="fas fa-chevron-down text-amber-400 toggle-icon-${index} transition-transform" style="transform: rotate(0deg)"></i>
                             </div>
+                            <i class="fas fa-chevron-down text-amber-400 toggle-icon-${index} transition-transform flex-shrink-0 mt-1" style="transform: rotate(0deg)"></i>
                         </div>
                     </div>
 
