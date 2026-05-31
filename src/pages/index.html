@@ -80,13 +80,23 @@
 
     <?!= include('src/partials/api') ?>
     <script>
-        function goSubmitted() { location.href = 'submitted-issues.html'; }
-        function goSubmit()    { location.href = 'submit-issue.html'; }
+        // Build a same-app URL. On Apps Script /exec uses ?page=key; in local
+        // dev (preview) we fall back to flat .html filenames in the same folder.
+        function pageUrl(key) {
+            const base = window.IRP_WEBAPP_URL || '';
+            if (base) return base + '?page=' + encodeURIComponent(key);
+            const local = { submitted: 'submitted-issues.html', submit: 'submit-issue.html',
+                            committee: 'committee-dashboard.html', builder: 'builder-dashboard.html',
+                            admin: 'admin-dashboard.html' };
+            return local[key] || 'index.html';
+        }
+        function goSubmitted() { location.href = pageUrl('submitted'); }
+        function goSubmit()    { location.href = pageUrl('submit'); }
         function switchAccount() { API.signOut(); }
         function goDashboard() {
             const u = window.IRP_USER || {};
-            if (u.role === 'COMMITTEE') location.href = 'committee-dashboard.html';
-            else if (u.role === 'BUILDER') location.href = 'builder-dashboard.html';
+            if (u.role === 'COMMITTEE') location.href = pageUrl('committee');
+            else if (u.role === 'BUILDER') location.href = pageUrl('builder');
             else location.reload();
         }
 

@@ -38,20 +38,12 @@ function doGet(e) {
     const role  = getUserRole(email);
     const requested = (e && e.parameter && e.parameter.page) || "";
 
-    // Pick target page
-    let key;
-    if (requested && PAGE_MAP[requested]) {
-        key = requested;
-    } else if (role === "COMMITTEE") {
-        key = "committee";
-    } else if (role === "BUILDER") {
-        key = getFeatureFlag("FEATURE_BUILDER_DASHBOARD") ? "builder" : "denied";
-    } else if (role === "RESIDENT") {
-        key = getFeatureFlag("FEATURE_IN_PORTAL_SUBMIT") ? "submit"
-            : (getFeatureFlag("FEATURE_SUBMITTED_PAGE") ? "submitted" : "denied");
-    } else {
-        key = "denied";
-    }
+    // Pick target page.
+    // Default landing is ALWAYS the index/login page so the user explicitly
+    // chooses read-only view vs. tech (signed-in) mode. Dashboards open only
+    // when requested via ?page=committee|builder|admin|submitted|submit.
+    // ("denied" maps to src/pages/index — the same shared landing screen.)
+    let key = (requested && PAGE_MAP[requested]) ? requested : "denied";
 
     const target = PAGE_MAP[key];
 

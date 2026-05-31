@@ -1,4 +1,10 @@
 <script>
+// Set once per page render: the absolute Web app URL, so client code can
+// build same-app links like IRP_WEBAPP_URL + '?page=committee' instead of
+// guessing a relative path (which 404s under Apps Script's /exec endpoint).
+window.IRP_WEBAPP_URL = "<?= (function(){ try { return getWebAppUrl() || ''; } catch(e) { return ''; } })() ?>";
+</script>
+<script>
 const API = {
     ENDPOINT: "https://script.google.com/macros/s/AKfycbzfqTrf8fR-cc1ESy3qY13lxc8e0_K4-DeGgRkc-uK22D-NxVvab2V4Gu6Ac-vw9L-Ixw/exec",
 
