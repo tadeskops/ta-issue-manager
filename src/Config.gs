@@ -73,7 +73,8 @@ const DEFAULT_TUNABLES = {
     CONFIG_CACHE_TTL_SECONDS:  300,        // cache TTL (also informational)
     DEFAULT_THEME:             "light",     // high (original dark) | light | medium
     TECH_WEBAPP_URL:           "",           // separate deployment URL that requires Google sign-in (committee/builder). Empty = same URL.
-    PUBLIC_WEBAPP_URL:         ""            // public (anonymous) deployment URL — used as the landing page after sign-out. Empty = current URL.
+    PUBLIC_WEBAPP_URL:         "",           // public (anonymous) deployment URL — used as the landing page after sign-out. Empty = current URL.
+    SUBMITTED_INCLUDE_REJECTED: "false"      // read-only "Submitted Issues" view: include rejected (archived) rows. Default off → public sees only pending + live.
 };
 
 // ----- Internal constants -----

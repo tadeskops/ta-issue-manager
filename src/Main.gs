@@ -360,7 +360,9 @@ function submitIssue(payload, submittedBy) {
             flat:         p.flat,
             category:     p.category,
             subCategory:  p.subCategory || "",
-            severity:     p.severity,
+            // Severity is intentionally blank at intake; the committee
+            // assigns it at approval time (see approveIssue + SLA calc).
+            severity:     "",
             tower:        p.tower,
             description:  p.description,
             photoLinks:   photoLinks
@@ -644,16 +646,17 @@ function validateUserAccess(email) {
 // Get Pending Issues
 function getPendingIssues() {
     try {
-        const sheet = getSheet(SHEETS.PENDING_REVIEW);
-        const data = sheet.getDataRange().getValues();
+        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
+        const archiveSheet = getSheet(SHEETS.ARCHIVES_ISSUES);
+        const pendingData  = pendingSheet.getDataRange().getValues();
+        const archiveData  = archiveSheet.getDataRange().getValues();
         const issues = [];
 
-        for (let i = firstDataRow_(data); i < data.length; i++) {
-            const row = data[i];
-            // Include PENDING_APPROVAL + REJECTED (UI filters); skip APPROVED (already on LIVE).
-            const state = row[PENDING_COL.STATE] || "PENDING_APPROVAL";
-            if (state === "APPROVED") continue;
-
+        const pushRow = function (row, fallbackState) {
+            const state = row[PENDING_COL.STATE] || fallbackState;
+            // Skip APPROVED rows from pending (they live on LIVE_ISSUES); the
+            // committee dashboard surfaces approved ones via its Active tab.
+            if (state === "APPROVED") return;
             const photo = row[PENDING_COL.PHOTO];
             issues.push({
                 ticketId:     safeStr_(row[PENDING_COL.TICKET_ID]),
@@ -680,6 +683,13 @@ function getPendingIssues() {
                 actionDate:      safeDateIso_(row[PENDING_COL.ACTION_DATE]),
                 actionBy:        safeStr_(row[PENDING_COL.ACTION_BY])
             });
+        };
+
+        for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
+            pushRow(pendingData[i], "PENDING_APPROVAL");
+        }
+        for (let i = firstDataRow_(archiveData); i < archiveData.length; i++) {
+            pushRow(archiveData[i], "REJECTED");
         }
 
         return { success: true, data: issues, error: null };
@@ -1079,18 +1089,22 @@ function getIssuesWithStatus() {
 // truth for the read-only "Submitted Issues" page.
 function getSubmittedIssues() {
     try {
-        // Public viewer source = PENDING_REVIEW (all states except REJECTED,
-        // which lives in ARCHIVES_ISSUES) + ARCHIVES_ISSUES (rejected ones).
-        // For tickets whose state has been moved to APPROVED, overlay the
-        // current builder status from LIVE_ISSUES so committee/builder
-        // updates are reflected here.
+        // Read-only public view. Sources:
+        //   PENDING_REVIEW   -> rows still awaiting committee action
+        //   LIVE_ISSUES      -> overlay: rows that have been approved + their
+        //                       current builder status
+        //   ARCHIVES_ISSUES  -> rejected rows (only included when the
+        //                       SUBMITTED_INCLUDE_REJECTED tunable is "true")
+        const includeRejected = String(getTunable("SUBMITTED_INCLUDE_REJECTED") || "false").toLowerCase() === "true";
+
         const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
-        const archiveSheet = getSheet(SHEETS.ARCHIVES_ISSUES);
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
 
         const pendingData = pendingSheet.getDataRange().getValues();
-        const archiveData = archiveSheet.getDataRange().getValues();
         const liveData    = liveSheet.getDataRange().getValues();
+        const archiveData = includeRejected
+            ? getSheet(SHEETS.ARCHIVES_ISSUES).getDataRange().getValues()
+            : [];
 
         const liveByTicket = {};
         for (let i = 1; i < liveData.length; i++) {

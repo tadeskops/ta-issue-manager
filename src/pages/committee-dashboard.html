@@ -579,28 +579,6 @@
         }
 
         async function loadData() {
-            // One-shot deployment diagnostic — surfaces version of api_call
-            // running on the secure deployment + a test of getPendingIssues
-            // as the signed-in user. Look in DevTools console.
-            try {
-                const diag = await API.diag();
-                console.log('[diag]', JSON.stringify(diag, null, 2));
-            } catch (e) {
-                console.warn('[diag] failed:', e && e.message);
-            }
-            // Also call getPendingIssues raw via google.script.run so we can
-            // see what comes back BEFORE the API wrapper interprets it.
-            try {
-                const raw = await new Promise((resolve) => {
-                    google.script.run
-                        .withSuccessHandler(r => resolve({ ok: true, value: r }))
-                        .withFailureHandler(e => resolve({ ok: false, error: String(e && e.message || e) }))
-                        .api_call('getPendingIssues', {});
-                });
-                console.log('[raw getPendingIssues]', JSON.stringify(raw));
-            } catch (e) {
-                console.warn('[raw] threw:', e && e.message);
-            }
             try {
                 const pending = await API.getPendingIssues();
                 const live = await API.getLiveIssues('ALL');
