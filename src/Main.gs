@@ -1354,3 +1354,52 @@ function doPost(e) {
         })).setMimeType(ContentService.MimeType.JSON);
     }
 }
+
+// =====================================================================
+// SCHEMA DIAGNOSTIC
+// Returns header rows + first 2 data rows for the sheets that drive the
+// portal. Used by ?diag=sheets endpoint to verify column constants match
+// the live spreadsheet layout.
+// =====================================================================
+function diag_sheetSchemas_() {
+    const names = [
+        SHEETS.FORM_RESPONSES,
+        SHEETS.PENDING_REVIEW,
+        SHEETS.ARCHIVES_ISSUES,
+        SHEETS.LIVE_ISSUES,
+        SHEETS.CLOSED_ISSUES
+    ];
+    const ss = getSpreadsheet();
+    const out = { spreadsheet: ss.getName(), sheets: {} };
+
+    for (var i = 0; i < names.length; i++) {
+        var name = names[i];
+        try {
+            var sh = ss.getSheetByName(name);
+            if (!sh) { out.sheets[name] = { exists: false }; continue; }
+            var lastCol = sh.getLastColumn();
+            var lastRow = sh.getLastRow();
+            var headers = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+            var sampleRows = [];
+            var take = Math.min(2, Math.max(0, lastRow - 1));
+            if (take > 0 && lastCol > 0) {
+                sampleRows = sh.getRange(2, 1, take, lastCol).getValues();
+            }
+            out.sheets[name] = {
+                exists: true,
+                rows: lastRow,
+                cols: lastCol,
+                headers: headers.map(String),
+                samples: sampleRows.map(function (r) {
+                    return r.map(function (v) {
+                        if (v instanceof Date) return v.toISOString();
+                        return v === null || v === undefined ? "" : String(v);
+                    });
+                })
+            };
+        } catch (err) {
+            out.sheets[name] = { exists: false, error: String(err) };
+        }
+    }
+    return out;
+}

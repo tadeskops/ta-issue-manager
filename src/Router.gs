@@ -34,6 +34,15 @@ const PAGE_MAP = {
 };
 
 function doGet(e) {
+    // Schema introspection endpoint (?diag=sheets). Returns JSON describing
+    // header rows + a couple of sample rows so we can verify the live sheet
+    // layout against our column constants.
+    if (e && e.parameter && e.parameter.diag === "sheets") {
+        const out = diag_sheetSchemas_();
+        return ContentService.createTextOutput(JSON.stringify(out, null, 2))
+            .setMimeType(ContentService.MimeType.JSON);
+    }
+
     const email = (Session.getActiveUser().getEmail() || "").trim();
     const role  = getUserRole(email);
     const requested = (e && e.parameter && e.parameter.page) || "";
