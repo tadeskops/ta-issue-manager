@@ -19,6 +19,13 @@ concurrency:
   group: apps-script-deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
+env:
+  # Opt-in early to Node 24 runtime for actions (default after 2026-06-16).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   push:
     name: clasp push (+ optional deploy)
@@ -76,7 +83,13 @@ jobs:
           node -e "try { const j = JSON.parse(require('fs').readFileSync('.clasp.json','utf8')); console.log('.clasp.json: valid JSON, scriptId =', (j.scriptId||'').slice(0,8)+'…'); } catch(e) { console.error('::error::Invalid JSON in .clasp.json:', e.message); process.exit(1); }"
 
       - name: clasp push -f
-        run: clasp push -f
+        run: |
+          OUTPUT=$(clasp push -f 2>&1)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qE 'Pushed 0 files|Nothing to push'; then
+            echo "::error::clasp push reported zero files. Check .claspignore — it may be excluding everything."
+            exit 1
+          fi
 
       - name: Publish new web-app deployment
         if: github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true
