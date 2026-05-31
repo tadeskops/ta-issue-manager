@@ -448,3 +448,100 @@ via `clasp 3.3.0`:
 `signOut()` and "Back to Login" redirect to `PUBLIC_WEBAPP_URL`. Do not
 merge these into a single deployment — the public one must not require
 Google sign-in.
+
+### 19.9 Status enum — only what the server actually writes
+
+UI dropdowns, badge maps and fallback labels must list **only** the states
+the server writes. Inventing extra states (e.g. `NEW`) causes filters to
+show empty results and confuses users.
+
+Canonical status set (single source of truth):
+
+| Status | Set by | Lives on |
+|---|---|---|
+| `PENDING_APPROVAL` | form intake / `onFormSubmit` | `PENDING_REVIEW` |
+| `REJECTED` | `rejectIssue` | `ARCHIVES_ISSUES` |
+| `ASSIGNED` | `approveIssue` | `LIVE_ISSUES` |
+| `IN_PROGRESS` | builder update | `LIVE_ISSUES` |
+| `WORK_COMPLETED` | builder update | `LIVE_ISSUES` |
+| `REOPENED` | `reopenIssue` | `LIVE_ISSUES` |
+| `CLOSED` | `closeIssue` | `CLOSED_ISSUES` |
+
+When adding a new state, update **every** page's filter dropdown,
+`getStatusBadge()`, `getStatusIcon()`, and any `status || 'FALLBACK'`
+default. When removing a state, sweep the codebase first
+(`grep -rE "['\"]STATE['\"]" src/`).
+
+### 19.10 `.gs` files have no local JS parser — `clasp push` is the syntax check
+
+**Symptom:** Local edits to `src/Main.gs` looked fine in VS Code, all
+"No errors found", but CI failed with:
+`Syntax error: SyntaxError: Illegal return statement line: NNNN file: src/Main.gs`
+
+**Root cause:** Apps Script `.gs` files are not parsed by any local
+tool — VS Code's JS language service does not load them by default, so
+orphan `return` statements, missing function headers and unbalanced
+braces only surface when the V8 runtime parses them server-side after
+`clasp push`. In this incident an earlier refactor stripped the
+`function reopenIssue(...) {` header and left its body as top-level code.
+
+**Rule:** After any edit that touches function boundaries in a `.gs`
+file, run a quick brace/return audit before committing:
+
+```powershell
+node -e "const s=require('fs').readFileSync('src/Main.gs','utf8');let d=0;s.split('\n').forEach((l,i)=>{const o=(l.match(/{/g)||[]).length,c=(l.match(/}/g)||[]).length;d+=o-c;if(/^\s*return\b/.test(l)&&d===0)console.log('TOP-LEVEL RETURN at',i+1)});console.log('depth='+d)"
+```
+
+`depth` must end at `0`, and there must be no top-level returns.
+
+### 19.11 CI: never let `bash -e` swallow command output
+
+**Symptom:** Workflow step showed only `Process completed with exit code 1`,
+no diagnostic from the failing command.
+
+**Root cause:** `OUTPUT=$(cmd 2>&1); echo "$OUTPUT"` under `bash -e`
+aborts the script on the assignment line the moment `cmd` exits non-zero,
+so `echo` never runs and the captured stderr is lost.
+
+**Rule:** Wrap any capture-then-inspect pattern in `set +e … set -e`:
+
+```bash
+set +e
+OUTPUT=$(clasp push -f 2>&1)
+EC=$?
+set -e
+echo "$OUTPUT"
+echo "exit code: $EC"
+[ $EC -ne 0 ] && { echo "::error::cmd failed"; exit $EC; }
+```
+
+### 19.12 `clasp 3.x` `.claspignore` uses strict gitignore semantics
+
+**Symptom:** `clasp push -f` reported `Pushed 0 files` and CI failed.
+
+**Root cause:** clasp 3.x switched its ignore parser to strict gitignore
+rules: *"It is not possible to re-include a file if a parent directory of
+that file is excluded."* The legacy whitelist pattern
+
+```
+**
+!appsscript.json
+!src/**
+```
+
+excludes the `src/` directory itself, so `!src/**` has no effect — and
+older clasp versions silently tolerated this.
+
+**Rule:** Use root-anchored ignores so parent dirs are never excluded:
+
+```
+/*
+/.*
+
+!/appsscript.json
+!/src
+```
+
+`/*` only matches top-level non-hidden entries; `/.*` covers root-level
+dotfiles (`.github`, `.gitignore`, `.claspignore`). The `src/` directory
+is then never excluded, so its full contents are walked and pushed.
