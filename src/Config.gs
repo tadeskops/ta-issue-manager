@@ -71,7 +71,8 @@ const DEFAULT_TUNABLES = {
     SUBMIT_DESC_MIN:           5,          // description min length
     SUBMIT_DESC_MAX:           1000,       // description max length
     CONFIG_CACHE_TTL_SECONDS:  300,        // cache TTL (also informational)
-    DEFAULT_THEME:             "light"      // high (original dark) | light | medium
+    DEFAULT_THEME:             "light",     // high (original dark) | light | medium
+    TECH_WEBAPP_URL:           ""            // separate deployment URL that requires Google sign-in (committee/builder). Empty = same URL.
 };
 
 // ----- Internal constants -----

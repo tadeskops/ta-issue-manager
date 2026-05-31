@@ -84,6 +84,11 @@
         // dev (preview) we fall back to flat .html filenames in the same folder.
         function pageUrl(key) {
             const base = window.IRP_WEBAPP_URL || '';
+            // Tech-mode pages live on a separate deployment that requires Google
+            // sign-in. The URL is provided by CONFIG row TECH_WEBAPP_URL.
+            const techKeys = { committee: 1, builder: 1, admin: 1, submit: 1 };
+            const techBase = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.tunables && window.IRP_CLIENT_CONFIG.tunables.TECH_WEBAPP_URL) || '';
+            if (techKeys[key] && techBase) return techBase + '?page=' + encodeURIComponent(key);
             if (base) return base + '?page=' + encodeURIComponent(key);
             const local = { submitted: 'submitted-issues.html', submit: 'submit-issue.html',
                             committee: 'committee-dashboard.html', builder: 'builder-dashboard.html',
