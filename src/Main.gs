@@ -1063,37 +1063,46 @@ function getSubmittedIssues() {
             };
         }
 
+        // Coerce all values to primitives. google.script.run silently
+        // returns null when payloads contain mixed Date/empty-string columns
+        // across rows (the rhino serializer chokes on the inconsistency).
+        const toIso = function (v) {
+            if (!v) return "";
+            if (v instanceof Date) return v.toISOString();
+            return String(v);
+        };
+
         const responses = [];
         for (let i = 1; i < pendingData.length; i++) {
             const row = pendingData[i];
-            const tid = row[PENDING_COL.TICKET_ID];
-            const state = row[PENDING_COL.STATE] || "PENDING_APPROVAL";
+            const tid = String(row[PENDING_COL.TICKET_ID] || "");
+            const state = String(row[PENDING_COL.STATE] || "PENDING_APPROVAL");
             const enrichment = closedByTicket[tid] || liveByTicket[tid] || null;
             const status = enrichment ? enrichment.status : state;
             const severity = (enrichment && enrichment.severity) || row[PENDING_COL.SEVERITY] || "";
 
             responses.push({
                 ticketId: tid,
-                dateReported: row[PENDING_COL.DATE_REPORTED],
+                dateReported: toIso(row[PENDING_COL.DATE_REPORTED]),
                 resident: {
-                    name: row[PENDING_COL.RESIDENT] || "",
+                    name: String(row[PENDING_COL.RESIDENT] || ""),
                     email: "",
                     phone: ""
                 },
                 location: {
-                    tower: row[PENDING_COL.TOWER] || "",
-                    flat:  row[PENDING_COL.FLAT]  || ""
+                    tower: String(row[PENDING_COL.TOWER] || ""),
+                    flat:  String(row[PENDING_COL.FLAT]  || "")
                 },
                 issue: {
-                    category:    row[PENDING_COL.CATEGORY]    || "",
-                    subcategory: row[PENDING_COL.SUBCATEGORY] || "",
-                    severity:    severity,
-                    description: row[PENDING_COL.DESCRIPTION] || ""
+                    category:    String(row[PENDING_COL.CATEGORY]    || ""),
+                    subcategory: String(row[PENDING_COL.SUBCATEGORY] || ""),
+                    severity:    String(severity),
+                    description: String(row[PENDING_COL.DESCRIPTION] || "")
                 },
-                status: status,
+                status: String(status),
                 state:  state,
-                rejectionReason: row[PENDING_COL.REJECTION_REASON] || "",
-                attachments: splitPhotoLinks_(row[PENDING_COL.PHOTO])
+                rejectionReason: String(row[PENDING_COL.REJECTION_REASON] || ""),
+                attachments: splitPhotoLinks_(row[PENDING_COL.PHOTO]).map(String)
             });
         }
 
