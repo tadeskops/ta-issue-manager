@@ -51,6 +51,7 @@ function backup_nextVersion_() {
 // Export the bound spreadsheet as XLSX bytes using the export endpoint
 // authenticated with the current user's OAuth token.
 function backup_exportXlsx_() {
+    Logger.log("[backup] exporting spreadsheet " + SHEET_ID + " as XLSX...");
     const url = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
                 "/export?format=xlsx";
     const res = UrlFetchApp.fetch(url, {
@@ -61,11 +62,14 @@ function backup_exportXlsx_() {
         throw new Error("XLSX export failed: HTTP " + res.getResponseCode() +
                         " - " + res.getContentText().slice(0, 200));
     }
-    return res.getBlob().getBytes();
+    const bytes = res.getBlob().getBytes();
+    Logger.log("[backup] XLSX export OK (" + bytes.length + " bytes)");
+    return bytes;
 }
 
 // GET current SHA of a file in the repo, or null if it does not exist.
 function backup_getRemoteSha_(cfg, path) {
+    Logger.log("[backup] checking remote file: " + cfg.repo + "@" + cfg.branch + ":" + path);
     const url = "https://api.github.com/repos/" + cfg.repo +
                 "/contents/" + encodeURI(path) +
                 "?ref=" + encodeURIComponent(cfg.branch);
@@ -79,17 +83,24 @@ function backup_getRemoteSha_(cfg, path) {
         muteHttpExceptions: true
     });
     const code = res.getResponseCode();
-    if (code === 404) return null;
+    if (code === 404) {
+        Logger.log("[backup] remote file not found (will create new)");
+        return null;
+    }
     if (code !== 200) {
         throw new Error("GitHub GET contents failed: HTTP " + code +
                         " - " + res.getContentText().slice(0, 200));
     }
-    return JSON.parse(res.getContentText()).sha;
+    const sha = JSON.parse(res.getContentText()).sha;
+    Logger.log("[backup] remote file exists, sha=" + sha);
+    return sha;
 }
 
 // PUT the XLSX bytes to the repo, overwriting same filename.
 function backup_putToGit_(cfg, path, bytes, commitMessage) {
     const sha = backup_getRemoteSha_(cfg, path);
+    Logger.log("[backup] PUT " + path + " (" + bytes.length + " bytes)" +
+               (sha ? " updating sha=" + sha : " creating new"));
     const url = "https://api.github.com/repos/" + cfg.repo +
                 "/contents/" + encodeURI(path);
     const body = {
@@ -110,6 +121,7 @@ function backup_putToGit_(cfg, path, bytes, commitMessage) {
         muteHttpExceptions: true
     });
     const code = res.getResponseCode();
+    Logger.log("[backup] GitHub PUT response: HTTP " + code);
     if (code !== 200 && code !== 201) {
         throw new Error("GitHub PUT contents failed: HTTP " + code +
                         " - " + res.getContentText().slice(0, 300));
@@ -120,11 +132,15 @@ function backup_putToGit_(cfg, path, bytes, commitMessage) {
 // Public: backup current spreadsheet as XLSX to {BACKUP_DIR}/{BACKUP_FILE}
 // with commit message "backup: v{N} {YYYY-MM-DD HH:mm IST} [{reason}]".
 function backupSheetToGit(reason) {
+    Logger.log("========== backupSheetToGit START (reason=" + (reason || "manual") + ") ==========");
     const cfg = backup_props_();
+    Logger.log("[backup] config: repo=" + cfg.repo + " branch=" + cfg.branch +
+               " path=" + cfg.dir + "/" + cfg.filename +
+               " tokenSet=" + (!!cfg.token));
     if (!cfg.token) {
         const msg = "GITHUB_TOKEN script property is not set. " +
                     "Open Project Settings -> Script Properties and add it.";
-        Logger.log(msg);
+        Logger.log("[backup] ABORT: " + msg);
         return { success: false, error: msg };
     }
     try {
@@ -136,6 +152,7 @@ function backupSheetToGit(reason) {
         const path = cfg.dir + "/" + cfg.filename;
         const message = "backup: v" + version + " " + stamp +
                         (reason ? " [" + reason + "]" : "");
+        Logger.log("[backup] commit message: " + message);
         const result = backup_putToGit_(cfg, path, bytes, message);
         const info = {
             version: version,
@@ -144,10 +161,12 @@ function backupSheetToGit(reason) {
             url:    (result.content && result.content.html_url) || "",
             message: message
         };
-        Logger.log("Backup OK: " + JSON.stringify(info));
+        Logger.log("[backup] SUCCESS: " + JSON.stringify(info));
+        Logger.log("========== backupSheetToGit END (success) ==========");
         return { success: true, data: info };
     } catch (err) {
-        Logger.log("Backup failed: " + err);
+        Logger.log("[backup] FAILED: " + err + "\n" + (err && err.stack || ""));
+        Logger.log("========== backupSheetToGit END (failure) ==========");
         return { success: false, error: String(err) };
     }
 }
@@ -248,21 +267,35 @@ function backupAndResetFromForm() {
 // One-shot trigger installer. Removes any prior weeklyBackupJob trigger then
 // creates a new one (Mondays around 02:00 in the script time zone).
 function installWeeklyBackupTrigger() {
+    Logger.log("[trigger] installWeeklyBackupTrigger START");
     const existing = ScriptApp.getProjectTriggers();
+    Logger.log("[trigger] existing project triggers: " + existing.length);
+    let removed = 0;
     for (let i = 0; i < existing.length; i++) {
         if (existing[i].getHandlerFunction() === "weeklyBackupJob") {
             ScriptApp.deleteTrigger(existing[i]);
+            removed++;
         }
     }
-    ScriptApp.newTrigger("weeklyBackupJob")
+    Logger.log("[trigger] removed prior weeklyBackupJob triggers: " + removed);
+    const t = ScriptApp.newTrigger("weeklyBackupJob")
         .timeBased()
         .onWeekDay(ScriptApp.WeekDay.MONDAY)
         .atHour(2)
         .create();
-    return { success: true, message: "Weekly backup trigger installed (Mondays ~02:00)." };
+    Logger.log("[trigger] created trigger id=" + t.getUniqueId() +
+               " handler=weeklyBackupJob (Mondays ~02:00 " +
+               (Session.getScriptTimeZone() || "Asia/Kolkata") + ")");
+    const msg = "Weekly backup trigger installed (Mondays ~02:00). " +
+                "Removed " + removed + " prior trigger(s).";
+    Logger.log("[trigger] DONE: " + msg);
+    return { success: true, message: msg };
 }
 
 // Trigger handler. Do not call directly.
 function weeklyBackupJob() {
-    return backupSheetToGit("weekly");
+    Logger.log("[trigger] weeklyBackupJob fired at " + new Date().toISOString());
+    const r = backupSheetToGit("weekly");
+    Logger.log("[trigger] weeklyBackupJob result: " + JSON.stringify(r));
+    return r;
 }
