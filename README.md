@@ -1,6 +1,6 @@
 # Issue Addressal Portal (IRP)
 
-Google Apps Script web app for the Address residents' issue tracker.
+Google Apps Script web app for the Address residents' issue tracker. 
 
 ## Layout
 
@@ -30,6 +30,7 @@ Google Apps Script web app for the Address residents' issue tracker.
 ```
 
 ## Deploy
+
 Use clasp (`clasp push` from project root). Filenames in Apps Script preserve
 their `src/...` prefix; `HtmlService.createTemplateFromFile("src/pages/index")`
 resolves correctly.
@@ -38,6 +39,7 @@ Run `setupConfigSheet` once after the first deploy to seed the CONFIG sheet
 (idempotent — preserves existing edits).
 
 ## Configuration
+
 Every developer- / manager-tunable input lives in the **CONFIG** sheet:
 identity (emails), assets (folder/logo), feature flags, numeric tunables.
 See `src/Config.gs` (`DEFAULT_FEATURES`, `DEFAULT_TUNABLES`) for the full list.
