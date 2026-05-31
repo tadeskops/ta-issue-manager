@@ -36,13 +36,19 @@ jobs:
         run: npm install -g @google/clasp@3.3.0
 
       - name: Write clasp credentials from secret
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
-          printf '%s' '${{ secrets.CLASPRC_JSON }}' > "$HOME/.clasprc.json"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
+          node -e "JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json','utf8')); console.log('.clasprc.json: valid JSON')"
 
       - name: Write project link from secret
+        env:
+          CLASP_JSON: ${{ secrets.CLASP_JSON }}
         run: |
-          printf '%s' '${{ secrets.CLASP_JSON }}' > .clasp.json
+          printf '%s' "$CLASP_JSON" > .clasp.json
+          node -e "JSON.parse(require('fs').readFileSync('.clasp.json','utf8')); console.log('.clasp.json: valid JSON')"
 
       - name: clasp push -f
         run: clasp push -f
