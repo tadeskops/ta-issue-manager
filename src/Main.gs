@@ -744,8 +744,8 @@ function approveIssue(ticketId, userEmail, severity) {
                     state: "APPROVED",
                     severity: severity,
                     approvedBy: userEmail,
-                    approvedDate: now,
-                    slaDate: slaDate
+                    approvedDate: safeDateIso_(now),
+                    slaDate:      safeDateIso_(slaDate)
                 },
                 error: null
             };
@@ -789,7 +789,7 @@ function rejectIssue(ticketId, reason, userEmail) {
                     state: "REJECTED",
                     rejectionReason: reason,
                     rejectedBy: userEmail,
-                    rejectedDate: now
+                    rejectedDate: safeDateIso_(now)
                 },
                 error: null
             };
@@ -892,7 +892,7 @@ function updateBuilderStatus(ticketId, status, comment, vendor, closureDate) {
                     builderStatus: status,
                     builderComment: comment,
                     assignedVendor: vendor,
-                    lastUpdated: now
+                    lastUpdated: safeDateIso_(now)
                 },
                 error: null
             };
@@ -933,7 +933,7 @@ function closeIssue(ticketId, reason, userEmail) {
                 data: {
                     ticketId: ticketId,
                     state: "CLOSED",
-                    closedDate: closedDate,
+                    closedDate: safeDateIso_(closedDate),
                     closedBy: userEmail,
                     closureReason: reason,
                     resolutionTime: resolutionTime
@@ -974,7 +974,7 @@ function reopenIssue(ticketId, reason, userEmail) {
                 data: {
                     ticketId: ticketId,
                     state: "REOPENED",
-                    reopenedDate: new Date(),
+                    reopenedDate: safeDateIso_(new Date()),
                     reopenedBy: userEmail,
                     reopenReason: reason
                 },
@@ -1044,25 +1044,25 @@ function getIssuesWithStatus() {
             else if (pendingMap[key]){ hybridStatus = pendingMap[key].status; ticketId = pendingMap[key].ticketId; }
 
             issues.push({
-                ticketId: ticketId || ("SUB-" + new Date().getFullYear() + "-" + String(i).padStart(4, "0")),
-                issueTitle: row[FORM_COL.LOCATION] || "Issue Report",
+                ticketId:   safeStr_(ticketId) || ("SUB-" + new Date().getFullYear() + "-" + String(i).padStart(4, "0")),
+                issueTitle: safeStr_(row[FORM_COL.LOCATION]) || "Issue Report",
                 resident: {
-                    name:  row[FORM_COL.RESIDENT] || "Unknown",
+                    name:  safeStr_(row[FORM_COL.RESIDENT]) || "Unknown",
                     email: "",
                     phone: ""
                 },
                 location: {
-                    tower: row[FORM_COL.TOWER] || "N/A",
-                    flat:  row[FORM_COL.FLAT]  || "N/A"
+                    tower: safeStr_(row[FORM_COL.TOWER]) || "N/A",
+                    flat:  safeStr_(row[FORM_COL.FLAT])  || "N/A"
                 },
                 issue: {
-                    category:    row[FORM_COL.CATEGORY]    || "N/A",
-                    subcategory: row[FORM_COL.SUBCATEGORY] || "",
-                    severity:    row[FORM_COL.SEVERITY]    || "",
-                    description: row[FORM_COL.LOCATION]    || "No details provided"
+                    category:    safeStr_(row[FORM_COL.CATEGORY])    || "N/A",
+                    subcategory: safeStr_(row[FORM_COL.SUBCATEGORY]),
+                    severity:    safeStr_(row[FORM_COL.SEVERITY]),
+                    description: safeStr_(row[FORM_COL.LOCATION])    || "No details provided"
                 },
                 status: hybridStatus,
-                dateReported: row[FORM_COL.TIMESTAMP] || new Date().toISOString(),
+                dateReported: safeDateIso_(row[FORM_COL.TIMESTAMP]) || new Date().toISOString(),
                 attachments: splitPhotoLinks_(row[FORM_COL.PHOTO])
             });
         }
