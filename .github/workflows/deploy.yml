@@ -43,10 +43,17 @@ jobs:
             echo "::error::CLASPRC_JSON secret is empty or unset. Add it under Settings → Secrets and variables → Actions."
             exit 1
           fi
-          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          # Accept either raw JSON or base64-encoded JSON (recommended — immune to paste corruption).
+          if printf '%s' "$CLASPRC_JSON" | base64 -d > "$HOME/.clasprc.json" 2>/dev/null \
+             && node -e "JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json','utf8'))" 2>/dev/null; then
+            echo "Detected base64-encoded secret; decoded successfully."
+          else
+            printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+            echo "Wrote secret as raw JSON."
+          fi
           chmod 600 "$HOME/.clasprc.json"
           BYTES=$(wc -c < "$HOME/.clasprc.json")
-          echo "Wrote $HOME/.clasprc.json ($BYTES bytes)"
+          echo "Final $HOME/.clasprc.json size: $BYTES bytes"
           node -e "try { const j = JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json','utf8')); console.log('.clasprc.json: valid JSON, top-level keys =', Object.keys(j).join(',')); } catch(e) { console.error('::error::Invalid JSON in .clasprc.json — secret is corrupted or truncated:', e.message); process.exit(1); }"
 
       - name: Write project link from secret
@@ -57,9 +64,15 @@ jobs:
             echo "::error::CLASP_JSON secret is empty or unset."
             exit 1
           fi
-          printf '%s' "$CLASP_JSON" > .clasp.json
+          if printf '%s' "$CLASP_JSON" | base64 -d > .clasp.json 2>/dev/null \
+             && node -e "JSON.parse(require('fs').readFileSync('.clasp.json','utf8'))" 2>/dev/null; then
+            echo "Detected base64-encoded secret; decoded successfully."
+          else
+            printf '%s' "$CLASP_JSON" > .clasp.json
+            echo "Wrote secret as raw JSON."
+          fi
           BYTES=$(wc -c < .clasp.json)
-          echo "Wrote .clasp.json ($BYTES bytes)"
+          echo "Final .clasp.json size: $BYTES bytes"
           node -e "try { const j = JSON.parse(require('fs').readFileSync('.clasp.json','utf8')); console.log('.clasp.json: valid JSON, scriptId =', (j.scriptId||'').slice(0,8)+'…'); } catch(e) { console.error('::error::Invalid JSON in .clasp.json:', e.message); process.exit(1); }"
 
       - name: clasp push -f
