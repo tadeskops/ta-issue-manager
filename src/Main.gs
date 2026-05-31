@@ -106,6 +106,31 @@ function splitPhotoLinks_(cell) {
     return String(cell).split(/[,\s]+/).map(function (s) { return s.trim(); }).filter(Boolean);
 }
 
+// google.script.run silently delivers `null` to the client success
+// handler when the response contains any value it cannot serialize —
+// most notably an Invalid Date (a Date whose time is NaN, which sheets
+// emit for empty date-formatted cells). Coerce values to JSON-safe
+// primitives before returning them.
+function safeStr_(v) {
+    if (v === null || v === undefined) return "";
+    if (v instanceof Date) {
+        var t = v.getTime();
+        return isNaN(t) ? "" : v.toISOString();
+    }
+    return String(v);
+}
+function safeDateIso_(v) {
+    if (v === null || v === undefined || v === "") return "";
+    if (v instanceof Date) {
+        var t = v.getTime();
+        return isNaN(t) ? "" : v.toISOString();
+    }
+    // Sometimes the cell is a number (serial) or string ISO — coerce.
+    var d = new Date(v);
+    var t2 = d.getTime();
+    return isNaN(t2) ? String(v) : d.toISOString();
+}
+
 // Some sheets (notably PENDING_REVIEW and ARCHIVES_ISSUES) were created
 // without a labeled header row, so getDataRange() returns a real ticket
 // row at index 0 that loops would otherwise silently skip. Detect that
@@ -631,29 +656,29 @@ function getPendingIssues() {
 
             const photo = row[PENDING_COL.PHOTO];
             issues.push({
-                ticketId: row[PENDING_COL.TICKET_ID],
-                dateReported: row[PENDING_COL.DATE_REPORTED],
+                ticketId:     safeStr_(row[PENDING_COL.TICKET_ID]),
+                dateReported: safeDateIso_(row[PENDING_COL.DATE_REPORTED]),
                 resident: {
-                    name:  row[PENDING_COL.RESIDENT] || "",
-                    email: "",   // not collected by form
+                    name:  safeStr_(row[PENDING_COL.RESIDENT]),
+                    email: "",
                     phone: ""
                 },
                 location: {
-                    tower: row[PENDING_COL.TOWER] || "",
-                    flat:  row[PENDING_COL.FLAT]  || ""
+                    tower: safeStr_(row[PENDING_COL.TOWER]),
+                    flat:  safeStr_(row[PENDING_COL.FLAT])
                 },
                 issue: {
-                    category:    row[PENDING_COL.CATEGORY]    || "",
-                    subcategory: row[PENDING_COL.SUBCATEGORY] || "",
-                    severity:    row[PENDING_COL.SEVERITY]    || "",
-                    location:    row[PENDING_COL.DESCRIPTION] || "",
-                    description: row[PENDING_COL.DESCRIPTION] || "",
+                    category:    safeStr_(row[PENDING_COL.CATEGORY]),
+                    subcategory: safeStr_(row[PENDING_COL.SUBCATEGORY]),
+                    severity:    safeStr_(row[PENDING_COL.SEVERITY]),
+                    location:    safeStr_(row[PENDING_COL.DESCRIPTION]),
+                    description: safeStr_(row[PENDING_COL.DESCRIPTION]),
                     photoLinks:  splitPhotoLinks_(photo)
                 },
-                state: state,
-                rejectionReason: row[PENDING_COL.REJECTION_REASON] || "",
-                actionDate:      row[PENDING_COL.ACTION_DATE]      || "",
-                actionBy:        row[PENDING_COL.ACTION_BY]        || ""
+                state:           safeStr_(state),
+                rejectionReason: safeStr_(row[PENDING_COL.REJECTION_REASON]),
+                actionDate:      safeDateIso_(row[PENDING_COL.ACTION_DATE]),
+                actionBy:        safeStr_(row[PENDING_COL.ACTION_BY])
             });
         }
 
@@ -800,38 +825,38 @@ function getLiveIssues(filterOption) {
             const photo = row[LIVE_COL.PHOTO];
 
             issues.push({
-                ticketId: row[LIVE_COL.TICKET_ID],
-                dateReported: row[LIVE_COL.DATE_REPORTED],
+                ticketId:     safeStr_(row[LIVE_COL.TICKET_ID]),
+                dateReported: safeDateIso_(row[LIVE_COL.DATE_REPORTED]),
                 resident: {
-                    name: row[LIVE_COL.RESIDENT] || "",
+                    name:  safeStr_(row[LIVE_COL.RESIDENT]),
                     email: "",
                     phone: ""
                 },
                 location: {
-                    tower: row[LIVE_COL.TOWER] || "",
-                    flat:  row[LIVE_COL.FLAT]  || ""
+                    tower: safeStr_(row[LIVE_COL.TOWER]),
+                    flat:  safeStr_(row[LIVE_COL.FLAT])
                 },
                 issue: {
-                    category:    row[LIVE_COL.CATEGORY]    || "",
-                    subcategory: row[LIVE_COL.SUBCATEGORY] || "",
+                    category:    safeStr_(row[LIVE_COL.CATEGORY]),
+                    subcategory: safeStr_(row[LIVE_COL.SUBCATEGORY]),
                     severity:    sevRaw,
-                    description: row[LIVE_COL.DESCRIPTION] || "",
+                    description: safeStr_(row[LIVE_COL.DESCRIPTION]),
                     photoLinks:  splitPhotoLinks_(photo)
                 },
                 builder: {
-                    status:        row[LIVE_COL.STATUS]           || "ASSIGNED",
-                    comment:       row[LIVE_COL.REMARKS]          || "",
-                    assignedVendor:row[LIVE_COL.ASSIGNED_VENDOR]  || "",
-                    lastUpdated:   row[LIVE_COL.DATE_ASSIGNED]    || ""
+                    status:         safeStr_(row[LIVE_COL.STATUS]) || "ASSIGNED",
+                    comment:        safeStr_(row[LIVE_COL.REMARKS]),
+                    assignedVendor: safeStr_(row[LIVE_COL.ASSIGNED_VENDOR]),
+                    lastUpdated:    safeDateIso_(row[LIVE_COL.DATE_ASSIGNED])
                 },
                 sla: {
-                    dueDate: slaDate,
-                    breached: breached,
+                    dueDate:       slaDate ? (isNaN(slaDate.getTime()) ? "" : slaDate.toISOString()) : "",
+                    breached:      breached,
                     daysRemaining: daysRemaining
                 },
-                state:       row[LIVE_COL.STATUS]        || "",
+                state:       safeStr_(row[LIVE_COL.STATUS]),
                 approvedBy:  "",
-                lastUpdated: row[LIVE_COL.DATE_ASSIGNED] || ""
+                lastUpdated: safeDateIso_(row[LIVE_COL.DATE_ASSIGNED])
             });
         }
 
