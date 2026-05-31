@@ -1,13 +1,28 @@
 # Whitelist for `clasp push` (gitignore semantics, clasp 3.x).
 #
-# Root-anchored patterns only ignore top-level entries, so we can re-include
-# the `src/` directory without violating gitignore's "parent dir cannot
-# be re-included" rule. Everything inside `src/` is pushed by default.
-# The prior pattern (`**` + `!src/**`) silently excluded everything
-# under clasp 3.x and made CI fail with "Pushed 0 files".
+# Apps Script should contain ONLY:
+#   - appsscript.json (manifest)
+#   - everything under src/ (.gs and .html partials/pages)
+#
+# clasp converts any pushed *.js into *.gs, so Node-only scripts under
+# scripts/ or assets/ MUST be excluded or they'll execute server-side
+# and break the web app (e.g. ReferenceError: require is not defined).
 
+# 1) Block all top-level entries (files + dotfiles + dotdirs)
 /*
 /.*
 
+# 2) Defensive deep excludes — some ignore matchers walk every path
+#    independently and do not propagate a directory exclusion to its
+#    contents, so we must spell out the nested junk too.
+/.history/**
+/.git/**
+/.github/**
+/.vscode/**
+/node_modules/**
+/scripts/**
+/assets/**
+
+# 3) Re-include the manifest + the source tree
 !/appsscript.json
 !/src
