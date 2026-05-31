@@ -582,13 +582,12 @@
             try {
                 const pending = await API.getPendingIssues();
                 const live = await API.getLiveIssues('ALL');
+                const closed = await API.getClosedIssues();
                 const metrics = await API.getDashboardMetrics();
 
                 pendingIssues = (pending || []).map(normalizeIssueData);
                 activeIssues = (live || []).map(normalizeIssueData);
-                
-                // Calculate closed issues from metrics
-                closedIssues = (metrics.recentClosed || []).map(normalizeIssueData);
+                closedIssues = (closed || []).map(normalizeIssueData);
 
                 renderPending();
                 renderActive();
@@ -714,14 +713,35 @@
 
         function renderClosed() {
             const tbody = document.getElementById('closedTableBody');
-            tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-500">No closed issues</td></tr>';
+            if (!closedIssues || closedIssues.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-500">No closed issues</td></tr>';
+                return;
+            }
+            tbody.innerHTML = closedIssues.map(issue => {
+                const closure = issue.closure || {};
+                const closedDate = closure.closedDate ? new Date(closure.closedDate).toLocaleDateString() : '—';
+                const resDays = (closure.resolutionDays != null) ? closure.resolutionDays : '—';
+                return `
+                    <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors issue-row" id="row-${issue.ticketId}">
+                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'closed')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button></td>
+                        <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
+                        <td class="p-4 text-slate-300 text-sm">${issue.issue.category}</td>
+                        <td class="p-4 text-slate-300 text-sm">${closedDate}</td>
+                        <td class="p-4 hidden md:table-cell text-slate-300 text-sm text-center">${resDays}d</td>
+                        <td class="p-4 text-center space-x-1">
+                            <button onclick="openQuickViewModal('${issue.ticketId}', 'closed')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
+                            <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'CLOSED_ISSUES')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         function updateKPIs(metrics) {
             const activePending = pendingIssues.filter(i => (i.state || 'PENDING_APPROVAL').toUpperCase() === 'PENDING_APPROVAL');
             document.getElementById('kpiPending').textContent = activePending.length;
             document.getElementById('kpiActive').textContent = activeIssues.length;
-            document.getElementById('kpiClosed').textContent = metrics.totalClosed || 0;
+            document.getElementById('kpiClosed').textContent = (closedIssues && closedIssues.length) || metrics.totalClosed || 0;
             document.getElementById('kpiCritical').textContent = activePending.filter(i => i.issue.severity === 'Critical').length;
             document.getElementById('kpiSLA').textContent = activeIssues.filter(i => i.sla.breached).length;
         }

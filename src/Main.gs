@@ -953,8 +953,63 @@ function closeIssue(ticketId, reason, userEmail) {
     }
 }
 
+// Get Closed Issues: read CLOSED_ISSUES. Layout = LIVE_COL plus closure
+// metadata appended at the end: [reason, closedDate, closedBy, resolutionDays].
+function getClosedIssues() {
+    try {
+        const sheet = getSheet(SHEETS.CLOSED_ISSUES);
+        const data = sheet.getDataRange().getValues();
+        const issues = [];
+        const REASON_IDX     = LIVE_WIDTH;
+        const CLOSED_AT_IDX  = LIVE_WIDTH + 1;
+        const CLOSED_BY_IDX  = LIVE_WIDTH + 2;
+        const RES_DAYS_IDX   = LIVE_WIDTH + 3;
+
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            if (!row[LIVE_COL.TICKET_ID]) continue;
+            issues.push({
+                ticketId:     safeStr_(row[LIVE_COL.TICKET_ID]),
+                dateReported: safeDateIso_(row[LIVE_COL.DATE_REPORTED]),
+                resident: {
+                    name:  safeStr_(row[LIVE_COL.RESIDENT]),
+                    email: "",
+                    phone: ""
+                },
+                location: {
+                    tower: safeStr_(row[LIVE_COL.TOWER]),
+                    flat:  safeStr_(row[LIVE_COL.FLAT])
+                },
+                issue: {
+                    category:    safeStr_(row[LIVE_COL.CATEGORY]),
+                    subcategory: safeStr_(row[LIVE_COL.SUBCATEGORY]),
+                    severity:    safeStr_(row[LIVE_COL.SEVERITY]),
+                    description: safeStr_(row[LIVE_COL.DESCRIPTION]),
+                    photoLinks:  splitPhotoLinks_(row[LIVE_COL.PHOTO])
+                },
+                builder: {
+                    status:         "CLOSED",
+                    assignedVendor: safeStr_(row[LIVE_COL.ASSIGNED_VENDOR]),
+                    comment:        safeStr_(row[LIVE_COL.REMARKS]),
+                    lastUpdated:    safeDateIso_(row[CLOSED_AT_IDX])
+                },
+                closure: {
+                    reason:         safeStr_(row[REASON_IDX]),
+                    closedDate:     safeDateIso_(row[CLOSED_AT_IDX]),
+                    closedBy:       safeStr_(row[CLOSED_BY_IDX]),
+                    resolutionDays: Number(row[RES_DAYS_IDX]) || 0
+                },
+                state: "CLOSED"
+            });
+        }
+
+        return { success: true, data: issues, error: null };
+    } catch (error) {
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
 // Reopen Issue: move row back from CLOSED to LIVE, status=REOPENED.
-function reopenIssue(ticketId, reason, userEmail) {
     try {
         const closedSheet = getSheet(SHEETS.CLOSED_ISSUES);
         const liveSheet   = getSheet(SHEETS.LIVE_ISSUES);

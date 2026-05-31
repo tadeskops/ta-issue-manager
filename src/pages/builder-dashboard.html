@@ -353,9 +353,20 @@
 
         async function loadData() {
             try {
-                const issues = await API.getLiveIssues('BUILDER');
-                allIssues = (issues || []).map(normalizeIssueData);
-                
+                const liveP   = API.getLiveIssues('BUILDER');
+                const closedP = API.getClosedIssues();
+                const [issues, closed] = await Promise.all([liveP, closedP]);
+                const live = (issues || []).map(normalizeIssueData);
+                // Closed issues come from CLOSED_ISSUES sheet; show them
+                // alongside live ones so the "Work Completed" filter reflects
+                // both committee-closed tickets and builder-marked completions.
+                const closedNorm = (closed || []).map(normalizeIssueData).map(i => {
+                    i.builder = i.builder || {};
+                    i.builder.status = 'WORK_COMPLETED';
+                    return i;
+                });
+                allIssues = live.concat(closedNorm);
+
                 renderIssuesTable();
                 updateKPIs();
                 showToast('✓ Data refreshed!', 'success');

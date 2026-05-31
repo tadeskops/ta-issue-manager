@@ -69,6 +69,7 @@ const API = {
     approveIssue(ticketId)    { return this.call("approveIssue", { ticketId }); },
     rejectIssue(t, r)         { return this.call("rejectIssue", { ticketId: t, reason: r }); },
     getLiveIssues(f = "ALL")  { return this.call("getLiveIssues", { filterOption: f }); },
+    getClosedIssues()         { return this.call("getClosedIssues"); },
     updateBuilderStatus(t, s, c = "", v = "", d = null) {
         return this.call("updateBuilderStatus", { ticketId: t, status: s, comment: c, vendor: v, closureDate: d });
     },

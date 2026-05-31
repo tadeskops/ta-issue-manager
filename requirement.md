@@ -105,11 +105,11 @@
 | # | Tab | Purpose |
 |---|---|---|
 | 1 | `Form Responses 1` | Raw form intake (auto-populated by Google Forms) |
-| 2 | `PENDING_REVIEW` | Issues awaiting committee approval (also acts as the weekly-review snapshot) |
-| 3 | `LIVE_ISSUES` | Approved, active issues (builder updates here) |
+| 2 | `PENDING_REVIEW` | Issues **currently** awaiting committee approval. Rows leave this sheet on approve/reject (strict move). |
+| 3 | `LIVE_ISSUES` | Approved, active issues (builder updates here). Rows leave on close. |
 | 4 | `BUILDER_VIEW` | Spreadsheet-side formula view of `LIVE_ISSUES` for the builder — no code reader |
-| 5 | `ARCHIVES_ISSUES` | Spreadsheet-side formula archive view — no code reader |
-| 6 | `CLOSED_ISSUES` | Resolved, archived issues |
+| 5 | `ARCHIVES_ISSUES` | **Rejected** issues (moved here from `PENDING_REVIEW` on reject). Read-only from the app. |
+| 6 | `CLOSED_ISSUES` | Resolved, archived issues. Layout = `LIVE_COL` + 4 closure columns `[reason, closedDate, closedBy, resolutionDays]`. |
 | 7 | `CATEGORY_MASTER` | Dropdown values |
 | 8 | `DASHBOARD` | Formula-only metric tab |
 | 9 | `CONFIG` | Runtime config: identity, assets, feature flags, tunables |
@@ -156,6 +156,7 @@ All requests pass through `api_call(action, payload)` in [Router.gs](Router.gs).
 | `approveIssue` (payload: `{ticketId, severity}`) | ✅ | — | — |
 | `rejectIssue` | ✅ | — | — |
 | `getLiveIssues` | ✅ | ✅ | — |
+| `getClosedIssues` | ✅ | ✅ | — |
 | `updateBuilderStatus` | ✅ | ✅ | — |
 | `closeIssue` | ✅ | ✅ | — |
 | `reopenIssue` | ✅ | ✅ | — |
@@ -180,21 +181,40 @@ signed-in user (used by `API.whoAmI()` on page load).
 
 ## 8. Issue Lifecycle (state machine)
 
+Strict-move semantics: every state transition is `appendRow(target); deleteRow(source)`.
+No in-place state flips. A ticket lives on exactly one sheet at a time.
+
 ```
-PENDING_APPROVAL  (intake — severity BLANK)
-  ├─▶ APPROVED (committee assigns severity → SLA computed)  → LIVE_ISSUES
-  └─▶ REJECTED (committee)  → row retained in PENDING_REVIEW for audit
+Form intake (severity BLANK)
+  → PENDING_REVIEW
+        ├─▶ approveIssue   → LIVE_ISSUES   (severity set, SLA computed)
+        └─▶ rejectIssue    → ARCHIVES_ISSUES (audit, read-only)
 
-LIVE_ISSUES:
-  ASSIGNED → IN_PROGRESS → WORK_COMPLETED → CLOSED
+LIVE_ISSUES (builder updates STATUS column in place):
+  ASSIGNED → IN_PROGRESS → WORK_COMPLETED
+        └─▶ closeIssue   → CLOSED_ISSUES
 
-CLOSED → REOPENED (committee) → LIVE_ISSUES (status = IN_PROGRESS)
+CLOSED_ISSUES:
+  └─▶ reopenIssue    → LIVE_ISSUES (status = IN_PROGRESS)
 ```
 
 > Severity & SLA are set **on approval**, not on intake. `approveIssue`
 > requires `{ ticketId, severity }`; the server validates severity and
 > computes `slaDate = calculateSLADate(severity, reportedDate)` before
 > writing to `LIVE_ISSUES`.
+
+### 8.1 Per-page data sources
+
+Every page must fetch from **every** lifecycle sheet it surfaces — do not
+infer counts from `getDashboardMetrics` alone.
+
+| Page | Fetches | Renders |
+|---|---|---|
+| `committee-dashboard.html` | `getPendingIssues` (PENDING + ARCHIVES) + `getLiveIssues('ALL')` + `getClosedIssues` + `getDashboardMetrics` | Pending tab (filter: Pending/Rejected/All), Active tab, Closed tab |
+| `builder-dashboard.html` | `getLiveIssues('BUILDER')` + `getClosedIssues` | Merged into single table; "Work Completed" filter covers both builder-marked and committee-closed |
+| `admin-dashboard.html` | `getDashboardMetrics` + `getLiveIssues('ALL')` | KPIs + charts + aging/SLA tables |
+| `submitted-issues.html` | `getSubmittedIssues` (unions PENDING + LIVE + optional ARCHIVES) | Single table with Status filter; archives gated by `SUBMITTED_INCLUDE_REJECTED` |
+| `submit-issue.html` | `getClientConfig` + `getCategoryMaster` | Intake form |
 
 ---
 
@@ -314,3 +334,117 @@ flow still works. CONFIG sheet is backward-compatible.
 5. Removing an email from `CONFIG.COMMITTEE_EMAILS` and running `clearConfigCache` revokes that user's access within seconds.
 6. No `sessionStorage`/`localStorage` key contains an email after any flow.
 7. `doPost` ignores any `userEmail` field in the request body and uses `Session.getActiveUser().getEmail()`.
+
+---
+
+## 19. Critical Issues & Lessons Learned
+
+This section records bugs whose root cause was non-obvious. Re-read before
+touching the affected area.
+
+### 19.1 `google.script.run` silently returns `null` on Invalid Date
+
+**Symptom:** `api_call('getX')` resolves to `null` on the client even though
+the server function returns a populated `{success, data, error}` object.
+No error, no console log, no stack trace.
+
+**Root cause:** Apps Script cannot serialize `new Date(NaN)` across the
+`google.script.run` bridge. If **any** field in the response is an Invalid
+Date, the *entire* response is dropped and the success handler receives
+`null`. Invalid Dates are produced when reading empty date-formatted Sheet
+cells with `getValues()`.
+
+**Rule:** Every value returned to the client must pass through the helpers
+in `src/Main.gs`:
+- `safeStr_(v)` — coerce to string, blank for null/undefined.
+- `safeDateIso_(v)` — ISO string, or `""` if invalid/empty.
+
+Applies to **all** server functions that read from sheets:
+`getPendingIssues`, `getLiveIssues`, `getClosedIssues`,
+`getSubmittedIssues`, `getFormResponses`, `getIssuesWithStatus`, etc.
+
+### 19.2 Strict-move semantics for sheet-based state transitions
+
+**Symptom:** Committee "Pending Only" filter showed approved tickets.
+Rows appeared on multiple tabs at once.
+
+**Root cause:** `approveIssue` was flipping a `STATE=APPROVED` column in
+place on `PENDING_REVIEW` and **also** appending to `LIVE_ISSUES`. The
+same ticket existed on two sheets.
+
+**Rule:** Every transition is `appendRow(target); deleteRow(source)` —
+in that order, inside one function. Never leave a logical state flag on
+the source row. A ticket lives on exactly one sheet at a time.
+
+Applies to: `approveIssue`, `rejectIssue`, `closeIssue`, `reopenIssue`,
+`deleteIssue`.
+
+### 19.3 Never silently swap in mock data on API failure
+
+**Symptom:** Dashboard "worked" with plausible-looking content while the
+real backend was broken (permission denied, null response, etc.).
+Real failures went undetected for days.
+
+**Rule:** On API failure, render empty state + a visible toast carrying
+the real error message. Mock data is for local development only and must
+never be used as a runtime fallback. If permissions are the likely cause,
+append a hint ("your Google account may not have access…").
+
+Reference implementation: `committee-dashboard.html → loadData()` catch
+block.
+
+### 19.4 Per-page data audit — fetch from every relevant lifecycle sheet
+
+**Symptom:** Committee "Closed" tab was permanently empty. Builder
+"Work Completed" filter only showed builder-marked rows, not committee-closed
+tickets.
+
+**Root cause:** Pages were sourcing counts from `getDashboardMetrics`
+(which has aggregates but not row data) instead of fetching the actual
+sheet via `getClosedIssues`.
+
+**Rule:** When a page surfaces rows from a lifecycle state, it must call
+the dedicated getter for that sheet. See §8.1 for the per-page matrix.
+When adding a new state or sheet, update that matrix and audit every page.
+
+### 19.5 Sheet column layouts diverge per tab — don't share a single map
+
+`PENDING_REVIEW` uses `PENDING_COL` (width `PENDING_WIDTH = 17`).
+`LIVE_ISSUES` and `CLOSED_ISSUES` use `LIVE_COL` (width `LIVE_WIDTH = 20`).
+`ARCHIVES_ISSUES` reuses `PENDING_COL`.
+`CLOSED_ISSUES` extends `LIVE_COL` with 4 trailing columns:
+`[reason, closedDate, closedBy, resolutionDays]` at indices
+`LIVE_WIDTH .. LIVE_WIDTH+3`.
+
+Functions that union rows across sheets (e.g. `getSubmittedIssues`) must
+use a per-sheet mapper — do not index `row[]` with a single shared map.
+
+### 19.6 `submitIssue` writes blank severity
+
+Severity is assigned by the committee on approval, not by the resident.
+`submitIssue` and the form trigger both force `severity = ""` regardless
+of any client-supplied value. The submit form has no severity field.
+
+### 19.7 Tunables that gate visibility
+
+| Tunable (CONFIG sheet) | Default | Effect |
+|---|---|---|
+| `SUBMITTED_INCLUDE_REJECTED` | `"false"` | When `"true"`, `getSubmittedIssues` also unions `ARCHIVES_ISSUES`. Read-only submitted view hides rejected rows by default. |
+| `FEATURE_SHOW_SEVERITY_ON_SUBMITTED` | `"false"` | When `"true"`, severity column is visible on the submitted-issues page. |
+
+Defaults live in `DEFAULT_TUNABLES` (`src/Config.gs`); CONFIG sheet values
+override.
+
+### 19.8 Two deployments — public vs secure
+
+The app is published as two web-app deployments and CI keeps both in sync
+via `clasp 3.3.0`:
+
+| Deployment | `executeAs` | `access` | Purpose |
+|---|---|---|---|
+| Public  | `USER_DEPLOYING` | `ANYONE_ANONYMOUS` | Landing + intake form (no Google sign-in) |
+| Secure  | `USER_ACCESSING` | `ANYONE` | All authenticated dashboards |
+
+`signOut()` and "Back to Login" redirect to `PUBLIC_WEBAPP_URL`. Do not
+merge these into a single deployment — the public one must not require
+Google sign-in.

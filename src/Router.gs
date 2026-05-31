@@ -222,6 +222,7 @@ function api_call(action, payload) {
             case "approveIssue":             result = approveIssue(payload.ticketId, email, payload.severity); break;
             case "rejectIssue":              result = rejectIssue(payload.ticketId, payload.reason, email); break;
             case "getLiveIssues":            result = getLiveIssues(payload.filterOption || "ALL"); break;
+            case "getClosedIssues":          result = getClosedIssues(); break;
             case "updateBuilderStatus":      result = updateBuilderStatus(payload.ticketId, payload.status, payload.comment, payload.vendor, payload.closureDate); break;
             case "closeIssue":               result = closeIssue(payload.ticketId, payload.reason, email); break;
             case "reopenIssue":              result = reopenIssue(payload.ticketId, payload.reason, email); break;
