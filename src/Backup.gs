@@ -171,12 +171,16 @@ function backupSheetToGit(reason) {
     }
 }
 
-// Wipe data rows (keep header) on a sheet.
+// Wipe data rows (keep header) on a sheet, including any data validations
+// on the cleared range so a subsequent bulk-insert is not rejected by stale
+// dropdown rules.
 function backup_clearDataRows_(sheet) {
     const lastRow = sheet.getLastRow();
     const lastCol = sheet.getLastColumn();
     if (lastRow > 1 && lastCol > 0) {
-        sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+        const range = sheet.getRange(2, 1, lastRow - 1, lastCol);
+        range.clearContent();
+        range.clearDataValidations();
     }
 }
 
@@ -206,22 +210,31 @@ function backup_formRowToLive_(formRow, ticketId, actorEmail) {
 // Public: backup spreadsheet, then wipe PENDING_REVIEW + LIVE_ISSUES and
 // repopulate LIVE_ISSUES from every row in "Form Responses 1".
 function backupAndResetFromForm() {
+    Logger.log("########## backupAndResetFromForm START ##########");
     const backup = backupSheetToGit("pre-reset");
     if (!backup.success) {
+        Logger.log("[reset] ABORTING: backup failed, no destructive action taken");
         return {
             success: false,
             error: "Aborted: backup failed before reset. " + backup.error
         };
     }
+    Logger.log("[reset] backup OK -> proceeding to wipe + repopulate");
     try {
         const formSheet    = getSheet(SHEETS.FORM_RESPONSES);
         const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
+        Logger.log("[reset] sheets resolved (form/pending/live)");
+        const liveHeader = liveSheet.getRange(1, 1, 1, liveSheet.getLastColumn()).getValues()[0];
+        Logger.log("[reset] LIVE_ISSUES header (" + liveHeader.length + " cols): " + JSON.stringify(liveHeader));
 
         const formData = formSheet.getDataRange().getValues();
+        Logger.log("[reset] Form Responses rows (incl. header): " + formData.length);
         if (formData.length < 2) {
             backup_clearDataRows_(pendingSheet);
             backup_clearDataRows_(liveSheet);
+            Logger.log("[reset] form is empty - cleared both sheets, nothing to insert");
+            Logger.log("########## backupAndResetFromForm END (empty form) ##########");
             return {
                 success: true,
                 data: {
@@ -233,18 +246,30 @@ function backupAndResetFromForm() {
         }
 
         backup_clearDataRows_(pendingSheet);
+        Logger.log("[reset] cleared PENDING_REVIEW data rows");
         backup_clearDataRows_(liveSheet);
+        Logger.log("[reset] cleared LIVE_ISSUES data rows");
 
         const actor = (Session.getActiveUser() && Session.getActiveUser().getEmail()) || "";
+        Logger.log("[reset] actor email: " + (actor || "(empty)"));
         const rows = [];
         const pad5 = function (n) { return String(n).padStart(5, "0"); };
         for (let i = 1; i < formData.length; i++) {
             const ticketId = "TKT-" + pad5(i);
             rows.push(backup_formRowToLive_(formData[i], ticketId, actor));
         }
+        Logger.log("[reset] mapped " + rows.length + " rows from form");
         if (rows.length) {
-            liveSheet.getRange(2, 1, rows.length, LIVE_WIDTH).setValues(rows);
+            const writeRange = liveSheet.getRange(2, 1, rows.length, LIVE_WIDTH);
+            // Defensively strip any validations still attached to the write
+            // range. Sheet-wide column validations can extend past the prior
+            // last-row, so backup_clearDataRows_ alone is not enough.
+            writeRange.clearDataValidations();
+            Logger.log("[reset] cleared data validations on write range (" + rows.length + " x " + LIVE_WIDTH + ")");
+            writeRange.setValues(rows);
+            Logger.log("[reset] wrote " + rows.length + " rows into LIVE_ISSUES");
         }
+        Logger.log("########## backupAndResetFromForm END (success, inserted=" + rows.length + ") ##########");
         return {
             success: true,
             data: {
@@ -255,7 +280,8 @@ function backupAndResetFromForm() {
             }
         };
     } catch (err) {
-        Logger.log("Reset failed: " + err);
+        Logger.log("[reset] FAILED after backup: " + err + "\n" + (err && err.stack || ""));
+        Logger.log("########## backupAndResetFromForm END (failure) ##########");
         return {
             success: false,
             error: "Reset error after successful backup: " + String(err),
