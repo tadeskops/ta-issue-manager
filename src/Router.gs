@@ -94,9 +94,24 @@ function renderDenied_(email, role) {
  *   <?!= include('partial-name') ?>
  * Evaluated through the templating engine so the included partial may
  * itself use scriptlets (e.g. theme.html reads DEFAULT_THEME from Config).
+ *
+ * Cycle guard: throws with the full include chain if a template tries
+ * to include itself (directly or transitively). Without this, a stray
+ * recursive include shows up only as "Maximum call stack size exceeded".
  */
+var __INCLUDE_STACK__ = [];
 function include(filename) {
-    return HtmlService.createTemplateFromFile(filename).evaluate().getContent();
+    if (__INCLUDE_STACK__.indexOf(filename) !== -1) {
+        var chain = __INCLUDE_STACK__.concat([filename]).join(' -> ');
+        __INCLUDE_STACK__ = [];
+        throw new Error('include() cycle: ' + chain);
+    }
+    __INCLUDE_STACK__.push(filename);
+    try {
+        return HtmlService.createTemplateFromFile(filename).evaluate().getContent();
+    } finally {
+        __INCLUDE_STACK__.pop();
+    }
 }
 
 /**

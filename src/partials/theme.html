@@ -8,8 +8,6 @@
      at all — the page renders exactly as its own CSS defines it.
 
      Default tone is read from CONFIG row DEFAULT_THEME (Config.gs).
-
-     Include with:  &lt;?!= include('src/partials/theme') ?&gt;
     ============================================================================
 -->
 <? var __defTheme = (function(){ try { return getTunable('DEFAULT_THEME') || 'high'; } catch(e){ return 'high'; } })(); ?>
