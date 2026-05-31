@@ -117,7 +117,7 @@ jobs:
           node -e "
             const fs = require('fs');
             const j = JSON.parse(fs.readFileSync('appsscript.json','utf8'));
-            j.webapp = { executeAs: 'USER_ACCESSING', access: 'ANYONE_WITH_GOOGLE_ACCOUNT' };
+            j.webapp = { executeAs: 'USER_ACCESSING', access: 'ANYONE' };
             fs.writeFileSync('appsscript.json', JSON.stringify(j, null, 2));
             console.log('Patched webapp block:', JSON.stringify(j.webapp));
           "
