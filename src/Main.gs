@@ -1010,6 +1010,7 @@ function getClosedIssues() {
 }
 
 // Reopen Issue: move row back from CLOSED to LIVE, status=REOPENED.
+function reopenIssue(ticketId, reason, userEmail) {
     try {
         const closedSheet = getSheet(SHEETS.CLOSED_ISSUES);
         const liveSheet   = getSheet(SHEETS.LIVE_ISSUES);
