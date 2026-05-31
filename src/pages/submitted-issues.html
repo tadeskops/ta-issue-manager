@@ -386,7 +386,7 @@
                                         <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">
                                             <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.attachments.length})
                                         </p>
-                                        <a href="https://drive.google.com/drive/folders/1oJDZT_bokWitmmgDlfulTBsjKlGdcGcPaqjJ92OEMgxQnwftLnZHWiq2NOLl7zIEq3lW53FZ?usp=sharing"
+                                        <a href="https:\u002f\u002fdrive.google.com\u002fdrive\u002ffolders\u002f1oJDZT_bokWitmmgDlfulTBsjKlGdcGcPaqjJ92OEMgxQnwftLnZHWiq2NOLl7zIEq3lW53FZ?usp=sharing"
                                            target="_blank" rel="noopener noreferrer"
                                            class="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
                                             <i class="fab fa-google-drive"></i> Open Drive folder
@@ -395,8 +395,8 @@
                                     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                         ${issue.attachments.map(att => {
                                             const fileId = extractDriveFileId(att);
-                                            const thumb = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w800` : att;
-                                            const viewer = fileId ? `https://drive.google.com/file/d/${fileId}/view` : att;
+                                            const thumb = fileId ? `https:\u002f\u002fdrive.google.com\u002fthumbnail?id=${fileId}&sz=w800` : att;
+                                            const viewer = fileId ? `https:\u002f\u002fdrive.google.com\u002ffile\u002fd\u002f${fileId}\u002fview` : att;
                                             return `
                                             <a href="${viewer}" target="_blank" rel="noopener noreferrer"
                                                class="group relative block rounded-lg overflow-hidden border border-slate-600/40 hover:border-amber-400/60 bg-slate-800/40 transition-all aspect-square">
