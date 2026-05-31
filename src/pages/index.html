@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Address - IRP Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -67,8 +66,6 @@
             <div id="authStatus" class="text-center text-slate-300 text-sm">
                 <i class="fas fa-spinner fa-spin mr-2 text-amber-400"></i>Checking Google sign-in…
             </div>
-            <!-- Google Identity Services renders its branded button here when a client id is configured. -->
-            <div id="gisButton" class="flex justify-center"></div>
             <button id="primaryAction" onclick="goDashboard()" class="hidden w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-bold py-3 rounded-lg transition-all border border-amber-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider">
                 <i class="fas fa-sign-in-alt mr-2"></i><span id="primaryLabel">Open Dashboard</span>
             </button>
@@ -87,6 +84,12 @@
     </div>
 
     <?!= include('src/partials/api') ?>
+    <script>
+        // Set by the server when this template is rendered as a denial page —
+        // the originally-requested page key (e.g. "committee") so we can
+        // auto-redirect anonymous visitors to the secure deployment URL.
+        window.IRP_REQUESTED_PAGE = "<?= (typeof requestedPage !== 'undefined' ? requestedPage : '') ?>";
+    </script>
     <script>
         // Build a same-app URL. On Apps Script /exec uses ?page=key; in local
         // dev (preview) we fall back to flat .html filenames in the same folder.
@@ -107,22 +110,29 @@
         function goSubmit()    { location.href = pageUrl('submit'); }
         function switchAccount() {
             try { localStorage.removeItem('IRP_LAST_USER'); } catch(e) {}
-            try { if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect(); } catch(e) {}
             API.signOut();
         }
-        function signIn() {
-            // If GIS is available, prompt the One Tap / account chooser.
-            if (window.google && google.accounts && google.accounts.id && window.IRP_GIS_READY) {
-                try { google.accounts.id.prompt(); return; } catch (e) { /* fall through */ }
-            }
-            // Else: redirect to the tech-mode deployment if configured.
+
+        // Returns the secure (sign-in required) deployment URL, with the
+        // requested page tacked on so the user lands where they intended.
+        function secureUrl(pageKey) {
             const techBase = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.tunables && window.IRP_CLIENT_CONFIG.tunables.TECH_WEBAPP_URL) || '';
-            if (techBase) { location.href = techBase; return; }
-            // Last resort: Google account chooser.
-            const here = new URL(location.href);
-            const chooser = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(here.toString());
-            location.href = chooser;
+            if (!techBase) return '';
+            if (!pageKey) return techBase;
+            const sep = techBase.indexOf('?') === -1 ? '?' : '&';
+            return techBase + sep + 'page=' + encodeURIComponent(pageKey);
         }
+
+        function signIn() {
+            const want = (window.IRP_REQUESTED_PAGE || new URLSearchParams(location.search).get('page') || '').replace(/[^a-z]/gi, '');
+            const url = secureUrl(want);
+            if (url) { location.href = url; return; }
+            // No secure deployment configured — last-resort account chooser so
+            // the user can at least sign in to Google before retrying.
+            const here = new URL(location.href);
+            location.href = 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(here.toString());
+        }
+
         function goDashboard() {
             const u = window.IRP_USER || {};
             if (u.role === 'COMMITTEE') location.href = pageUrl('committee');
@@ -130,18 +140,15 @@
             else location.reload();
         }
 
-        // Renders the verified-user UI and auto-redirects to the right dashboard.
         function applyAuthenticatedUser(u) {
-            const statusEl = document.getElementById('authStatus');
-            const btn = document.getElementById('primaryAction');
-            const label = document.getElementById('primaryLabel');
+            const statusEl  = document.getElementById('authStatus');
+            const btn       = document.getElementById('primaryAction');
+            const label     = document.getElementById('primaryLabel');
             const switchBtn = document.getElementById('switchAcct');
             const signInBtn = document.getElementById('signInBtn');
             const submitBtn = document.getElementById('submitBtn');
-            const gisHost = document.getElementById('gisButton');
             window.IRP_USER = u;
             try { localStorage.setItem('IRP_LAST_USER', JSON.stringify({ email: u.email, role: u.role, ts: Date.now() })); } catch(e) {}
-            if (gisHost) gisHost.classList.add('hidden');
             if (signInBtn) signInBtn.classList.add('hidden');
             if (switchBtn) switchBtn.classList.remove('hidden');
             if (u.role === 'COMMITTEE') {
@@ -160,101 +167,51 @@
             }
         }
 
-        async function handleGoogleCredential(credResponse) {
-            const statusEl = document.getElementById('authStatus');
-            if (!credResponse || !credResponse.credential) return;
-            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-2 text-amber-400"></i>Verifying with server\u2026';
-            try {
-                const res = await API.loginWithIdToken(credResponse.credential);
-                if (res && res.sessionToken) {
-                    API.setSession(res.sessionToken, { email: res.email, role: res.role });
-                    applyAuthenticatedUser({ email: res.email, role: res.role });
-                    return;
-                }
-                statusEl.innerHTML = '<i class="fas fa-times-circle text-red-400 mr-2"></i>Sign-in failed: server returned no session token.';
-            } catch (err) {
-                const msg = (err && err.message) || String(err);
-                statusEl.innerHTML = '<i class="fas fa-times-circle text-red-400 mr-2"></i>' +
-                    msg.replace(/</g, '&lt;');
-            }
-        }
-        window.handleGoogleCredential = handleGoogleCredential;
-
-        function initGoogleIdentity(clientId) {
-            if (!clientId) return false;
-            if (!(window.google && google.accounts && google.accounts.id)) return false;
-            try {
-                google.accounts.id.initialize({
-                    client_id: clientId,
-                    callback: handleGoogleCredential,
-                    auto_select: true,
-                    cancel_on_tap_outside: false,
-                    use_fedcm_for_prompt: true
-                });
-                const host = document.getElementById('gisButton');
-                if (host) {
-                    host.innerHTML = '';
-                    google.accounts.id.renderButton(host, {
-                        type: 'standard', theme: 'filled_blue', size: 'large',
-                        text: 'signin_with', shape: 'pill', logo_alignment: 'left'
-                    });
-                }
-                google.accounts.id.prompt(); // One Tap auto-prompt
-                window.IRP_GIS_READY = true;
-                return true;
-            } catch (e) {
-                console.error('GIS init failed:', e);
-                return false;
-            }
-        }
-
         (async function init() {
-            const statusEl = document.getElementById('authStatus');
-            const switchBtn = document.getElementById('switchAcct');
+            const statusEl  = document.getElementById('authStatus');
             const signInBtn = document.getElementById('signInBtn');
-            // Always fetch client config so signIn() has TECH_WEBAPP_URL and
-            // GOOGLE_OAUTH_CLIENT_ID even for unauthenticated visitors.
+            const switchBtn = document.getElementById('switchAcct');
             try {
                 const cc = await API.getClientConfig();
                 window.IRP_CLIENT_CONFIG = cc || {};
             } catch (e) { /* non-fatal */ }
-            const tun = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.tunables) || {};
-            const clientId = tun.GOOGLE_OAUTH_CLIENT_ID || '';
 
-            // 1) If we already hold a valid session token in localStorage, use it.
-            const tok = API.loadSession();
-            if (tok && API._user && API._user.email) {
-                applyAuthenticatedUser(API._user);
-                // Refresh role in background by asking the server with the token.
-                try { const r = await API.call('validateUserAccess'); if (r && r.email) applyAuthenticatedUser(r); } catch (e) {}
-                return;
-            }
-
-            // 2) USER_ACCESSING deployment path: Session.getActiveUser() will return the email.
+            let u = { email: '', role: 'UNKNOWN' };
             try {
-                const u = await new Promise((resolve, reject) => {
+                u = await new Promise((resolve, reject) => {
                     if (!(typeof google !== 'undefined' && google.script && google.script.run)) return resolve({ email: '', role: 'UNKNOWN' });
                     google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).api_whoAmI();
                 });
-                if (u && u.email && u.role !== 'UNKNOWN') { applyAuthenticatedUser(u); return; }
-                if (u && u.email && u.role === 'UNKNOWN') {
-                    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-400 mr-2"></i>' +
-                        '<b>' + u.email + '</b> is not authorized. Contact the committee to be added to the CONFIG list, then reload.';
-                    switchBtn.classList.remove('hidden');
-                    return;
-                }
-            } catch (e) { /* fall through to GIS path */ }
+            } catch (e) { /* leave u as UNKNOWN */ }
 
-            // 3) Anonymous deployment: use Google Identity Services to grab the
-            // already-signed-in Gmail account (One Tap) and verify on the server.
-            if (clientId && initGoogleIdentity(clientId)) {
-                statusEl.innerHTML = '<i class="fab fa-google mr-2 text-amber-400"></i>Sign in with your Google account to continue. (One Tap will appear if you\u2019re already signed in.)';
+            // Signed in and authorised — show role-based dashboard CTA.
+            if (u && u.email && u.role !== 'UNKNOWN') {
+                applyAuthenticatedUser(u);
                 return;
             }
 
-            // 4) Fallback messaging when GIS isn\u2019t configured.
+            // Signed in but email isn't in CONFIG.
+            if (u && u.email && u.role === 'UNKNOWN') {
+                statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-400 mr-2"></i>' +
+                    '<b>' + u.email + '</b> is not authorised. Ask the committee to add you to the CONFIG list, then reload.';
+                switchBtn.classList.remove('hidden');
+                return;
+            }
+
+            // Not signed in. This is the public (anonymous) deployment.
+            // If the visitor was trying to open a protected page, auto-redirect
+            // them to the secure deployment URL so Google can sign them in.
+            const want = (window.IRP_REQUESTED_PAGE || '').replace(/[^a-z]/gi, '');
+            const secure = secureUrl(want);
+            if (want && secure) {
+                statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-2 text-amber-400"></i>Redirecting to secure sign-in…';
+                location.href = secure;
+                return;
+            }
+
+            // Anonymous landing on the public deployment.
             statusEl.innerHTML = '<i class="fab fa-google mr-2 text-amber-400"></i>' +
-                'Sign-in is not configured yet. Admin: set <code class="text-amber-300">GOOGLE_OAUTH_CLIENT_ID</code> in the CONFIG sheet to enable one-click Google sign-in here.';
+                'You’re viewing the public read-only portal. Sign in for committee or builder access.';
             signInBtn.classList.remove('hidden');
         })();
     </script>

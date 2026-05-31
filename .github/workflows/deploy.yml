@@ -96,7 +96,14 @@ jobs:
         run: |
           DESC="Auto-deploy $(date -u +'%Y-%m-%d %H:%M UTC') ${{ github.sha }}"
           if [ -n "${{ secrets.DEPLOYMENT_ID }}" ]; then
+            echo "Updating public deployment ${{ secrets.DEPLOYMENT_ID }}"
             clasp update-deployment "${{ secrets.DEPLOYMENT_ID }}" --description "$DESC"
           else
             clasp create-deployment --description "$DESC"
+          fi
+          if [ -n "${{ secrets.DEPLOYMENT_ID_SECURE }}" ]; then
+            echo "Updating secure (sign-in) deployment ${{ secrets.DEPLOYMENT_ID_SECURE }}"
+            clasp update-deployment "${{ secrets.DEPLOYMENT_ID_SECURE }}" --description "$DESC"
+          else
+            echo "DEPLOYMENT_ID_SECURE secret not set; skipping secure deployment update."
           fi
