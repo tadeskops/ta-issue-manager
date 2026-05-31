@@ -571,7 +571,7 @@
                     severity: data.issue?.severity || data.severity || '',
                     description: data.issue?.description || data.description || ''
                 },
-                status: data.status || 'NEW',
+                status: data.status || 'PENDING_APPROVAL',
                 dateReported: data.dateReported || '',
                 builder: data.builder || {},
                 sla: data.sla || { daysRemaining: 0, breached: false }

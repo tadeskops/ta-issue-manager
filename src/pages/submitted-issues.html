@@ -132,11 +132,11 @@
                 <select id="statusFilter" onchange="filterIssues()"
                         class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
                     <option value="">All Status</option>
-                    <option value="NEW">New</option>
                     <option value="PENDING_APPROVAL">Pending Approval</option>
                     <option value="ASSIGNED">Assigned</option>
                     <option value="IN_PROGRESS">In Progress</option>
                     <option value="WORK_COMPLETED">Work Completed</option>
+                    <option value="REOPENED">Reopened</option>
                     <option value="CLOSED">Closed</option>
                     <option value="REJECTED">Rejected</option>
                 </select>
@@ -237,7 +237,7 @@
                     severity: data.issue?.severity || data.severity || '',
                     description: data.issue?.description || data.description || ''
                 },
-                status: data.status || 'NEW',
+                status: data.status || 'PENDING_APPROVAL',
                 dateReported: data.dateReported || '',
                 attachments: data.attachments || []
             };
@@ -338,7 +338,7 @@
                                     ${issue.issue.severity || 'N/A'}
                                 </span>` : ''}
                                 <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getStatusBadge(issue.status)}">
-                                    <i class="fas ${getStatusIcon(issue.status)} mr-1"></i>${issue.status || 'NEW'}
+                                    <i class="fas ${getStatusIcon(issue.status)} mr-1"></i>${issue.status || 'PENDING_APPROVAL'}
                                 </span>
                                 <i class="fas fa-chevron-down text-amber-400 toggle-icon-${index} transition-transform" style="transform: rotate(0deg)"></i>
                             </div>
@@ -539,11 +539,11 @@
 
         function getStatusBadge(status) {
             const badges = {
-                'NEW': 'bg-blue-600/30 text-blue-200 border border-blue-500/50',
                 'PENDING_APPROVAL': 'bg-amber-600/30 text-amber-200 border border-amber-500/50',
                 'ASSIGNED': 'bg-purple-600/30 text-purple-200 border border-purple-500/50',
                 'IN_PROGRESS': 'bg-cyan-600/30 text-cyan-200 border border-cyan-500/50',
                 'WORK_COMPLETED': 'bg-emerald-600/30 text-emerald-200 border border-emerald-500/50',
+                'REOPENED': 'bg-orange-600/30 text-orange-200 border border-orange-500/50',
                 'CLOSED': 'bg-slate-600/30 text-slate-200 border border-slate-500/50',
                 'REJECTED': 'bg-red-600/30 text-red-200 border border-red-500/50'
             };
@@ -552,11 +552,11 @@
 
         function getStatusIcon(status) {
             const icons = {
-                'NEW': 'fa-circle-plus',
                 'PENDING_APPROVAL': 'fa-hourglass-half',
                 'ASSIGNED': 'fa-user-check',
                 'IN_PROGRESS': 'fa-spinner fa-pulse',
                 'WORK_COMPLETED': 'fa-check-circle',
+                'REOPENED': 'fa-rotate-left',
                 'CLOSED': 'fa-lock',
                 'REJECTED': 'fa-ban'
             };
