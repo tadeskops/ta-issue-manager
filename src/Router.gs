@@ -215,3 +215,4 @@ function isActionAllowed_(action, role) {
     if (role === "RESIDENT")  return RESIDENT_ALLOWED.indexOf(action) !== -1;
     return false;
 }
+
