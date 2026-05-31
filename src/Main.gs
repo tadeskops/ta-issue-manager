@@ -67,33 +67,32 @@ const PENDING_COL = {
 };
 const PENDING_WIDTH = 17;
 
-// LIVE_ISSUES (23 columns).
+// LIVE_ISSUES (20 columns; mirrors the live spreadsheet header row).
 const LIVE_COL = {
-    TICKET_ID:            0,
-    DATE_REPORTED:        1,
-    RESIDENT:             2,
-    FLAT:                 3,
-    CATEGORY:             4,
-    SEVERITY:             5,
-    TOWER:                6,
-    SUBCATEGORY:          7,
-    PHOTO:                8,
-    DESCRIPTION:          9,
-    BUILDER_STATUS:      10,
-    BUILDER_COMMENT:     11,
-    ASSIGNED_VENDOR:     12,
-    DATE_ASSIGNED:       13,
-    RESIDENT_CONFIRM:    14,
-    REOPENED_FLAG:       15,
-    REMARKS:             16,
-    RESERVED1:           17,
-    SLA_DATE:            18,   // Target Closure
-    CLOSURE_DATE:        19,
-    STATUS:              20,   // APPROVED | IN_PROGRESS | WORK_COMPLETED | REOPENED
-    ACTION_BY:           21,   // last actor email
-    LAST_UPDATED:        22
+    TICKET_ID:        0,   // Ticket ID
+    DATE_REPORTED:    1,   // Date Reported
+    TOWER:            2,   // Found at Tower
+    FLAT:             3,   // Flat No
+    RESIDENT:         4,   // Resident Name
+    PHONE:            5,   // Phone
+    CATEGORY:         6,   // Category
+    SUBCATEGORY:      7,   // Subcategory
+    SEVERITY:         8,   // Severity
+    LOCATION:         9,   // Exact Location
+    DESCRIPTION:     10,   // Description
+    PHOTO:           11,   // Photo Link
+    ASSIGNED_VENDOR: 12,   // Assigned To
+    STATUS:          13,   // Status (single status column on this sheet)
+    BUILDER_STATUS:  13,   //   alias of STATUS — sheet has only one
+    DATE_ASSIGNED:   14,   // Date Assigned
+    SLA_DATE:        15,   // Target Closure
+    CLOSURE_DATE:    16,   // Closure Date
+    RESIDENT_CONFIRM:17,   // Resident Confirmation
+    REOPENED_FLAG:   18,   // Reopened
+    REMARKS:         19,   // Remarks
+    BUILDER_COMMENT: 19    //   alias of REMARKS
 };
-const LIVE_WIDTH = 23;
+const LIVE_WIDTH = 20;
 
 // Build a row array of given width filled with empty strings.
 function newRow_(width) { return new Array(width).fill(""); }
@@ -105,6 +104,21 @@ function splitPhotoLinks_(cell) {
     if (!cell) return [];
     if (Array.isArray(cell)) return cell.filter(Boolean);
     return String(cell).split(/[,\s]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+// Some sheets (notably PENDING_REVIEW and ARCHIVES_ISSUES) were created
+// without a labeled header row, so getDataRange() returns a real ticket
+// row at index 0 that loops would otherwise silently skip. Detect that
+// case so iteration can start at the right offset without mutating the
+// sheet.
+function firstDataRow_(data) {
+    if (!data || !data.length) return 1;
+    var c0 = data[0][0];
+    var s  = (c0 === null || c0 === undefined) ? "" : String(c0).trim();
+    if (!s) return 1;
+    // Looks like a ticket id (TKT-00001, TA-0001, etc.) -> no header row.
+    if (/^[A-Z]{2,4}-\d+/i.test(s)) return 0;
+    return 1;
 }
 // ===== END CONFIG =====
 
@@ -525,7 +539,7 @@ function syncFormResponses() {
         };
 
         const processedKeys = new Set();
-        for (let i = 1; i < pendingData.length; i++) {
+        for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
             const p = pendingData[i];
             processedKeys.add(sigOf(
                 p[PENDING_COL.DATE_REPORTED],
@@ -609,7 +623,7 @@ function getPendingIssues() {
         const data = sheet.getDataRange().getValues();
         const issues = [];
 
-        for (let i = 1; i < data.length; i++) {
+        for (let i = firstDataRow_(data); i < data.length; i++) {
             const row = data[i];
             // Include PENDING_APPROVAL + REJECTED (UI filters); skip APPROVED (already on LIVE).
             const state = row[PENDING_COL.STATE] || "PENDING_APPROVAL";
@@ -663,7 +677,7 @@ function approveIssue(ticketId, userEmail, severity) {
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
         const pendingData  = pendingSheet.getDataRange().getValues();
 
-        for (let i = 1; i < pendingData.length; i++) {
+        for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
             const row = pendingData[i];
             if (row[PENDING_COL.TICKET_ID] !== ticketId) continue;
 
@@ -672,22 +686,20 @@ function approveIssue(ticketId, userEmail, severity) {
             const now          = new Date();
 
             const live = newRow_(LIVE_WIDTH);
-            live[LIVE_COL.TICKET_ID]      = ticketId;
-            live[LIVE_COL.DATE_REPORTED]  = reportedDate;
-            live[LIVE_COL.RESIDENT]       = row[PENDING_COL.RESIDENT]    || "";
-            live[LIVE_COL.FLAT]           = row[PENDING_COL.FLAT]        || "";
-            live[LIVE_COL.CATEGORY]       = row[PENDING_COL.CATEGORY]    || "";
-            live[LIVE_COL.SEVERITY]       = severity;
-            live[LIVE_COL.TOWER]          = row[PENDING_COL.TOWER]       || "";
-            live[LIVE_COL.SUBCATEGORY]    = row[PENDING_COL.SUBCATEGORY] || "";
-            live[LIVE_COL.PHOTO]          = row[PENDING_COL.PHOTO]       || "";
-            live[LIVE_COL.DESCRIPTION]    = row[PENDING_COL.DESCRIPTION] || "";
-            live[LIVE_COL.BUILDER_STATUS] = "ASSIGNED";
-            live[LIVE_COL.DATE_ASSIGNED]  = now;
-            live[LIVE_COL.SLA_DATE]       = slaDate;
-            live[LIVE_COL.STATUS]         = "APPROVED";
-            live[LIVE_COL.ACTION_BY]      = userEmail || "";
-            live[LIVE_COL.LAST_UPDATED]   = now;
+            live[LIVE_COL.TICKET_ID]       = ticketId;
+            live[LIVE_COL.DATE_REPORTED]   = reportedDate;
+            live[LIVE_COL.TOWER]           = row[PENDING_COL.TOWER]       || "";
+            live[LIVE_COL.FLAT]            = row[PENDING_COL.FLAT]        || "";
+            live[LIVE_COL.RESIDENT]        = row[PENDING_COL.RESIDENT]    || "";
+            live[LIVE_COL.CATEGORY]        = row[PENDING_COL.CATEGORY]    || "";
+            live[LIVE_COL.SUBCATEGORY]     = row[PENDING_COL.SUBCATEGORY] || "";
+            live[LIVE_COL.SEVERITY]        = severity;
+            live[LIVE_COL.DESCRIPTION]     = row[PENDING_COL.DESCRIPTION] || "";
+            live[LIVE_COL.PHOTO]           = row[PENDING_COL.PHOTO]       || "";
+            live[LIVE_COL.STATUS]          = "ASSIGNED";
+            live[LIVE_COL.DATE_ASSIGNED]   = now;
+            live[LIVE_COL.SLA_DATE]        = slaDate;
+            live[LIVE_COL.REMARKS]         = "Approved by " + (userEmail || "committee");
 
             // Mark the PENDING row as APPROVED instead of deleting it,
             // so the public view (which reads PENDING_REVIEW) still shows
@@ -729,7 +741,7 @@ function rejectIssue(ticketId, reason, userEmail) {
         const archiveSheet = getSheet(SHEETS.ARCHIVES_ISSUES);
         const data = pendingSheet.getDataRange().getValues();
 
-        for (let i = 1; i < data.length; i++) {
+        for (let i = firstDataRow_(data); i < data.length; i++) {
             if (data[i][PENDING_COL.TICKET_ID] !== ticketId) continue;
             const rowNum = i + 1;
             const now = new Date();
@@ -807,19 +819,19 @@ function getLiveIssues(filterOption) {
                     photoLinks:  splitPhotoLinks_(photo)
                 },
                 builder: {
-                    status:        row[LIVE_COL.BUILDER_STATUS]  || "ASSIGNED",
-                    comment:       row[LIVE_COL.BUILDER_COMMENT] || "",
-                    assignedVendor:row[LIVE_COL.ASSIGNED_VENDOR] || "",
-                    lastUpdated:   row[LIVE_COL.LAST_UPDATED]    || ""
+                    status:        row[LIVE_COL.STATUS]           || "ASSIGNED",
+                    comment:       row[LIVE_COL.REMARKS]          || "",
+                    assignedVendor:row[LIVE_COL.ASSIGNED_VENDOR]  || "",
+                    lastUpdated:   row[LIVE_COL.DATE_ASSIGNED]    || ""
                 },
                 sla: {
                     dueDate: slaDate,
                     breached: breached,
                     daysRemaining: daysRemaining
                 },
-                state:       row[LIVE_COL.STATUS]       || "",
-                approvedBy:  row[LIVE_COL.ACTION_BY]    || "",
-                lastUpdated: row[LIVE_COL.LAST_UPDATED] || ""
+                state:       row[LIVE_COL.STATUS]        || "",
+                approvedBy:  "",
+                lastUpdated: row[LIVE_COL.DATE_ASSIGNED] || ""
             });
         }
 
@@ -841,11 +853,9 @@ function updateBuilderStatus(ticketId, status, comment, vendor, closureDate) {
             const rowNum = i + 1;
             const now = new Date();
 
-            sheet.getRange(rowNum, LIVE_COL.BUILDER_STATUS  + 1).setValue(status || "");
-            sheet.getRange(rowNum, LIVE_COL.BUILDER_COMMENT + 1).setValue(comment || "");
+            sheet.getRange(rowNum, LIVE_COL.STATUS         + 1).setValue(status || "");
+            sheet.getRange(rowNum, LIVE_COL.REMARKS        + 1).setValue(comment || "");
             sheet.getRange(rowNum, LIVE_COL.ASSIGNED_VENDOR + 1).setValue(vendor || "");
-            sheet.getRange(rowNum, LIVE_COL.STATUS          + 1).setValue(status || "");
-            sheet.getRange(rowNum, LIVE_COL.LAST_UPDATED    + 1).setValue(now);
             if (closureDate) {
                 sheet.getRange(rowNum, LIVE_COL.CLOSURE_DATE + 1).setValue(new Date(closureDate));
             }
@@ -889,8 +899,6 @@ function closeIssue(ticketId, reason, userEmail) {
             while (base.length < LIVE_WIDTH) base.push("");
             base[LIVE_COL.STATUS]       = "CLOSED";
             base[LIVE_COL.CLOSURE_DATE] = closedDate;
-            base[LIVE_COL.ACTION_BY]    = userEmail || "";
-            base[LIVE_COL.LAST_UPDATED] = closedDate;
             const closedRow = base.concat([reason || "", closedDate, userEmail || "", resolutionTime]);
             closedSheet.appendRow(closedRow);
             liveSheet.deleteRow(i + 1);
@@ -928,12 +936,10 @@ function reopenIssue(ticketId, reason, userEmail) {
             const reopenedRow = row.slice(0, LIVE_WIDTH);
             while (reopenedRow.length < LIVE_WIDTH) reopenedRow.push("");
             const now = new Date();
-            reopenedRow[LIVE_COL.BUILDER_STATUS] = "ASSIGNED";
+            reopenedRow[LIVE_COL.STATUS]         = "REOPENED";
             reopenedRow[LIVE_COL.REOPENED_FLAG]  = "YES";
             reopenedRow[LIVE_COL.REMARKS]        = reason || reopenedRow[LIVE_COL.REMARKS] || "";
-            reopenedRow[LIVE_COL.STATUS]         = "REOPENED";
-            reopenedRow[LIVE_COL.ACTION_BY]      = userEmail || "";
-            reopenedRow[LIVE_COL.LAST_UPDATED]   = now;
+            reopenedRow[LIVE_COL.DATE_ASSIGNED]  = now;
 
             liveSheet.appendRow(reopenedRow);
             closedSheet.deleteRow(i + 1);
@@ -979,7 +985,7 @@ function getIssuesWithStatus() {
         const liveMap    = {};
         const closedMap  = {};
 
-        for (let i = 1; i < pendingData.length; i++) {
+        for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
             const r = pendingData[i];
             pendingMap[sig(r[PENDING_COL.RESIDENT], r[PENDING_COL.TOWER], r[PENDING_COL.FLAT])] = {
                 status:   r[PENDING_COL.STATE] || "PENDING_APPROVAL",
@@ -1113,13 +1119,13 @@ function getSubmittedIssues() {
 
         const responses = [];
         const seen = {};
-        for (let i = 1; i < pendingData.length; i++) {
+        for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
             const m = mapRow(pendingData[i]);
             if (!m.ticketId) continue;
             seen[m.ticketId] = true;
             responses.push(m);
         }
-        for (let i = 1; i < archiveData.length; i++) {
+        for (let i = firstDataRow_(archiveData); i < archiveData.length; i++) {
             const m = mapRow(archiveData[i]);
             if (!m.ticketId) continue;
             if (seen[m.ticketId]) continue;
@@ -1179,7 +1185,7 @@ function getDashboardMetrics() {
         const categoryBreakdown = {};
         const towerBreakdown    = {};
 
-        for (let i = 1; i < pendingData.length; i++) {
+        for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
             const r = pendingData[i];
             if ((r[PENDING_COL.STATE] || "PENDING_APPROVAL") !== "PENDING_APPROVAL") continue;
             totalPending++;
@@ -1194,7 +1200,7 @@ function getDashboardMetrics() {
             const category = String(r[LIVE_COL.CATEGORY] || "Uncategorised");
             const tower    = String(r[LIVE_COL.TOWER]    || "Unknown");
             const sla      = r[LIVE_COL.SLA_DATE] ? new Date(r[LIVE_COL.SLA_DATE]) : null;
-            const updated  = r[LIVE_COL.LAST_UPDATED] ? new Date(r[LIVE_COL.LAST_UPDATED]) : null;
+            const updated  = r[LIVE_COL.DATE_ASSIGNED] ? new Date(r[LIVE_COL.DATE_ASSIGNED]) : null;
 
             if (sla && today > sla) slaBreaches++;
             if (updated && (today - updated) > 7 * 24 * 60 * 60 * 1000) agingIssues++;
