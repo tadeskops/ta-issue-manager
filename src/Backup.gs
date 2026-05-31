@@ -184,31 +184,32 @@ function backup_clearDataRows_(sheet) {
     }
 }
 
-// Map one Form Responses row to a LIVE_ISSUES row.
-function backup_formRowToLive_(formRow, ticketId, actorEmail) {
-    const row = newRow_(LIVE_WIDTH);
+// Map one Form Responses row to a PENDING_REVIEW row.
+function backup_formRowToPending_(formRow, ticketId, actorEmail) {
+    const row = newRow_(PENDING_WIDTH);
     const now = new Date();
-    const sev = formRow[FORM_COL.SEVERITY] || "";
-    row[LIVE_COL.TICKET_ID]     = ticketId;
-    row[LIVE_COL.DATE_REPORTED] = formRow[FORM_COL.TIMESTAMP] || now;
-    row[LIVE_COL.RESIDENT]      = formRow[FORM_COL.RESIDENT]    || "";
-    row[LIVE_COL.FLAT]          = formRow[FORM_COL.FLAT]        || "";
-    row[LIVE_COL.CATEGORY]      = formRow[FORM_COL.CATEGORY]    || "";
-    row[LIVE_COL.SEVERITY]      = sev;
-    row[LIVE_COL.TOWER]         = formRow[FORM_COL.TOWER]       || "";
-    row[LIVE_COL.SUBCATEGORY]   = formRow[FORM_COL.SUBCATEGORY] || "";
-    row[LIVE_COL.PHOTO]         = formRow[FORM_COL.PHOTO]       || "";
-    row[LIVE_COL.DESCRIPTION]   = formRow[FORM_COL.LOCATION]    || "";
-    row[LIVE_COL.BUILDER_STATUS]= "ASSIGNED";
-    row[LIVE_COL.SLA_DATE]      = calculateSLADate(sev, formRow[FORM_COL.TIMESTAMP] || now);
-    row[LIVE_COL.STATUS]        = "APPROVED";
-    row[LIVE_COL.ACTION_BY]     = actorEmail || "";
-    row[LIVE_COL.LAST_UPDATED]  = now;
+    row[PENDING_COL.TICKET_ID]        = ticketId;
+    row[PENDING_COL.DATE_REPORTED]    = formRow[FORM_COL.TIMESTAMP]   || now;
+    row[PENDING_COL.RESIDENT]         = formRow[FORM_COL.RESIDENT]    || "";
+    row[PENDING_COL.FLAT]             = formRow[FORM_COL.FLAT]        || "";
+    row[PENDING_COL.CATEGORY]         = formRow[FORM_COL.CATEGORY]    || "";
+    row[PENDING_COL.SUBCATEGORY]      = formRow[FORM_COL.SUBCATEGORY] || "";
+    row[PENDING_COL.SEVERITY]         = formRow[FORM_COL.SEVERITY]    || "";
+    row[PENDING_COL.TOWER]            = formRow[FORM_COL.TOWER]       || "";
+    row[PENDING_COL.PHOTO]            = formRow[FORM_COL.PHOTO]       || "";
+    row[PENDING_COL.DESCRIPTION]      = formRow[FORM_COL.LOCATION]    || "";
+    row[PENDING_COL.SUBMITTED_BY]     = actorEmail || "";
+    row[PENDING_COL.ACTION_DATE]      = "";
+    row[PENDING_COL.ACTION_BY]        = "";
+    row[PENDING_COL.REJECTION_REASON] = "";
+    row[PENDING_COL.STATE]            = "SUBMITTED";
     return row;
 }
 
 // Public: backup spreadsheet, then wipe PENDING_REVIEW + LIVE_ISSUES and
-// repopulate LIVE_ISSUES from every row in "Form Responses 1".
+// repopulate PENDING_REVIEW from every row in "Form Responses 1" with
+// state="SUBMITTED". LIVE_ISSUES stays empty - rows only land there when
+// the committee accepts a pending issue.
 function backupAndResetFromForm() {
     Logger.log("########## backupAndResetFromForm START ##########");
     const backup = backupSheetToGit("pre-reset");
@@ -225,8 +226,8 @@ function backupAndResetFromForm() {
         const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
         Logger.log("[reset] sheets resolved (form/pending/live)");
-        const liveHeader = liveSheet.getRange(1, 1, 1, liveSheet.getLastColumn()).getValues()[0];
-        Logger.log("[reset] LIVE_ISSUES header (" + liveHeader.length + " cols): " + JSON.stringify(liveHeader));
+        const pendingHeader = pendingSheet.getRange(1, 1, 1, pendingSheet.getLastColumn()).getValues()[0];
+        Logger.log("[reset] PENDING_REVIEW header (" + pendingHeader.length + " cols): " + JSON.stringify(pendingHeader));
 
         const formData = formSheet.getDataRange().getValues();
         Logger.log("[reset] Form Responses rows (incl. header): " + formData.length);
@@ -256,18 +257,15 @@ function backupAndResetFromForm() {
         const pad5 = function (n) { return String(n).padStart(5, "0"); };
         for (let i = 1; i < formData.length; i++) {
             const ticketId = "TKT-" + pad5(i);
-            rows.push(backup_formRowToLive_(formData[i], ticketId, actor));
+            rows.push(backup_formRowToPending_(formData[i], ticketId, actor));
         }
-        Logger.log("[reset] mapped " + rows.length + " rows from form");
+        Logger.log("[reset] mapped " + rows.length + " rows from form -> PENDING_REVIEW");
         if (rows.length) {
-            const writeRange = liveSheet.getRange(2, 1, rows.length, LIVE_WIDTH);
-            // Defensively strip any validations still attached to the write
-            // range. Sheet-wide column validations can extend past the prior
-            // last-row, so backup_clearDataRows_ alone is not enough.
+            const writeRange = pendingSheet.getRange(2, 1, rows.length, PENDING_WIDTH);
             writeRange.clearDataValidations();
-            Logger.log("[reset] cleared data validations on write range (" + rows.length + " x " + LIVE_WIDTH + ")");
+            Logger.log("[reset] cleared data validations on write range (" + rows.length + " x " + PENDING_WIDTH + ")");
             writeRange.setValues(rows);
-            Logger.log("[reset] wrote " + rows.length + " rows into LIVE_ISSUES");
+            Logger.log("[reset] wrote " + rows.length + " rows into PENDING_REVIEW with state=SUBMITTED");
         }
         Logger.log("########## backupAndResetFromForm END (success, inserted=" + rows.length + ") ##########");
         return {
@@ -276,7 +274,7 @@ function backupAndResetFromForm() {
                 backup: backup.data,
                 inserted: rows.length,
                 message: "Backed up, reset PENDING_REVIEW + LIVE_ISSUES, " +
-                         "and inserted " + rows.length + " rows into LIVE_ISSUES."
+                         "and inserted " + rows.length + " rows into PENDING_REVIEW (state=SUBMITTED)."
             }
         };
     } catch (err) {
