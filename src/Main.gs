@@ -689,12 +689,16 @@ function approveIssue(ticketId, userEmail, severity) {
             live[LIVE_COL.ACTION_BY]      = userEmail || "";
             live[LIVE_COL.LAST_UPDATED]   = now;
 
-            // Persist committee-chosen severity back on the pending row as
-            // well so audit views see the same value.
-            pendingSheet.getRange(i + 1, PENDING_COL.SEVERITY + 1).setValue(severity);
+            // Mark the PENDING row as APPROVED instead of deleting it,
+            // so the public view (which reads PENDING_REVIEW) still shows
+            // this ticket with its updated status.
+            const pendingRowNum = i + 1;
+            pendingSheet.getRange(pendingRowNum, PENDING_COL.SEVERITY + 1).setValue(severity);
+            pendingSheet.getRange(pendingRowNum, PENDING_COL.ACTION_DATE + 1).setValue(now);
+            pendingSheet.getRange(pendingRowNum, PENDING_COL.ACTION_BY + 1).setValue(userEmail || "");
+            pendingSheet.getRange(pendingRowNum, PENDING_COL.STATE + 1).setValue("APPROVED");
 
             liveSheet.appendRow(live);
-            pendingSheet.deleteRow(i + 1);
 
             return {
                 success: true,
@@ -716,20 +720,30 @@ function approveIssue(ticketId, userEmail, severity) {
     }
 }
 
-// Reject Issue: mark PENDING row as REJECTED (kept for audit).
+// Reject Issue: move PENDING row to ARCHIVES_ISSUES with state=REJECTED,
+// then delete from PENDING_REVIEW. The archive remains visible on the
+// public submitted-issues view.
 function rejectIssue(ticketId, reason, userEmail) {
     try {
         const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
+        const archiveSheet = getSheet(SHEETS.ARCHIVES_ISSUES);
         const data = pendingSheet.getDataRange().getValues();
 
         for (let i = 1; i < data.length; i++) {
             if (data[i][PENDING_COL.TICKET_ID] !== ticketId) continue;
             const rowNum = i + 1;
             const now = new Date();
-            pendingSheet.getRange(rowNum, PENDING_COL.ACTION_DATE + 1).setValue(now);
-            pendingSheet.getRange(rowNum, PENDING_COL.ACTION_BY + 1).setValue(userEmail || "");
-            pendingSheet.getRange(rowNum, PENDING_COL.REJECTION_REASON + 1).setValue(reason || "");
-            pendingSheet.getRange(rowNum, PENDING_COL.STATE + 1).setValue("REJECTED");
+
+            // Build the archive row from a copy of the pending row so any
+            // sheet-specific extra columns are preserved by position.
+            const archived = data[i].slice();
+            while (archived.length < PENDING_WIDTH) archived.push("");
+            archived[PENDING_COL.ACTION_DATE]      = now;
+            archived[PENDING_COL.ACTION_BY]        = userEmail || "";
+            archived[PENDING_COL.REJECTION_REASON] = reason || "";
+            archived[PENDING_COL.STATE]            = "REJECTED";
+            archiveSheet.appendRow(archived);
+            pendingSheet.deleteRow(rowNum);
 
             return {
                 success: true,
@@ -1034,28 +1048,45 @@ function getIssuesWithStatus() {
 // truth for the read-only "Submitted Issues" page.
 function getSubmittedIssues() {
     try {
-        // View page reads ONLY from PENDING_REVIEW. LIVE_ISSUES is the
-        // builder's workspace and must not leak into the public viewer.
+        // Public viewer source = PENDING_REVIEW (all states except REJECTED,
+        // which lives in ARCHIVES_ISSUES) + ARCHIVES_ISSUES (rejected ones).
+        // For tickets whose state has been moved to APPROVED, overlay the
+        // current builder status from LIVE_ISSUES so committee/builder
+        // updates are reflected here.
         const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
-        const pendingData = pendingSheet.getDataRange().getValues();
+        const archiveSheet = getSheet(SHEETS.ARCHIVES_ISSUES);
+        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
 
-        // Coerce all values to primitives. google.script.run silently
-        // returns null when payloads contain mixed Date/empty-string columns
-        // across rows (the rhino serializer chokes on the inconsistency).
+        const pendingData = pendingSheet.getDataRange().getValues();
+        const archiveData = archiveSheet.getDataRange().getValues();
+        const liveData    = liveSheet.getDataRange().getValues();
+
+        const liveByTicket = {};
+        for (let i = 1; i < liveData.length; i++) {
+            const r = liveData[i];
+            const tid = r[LIVE_COL.TICKET_ID];
+            if (!tid) continue;
+            liveByTicket[String(tid)] = {
+                status:   r[LIVE_COL.BUILDER_STATUS] || r[LIVE_COL.STATUS] || "ASSIGNED",
+                severity: r[LIVE_COL.SEVERITY] || ""
+            };
+        }
+
         const toIso = function (v) {
             if (!v) return "";
             if (v instanceof Date) return v.toISOString();
             return String(v);
         };
 
-        const responses = [];
-        for (let i = 1; i < pendingData.length; i++) {
-            const row = pendingData[i];
+        const mapRow = function (row) {
             const tid = String(row[PENDING_COL.TICKET_ID] || "");
             const state = String(row[PENDING_COL.STATE] || "PENDING_APPROVAL");
-            const severity = row[PENDING_COL.SEVERITY] || "";
-
-            responses.push({
+            const live = liveByTicket[tid];
+            // Status displayed to viewers: builder status when ticket has
+            // been promoted to LIVE, otherwise the pending state.
+            const status = (state === "APPROVED" && live) ? String(live.status) : state;
+            const severity = (live && live.severity) || row[PENDING_COL.SEVERITY] || "";
+            return {
                 ticketId: tid,
                 dateReported: toIso(row[PENDING_COL.DATE_REPORTED]),
                 resident: {
@@ -1073,11 +1104,26 @@ function getSubmittedIssues() {
                     severity:    String(severity),
                     description: String(row[PENDING_COL.DESCRIPTION] || "")
                 },
-                status: state,
+                status: String(status),
                 state:  state,
                 rejectionReason: String(row[PENDING_COL.REJECTION_REASON] || ""),
                 attachments: splitPhotoLinks_(row[PENDING_COL.PHOTO]).map(String)
-            });
+            };
+        };
+
+        const responses = [];
+        const seen = {};
+        for (let i = 1; i < pendingData.length; i++) {
+            const m = mapRow(pendingData[i]);
+            if (!m.ticketId) continue;
+            seen[m.ticketId] = true;
+            responses.push(m);
+        }
+        for (let i = 1; i < archiveData.length; i++) {
+            const m = mapRow(archiveData[i]);
+            if (!m.ticketId) continue;
+            if (seen[m.ticketId]) continue;
+            responses.push(m);
         }
 
         return { success: true, responses: responses, count: responses.length, error: null };
