@@ -53,7 +53,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-4">
-                <button onclick="window.location.href='index.html'" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30">
+                <button onclick="window.location.href = (window.IRP_WEBAPP_URL || '?');" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30">
                     <i class="fas fa-arrow-left mr-2"></i>Back to Login
                 </button>
             </div>
@@ -154,18 +154,14 @@
 
     <?!= include('src/partials/api') ?>
     <script>
-        // === Auth (server-trusted via Google sign-in) ===
-        (async function ensureAuthorized() {
+        // === Auth (read-only view; anonymous allowed) ===
+        (async function captureUser() {
             try {
                 const u = await API.whoAmI();
                 window.IRP_USER = u;
-                if (!u.email || u.role === 'UNKNOWN') {
-                    location.href = 'index.html';
-                    return;
-                }
             } catch (e) {
-                console.error('Auth check failed:', e);
-                location.href = 'index.html';
+                console.warn('whoAmI failed (continuing as anonymous):', e);
+                window.IRP_USER = { email: '', role: 'UNKNOWN' };
             }
         })();
 
