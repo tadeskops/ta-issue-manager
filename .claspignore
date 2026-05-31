@@ -1,5 +1,11 @@
-# Anything not listed below is pushed to Apps Script.
-# Whitelist src/ + the manifest; ignore everything else.
-**
-!appsscript.json
-!src/**
+# Whitelist for `clasp push` (gitignore semantics, clasp 3.x).
+#
+# Root-anchored `/*` only ignores top-level entries, so we can re-include
+# the `src/` directory without violating gitignore's "parent dir cannot
+# be re-included" rule. Everything inside `src/` is pushed by default.
+# The prior pattern (`**` + `!src/**`) silently excluded everything
+# under clasp 3.x and made CI fail with "Pushed 0 files".
+
+/*
+!/appsscript.json
+!/src
