@@ -39,16 +39,28 @@ jobs:
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::CLASPRC_JSON secret is empty or unset. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
-          node -e "JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json','utf8')); console.log('.clasprc.json: valid JSON')"
+          BYTES=$(wc -c < "$HOME/.clasprc.json")
+          echo "Wrote $HOME/.clasprc.json ($BYTES bytes)"
+          node -e "try { const j = JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json','utf8')); console.log('.clasprc.json: valid JSON, top-level keys =', Object.keys(j).join(',')); } catch(e) { console.error('::error::Invalid JSON in .clasprc.json — secret is corrupted or truncated:', e.message); process.exit(1); }"
 
       - name: Write project link from secret
         env:
           CLASP_JSON: ${{ secrets.CLASP_JSON }}
         run: |
+          if [ -z "$CLASP_JSON" ]; then
+            echo "::error::CLASP_JSON secret is empty or unset."
+            exit 1
+          fi
           printf '%s' "$CLASP_JSON" > .clasp.json
-          node -e "JSON.parse(require('fs').readFileSync('.clasp.json','utf8')); console.log('.clasp.json: valid JSON')"
+          BYTES=$(wc -c < .clasp.json)
+          echo "Wrote .clasp.json ($BYTES bytes)"
+          node -e "try { const j = JSON.parse(require('fs').readFileSync('.clasp.json','utf8')); console.log('.clasp.json: valid JSON, scriptId =', (j.scriptId||'').slice(0,8)+'…'); } catch(e) { console.error('::error::Invalid JSON in .clasp.json:', e.message); process.exit(1); }"
 
       - name: clasp push -f
         run: clasp push -f
