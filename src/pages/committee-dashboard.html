@@ -597,18 +597,24 @@
 
                 showToast('✓ Data refreshed!', 'success');
             } catch (error) {
-                console.warn('API Error, loading mock data:', error.message);
-                // Fallback to mock data for local testing
-                pendingIssues = mockPendingIssues.map(normalizeIssueData);
-                activeIssues = mockActiveIssues.map(normalizeIssueData);
+                // Surface the real error instead of silently swapping in mock
+                // data — mock data hides backend/permission failures and makes
+                // it look like the dashboard "works" with fake content.
+                console.error('Committee dashboard load failed:', error);
+                pendingIssues = [];
+                activeIssues = [];
                 closedIssues = [];
-
                 renderPending();
                 renderActive();
                 renderClosed();
                 updateKPIs({ totalClosed: 0 });
 
-                showToast('📋 Using mock data (API unavailable)', 'success');
+                const msg = (error && error.message) || String(error);
+                let hint = '';
+                if (/permission|not have access|denied|openById/i.test(msg)) {
+                    hint = ' — your Google account may not have access to the spreadsheet. Ask the admin to share the issues sheet with you (Viewer is enough).';
+                }
+                showToast('Could not load issues: ' + msg + hint, 'error');
             }
         }
 
