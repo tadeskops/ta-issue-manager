@@ -82,7 +82,7 @@ jobs:
           echo "Final .clasp.json size: $BYTES bytes"
           node -e "try { const j = JSON.parse(require('fs').readFileSync('.clasp.json','utf8')); console.log('.clasp.json: valid JSON, scriptId =', (j.scriptId||'').slice(0,8)+'…'); } catch(e) { console.error('::error::Invalid JSON in .clasp.json:', e.message); process.exit(1); }"
 
-      - name: clasp push -f
+      - name: clasp push -f (public webapp config)
         run: |
           OUTPUT=$(clasp push -f 2>&1)
           echo "$OUTPUT"
@@ -91,7 +91,7 @@ jobs:
             exit 1
           fi
 
-      - name: Publish new web-app deployment
+      - name: Publish new web-app deployment (public, anonymous)
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true)
         run: |
           DESC="Auto-deploy $(date -u +'%Y-%m-%d %H:%M UTC') ${{ github.sha }}"
@@ -101,9 +101,36 @@ jobs:
           else
             clasp create-deployment --description "$DESC"
           fi
-          if [ -n "${{ secrets.DEPLOYMENT_ID_SECURE }}" ]; then
-            echo "Updating secure (sign-in) deployment ${{ secrets.DEPLOYMENT_ID_SECURE }}"
-            clasp update-deployment "${{ secrets.DEPLOYMENT_ID_SECURE }}" --description "$DESC"
-          else
-            echo "DEPLOYMENT_ID_SECURE secret not set; skipping secure deployment update."
-          fi
+
+      # The secure deployment must run as USER_ACCESSING with ANYONE_WITH_GOOGLE_ACCOUNT
+      # access so Google forces a real sign-in. appsscript.json is shared by the
+      # whole project, so we temporarily rewrite its webapp block, push that as a
+      # second version, then bump the secure deployment to it. The committed
+      # appsscript.json (anonymous defaults) is left intact for future runs.
+      - name: Publish secure deployment (user accessing, sign-in required)
+        if: (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true)) && env.SECURE_ID != ''
+        env:
+          SECURE_ID: ${{ secrets.DEPLOYMENT_ID_SECURE }}
+        run: |
+          DESC="Auto-deploy $(date -u +'%Y-%m-%d %H:%M UTC') ${{ github.sha }} [secure]"
+          echo "Patching appsscript.json for secure deployment (USER_ACCESSING / ANYONE_WITH_GOOGLE_ACCOUNT)…"
+          node -e "
+            const fs = require('fs');
+            const j = JSON.parse(fs.readFileSync('appsscript.json','utf8'));
+            j.webapp = { executeAs: 'USER_ACCESSING', access: 'ANYONE_WITH_GOOGLE_ACCOUNT' };
+            fs.writeFileSync('appsscript.json', JSON.stringify(j, null, 2));
+            console.log('Patched webapp block:', JSON.stringify(j.webapp));
+          "
+          clasp push -f
+          echo "Updating secure deployment ${SECURE_ID}"
+          clasp update-deployment "${SECURE_ID}" --description "$DESC"
+          # Restore the committed (public/anonymous) manifest so subsequent
+          # workflow steps and any later debugging see the repo's canonical state.
+          git checkout -- appsscript.json
+          echo "Restored appsscript.json to repo defaults."
+
+      - name: Note when secure deployment is unconfigured
+        if: env.SECURE_ID == '' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true))
+        env:
+          SECURE_ID: ${{ secrets.DEPLOYMENT_ID_SECURE }}
+        run: echo "DEPLOYMENT_ID_SECURE secret not set; skipping secure deployment update."
