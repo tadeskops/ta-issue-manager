@@ -87,7 +87,7 @@
                     <table class="w-full text-sm">
                         <thead class="bg-gray-100 border-b">
                             <tr>
-                                <th class="px-4 py-2 text-left">Ticket ID</th>
+                                <th class="px-4 py-2 text-left">Issue</th>
                                 <th class="px-4 py-2 text-left">Days Old</th>
                                 <th class="px-4 py-2 text-left">Status</th>
                             </tr>
@@ -106,7 +106,7 @@
                     <table class="w-full text-sm">
                         <thead class="bg-gray-100 border-b">
                             <tr>
-                                <th class="px-4 py-2 text-left">Ticket ID</th>
+                                <th class="px-4 py-2 text-left">Issue</th>
                                 <th class="px-4 py-2 text-left">Days Overdue</th>
                                 <th class="px-4 py-2 text-left">Category</th>
                             </tr>
@@ -255,7 +255,7 @@
                 ? '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">No aging issues</td></tr>'
                 : agingIssues.map(i => {
                     const daysOld = Math.floor((new Date() - new Date(i.lastUpdated)) / (1000 * 60 * 60 * 24));
-                    return `<tr class="border-b"><td class="px-4 py-2">${i.ticketId}</td><td class="px-4 py-2">${daysOld}</td><td class="px-4 py-2">${i.builder.status}</td></tr>`;
+                    return `<tr class="border-b"><td class="px-4 py-2" title="${i.ticketId}">${window.briefTitle(i)}</td><td class="px-4 py-2">${daysOld}</td><td class="px-4 py-2">${i.builder.status}</td></tr>`;
                 }).join('');
             document.getElementById('agingTable').innerHTML = agingHtml;
 
@@ -265,7 +265,7 @@
                 ? '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">No SLA breaches</td></tr>'
                 : slaIssues.map(i => {
                     const daysOverdue = Math.abs(i.sla.daysRemaining);
-                    return `<tr class="border-b bg-red-50"><td class="px-4 py-2 font-bold">${i.ticketId}</td><td class="px-4 py-2 text-red-600 font-bold">${daysOverdue}</td><td class="px-4 py-2">${i.issue.category}</td></tr>`;
+                    return `<tr class="border-b bg-red-50"><td class="px-4 py-2 font-bold" title="${i.ticketId}">${window.briefTitle(i)}</td><td class="px-4 py-2 text-red-600 font-bold">${daysOverdue}</td><td class="px-4 py-2">${i.issue.category}</td></tr>`;
                 }).join('');
             document.getElementById('slaTable').innerHTML = slaHtml;
         }

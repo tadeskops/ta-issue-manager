@@ -93,4 +93,26 @@ const API = {
 if (typeof window !== "undefined" && !window.IRP_USER) {
     window.IRP_USER = { email: "", role: "UNKNOWN" };
 }
+
+// Shared brief title for issue rows/cards across all pages. Prefers the
+// resident-supplied description (trimmed to one short line); falls back to
+// "Category – Subcategory", then ticket id. Keep tickets in detail views.
+window.briefTitle = function (issue) {
+    if (!issue) return "";
+    var raw = (issue.issueTitle ||
+               (issue.issue && issue.issue.description) ||
+               issue.description ||
+               "").toString().trim();
+    if (raw) {
+        var firstLine = raw.split(/\r?\n/)[0].trim();
+        var firstSentence = firstLine.split(/(?<=[.!?])\s+/)[0];
+        var pick = (firstSentence && firstSentence.length <= 80) ? firstSentence : firstLine;
+        if (pick.length > 80) pick = pick.slice(0, 77).replace(/\s+\S*$/, "") + "…";
+        return pick;
+    }
+    var cat = (issue.issue && issue.issue.category) || issue.category || "";
+    var sub = (issue.issue && issue.issue.subcategory) || issue.subcategory || "";
+    if (cat || sub) return (cat || "Issue") + (sub ? " \u2013 " + sub : "");
+    return issue.ticketId || "Issue";
+};
 </script>

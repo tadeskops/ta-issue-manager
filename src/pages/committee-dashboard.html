@@ -194,7 +194,7 @@
                     <table class="w-full">
                         <thead>
                             <tr class="border-b gold-border bg-slate-800/30">
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">ID</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Issue</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Location</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
@@ -230,7 +230,7 @@
                     <table class="w-full">
                         <thead>
                             <tr class="border-b gold-border bg-slate-800/30">
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">ID</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Issue</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Tower</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
@@ -261,7 +261,7 @@
                     <table class="w-full">
                         <thead>
                             <tr class="border-b gold-border bg-slate-800/30">
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">ID</th>
+                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Issue</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Category</th>
                                 <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Closed Date</th>
@@ -640,8 +640,8 @@
                         <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
                 `;
                 const idCell = isRejected
-                    ? `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors">${issue.ticketId}</button> <span class="ml-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/60 text-red-200 border border-red-700/50">REJECTED</span>`
-                    : `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors">${issue.ticketId}</button>`;
+                    ? `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button> <span class="ml-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/60 text-red-200 border border-red-700/50">REJECTED</span>`
+                    : `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button>`;
                 return `
                 <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors issue-row ${rowClass}" id="row-${issue.ticketId}">
                     <td class="p-4 font-bold cursor-pointer">${idCell}</td>
@@ -688,7 +688,7 @@
                 const rowClass = issue.sla.breached ? 'bg-red-950/30 border-red-600/30' : '';
                 return `
                     <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors ${rowClass} issue-row" id="row-${issue.ticketId}">
-                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'active')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors">${issue.ticketId}</button></td>
+                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'active')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button></td>
                         <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
                         <td class="p-4 text-slate-300 text-sm">${issue.location.tower}</td>
                         <td class="p-4 hidden md:table-cell text-slate-300 text-sm">${issue.issue.category}</td>

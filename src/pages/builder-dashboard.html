@@ -145,7 +145,7 @@
                 <table class="w-full">
                     <thead class="bg-slate-800/30">
                         <tr class="border-b gold-border">
-                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Ticket ID</th>
+                            <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Issue</th>
                             <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
                             <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Tower/Flat</th>
                             <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
@@ -387,8 +387,8 @@
                 
                 return `
                     <tr class="border-b issue-row ${rowClass}" id="row-${issue.ticketId}" style="border-left: 3px solid transparent; transition: border-color 0.2s;">
-                        <td class="border p-3 font-bold text-blue-600 cursor-pointer hover:underline" onclick="selectBuilderRow('${issue.ticketId}'); openDetailsModal('${issue.ticketId}')">
-                            ${issue.ticketId}
+                        <td class="border p-3 font-bold text-blue-600 cursor-pointer hover:underline" onclick="selectBuilderRow('${issue.ticketId}'); openDetailsModal('${issue.ticketId}')" title="${issue.ticketId}">
+                            ${window.briefTitle(issue)}
                         </td>
                         <td class="border p-3 hidden sm:table-cell text-sm">${issue.resident.name}</td>
                         <td class="border p-3 text-sm">${issue.location.tower}/${issue.location.flat}</td>
