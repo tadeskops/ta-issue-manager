@@ -210,17 +210,22 @@
             return;
         }
 
-        // Load master lists (CATEGORY_MASTER).
+        // Load master lists (CATEGORY_MASTER). Fallback lists below mirror the
+        // canonical Google Form (TA Issue Reporting Portal) so the dropdowns
+        // stay in sync if the API ever fails.
+        const FALLBACK_TOWERS        = ['Tower A','Tower B','Tower C','Common Area'];
+        const FALLBACK_CATEGORIES    = ['Civil','Plumbing','Electrical','Fire Safety','Lift','Security','Common Area','Amenities','Miscellaneous'];
+        const FALLBACK_SUBCATEGORIES = ['Crack','Paint','Waterproofing','Tile Damage','Leakage','Drainage','Water Pressure','MCB','Earthing','Switch Issue','Refuge Area','Door','Intercom','CCTV','Access Control','Lobby','Parking','Gym','Pool','Fittings','Equipments','Other'];
         try {
             const master = await API.getCategoryMaster();
-            fillSelect('tower',       master.towers       || ['Tower A','Tower B','Tower C','Common Area']);
-            fillSelect('category',    master.categories   || []);
-            fillSelect('subCategory', master.subcategories|| []);
+            fillSelect('tower',       master.towers        || FALLBACK_TOWERS);
+            fillSelect('category',    master.categories    || FALLBACK_CATEGORIES);
+            fillSelect('subCategory', master.subcategories || FALLBACK_SUBCATEGORIES);
         } catch (e) {
             console.warn('Category master unavailable, using fallback:', e.message);
-            fillSelect('tower',       ['Tower A','Tower B','Tower C','Common Area']);
-            fillSelect('category',    ['Civil','Plumbing','Electrical','Fire Safety','Lift','Security','Amenities','Common Area','Documentation']);
-            fillSelect('subCategory', []);
+            fillSelect('tower',       FALLBACK_TOWERS);
+            fillSelect('category',    FALLBACK_CATEGORIES);
+            fillSelect('subCategory', FALLBACK_SUBCATEGORIES);
         }
 
         // Restore draft.
