@@ -202,7 +202,7 @@ function backup_formRowToPending_(formRow, ticketId, actorEmail) {
     row[PENDING_COL.ACTION_DATE]      = "";
     row[PENDING_COL.ACTION_BY]        = "";
     row[PENDING_COL.REJECTION_REASON] = "";
-    row[PENDING_COL.STATE]            = "SUBMITTED";
+    row[PENDING_COL.STATE]            = "PENDING_APPROVAL";
     return row;
 }
 
@@ -265,7 +265,7 @@ function backupAndResetFromForm() {
             writeRange.clearDataValidations();
             Logger.log("[reset] cleared data validations on write range (" + rows.length + " x " + PENDING_WIDTH + ")");
             writeRange.setValues(rows);
-            Logger.log("[reset] wrote " + rows.length + " rows into PENDING_REVIEW with state=SUBMITTED");
+            Logger.log("[reset] wrote " + rows.length + " rows into PENDING_REVIEW with state=PENDING_APPROVAL");
         }
         Logger.log("########## backupAndResetFromForm END (success, inserted=" + rows.length + ") ##########");
         return {
@@ -274,7 +274,7 @@ function backupAndResetFromForm() {
                 backup: backup.data,
                 inserted: rows.length,
                 message: "Backed up, reset PENDING_REVIEW + LIVE_ISSUES, " +
-                         "and inserted " + rows.length + " rows into PENDING_REVIEW (state=SUBMITTED)."
+                         "and inserted " + rows.length + " rows into PENDING_REVIEW (state=PENDING_APPROVAL)."
             }
         };
     } catch (err) {
