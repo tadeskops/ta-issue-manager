@@ -183,10 +183,14 @@
         font: 10.5px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
         color: #cbd5e1;
         opacity: 0.55;
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
         transition: opacity 180ms ease, transform 180ms ease,
                     background 180ms ease, border-color 180ms ease,
                     box-shadow 180ms ease;
     }
+    .theme-switcher.is-dragging { cursor: grabbing; transition: none; opacity: 1; }
     .theme-switcher:hover,
     .theme-switcher:focus-within {
         opacity: 1;
@@ -197,6 +201,22 @@
             0 6px 20px rgba(0,0,0,0.45);
         transform: translateX(-50%) translateY(1px) scale(1.04);
     }
+    /* Once user has dragged it to a custom spot, disable the centering transform. */
+    .theme-switcher.is-placed,
+    .theme-switcher.is-placed:hover,
+    .theme-switcher.is-placed:focus-within { transform: none; }
+    .theme-switcher .ts-grip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 10px;
+        height: 14px;
+        opacity: 0.5;
+        cursor: grab;
+        color: currentColor;
+    }
+    .theme-switcher .ts-grip svg { width: 8px; height: 12px; display: block; }
+    .theme-switcher.is-dragging .ts-grip { cursor: grabbing; }
     /* Switcher styling on light/medium: warm card look */
     :is(html[data-theme="light"], html[data-theme="medium"]) .theme-switcher {
         background: color-mix(in srgb, var(--t-card-1) 60%, transparent);
@@ -233,18 +253,35 @@
     .theme-switcher button[data-theme-value="medium"] { background: linear-gradient(135deg,#ede2c8,#d9c9a3); }
 
     @media (max-width: 640px) {
-        /* Stay top-center on mobile too, just slightly smaller. */
+        /* Mobile: dock to right edge, vertical strip, centered vertically. */
         .theme-switcher {
-            top: 6px;
-            padding: 4px 8px;
-            opacity: 0.65;
+            top: 50%;
+            left: auto;
+            right: 6px;
+            transform: translateY(-50%);
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px 5px;
+            border-radius: 14px;
+            opacity: 0.55;
         }
         .theme-switcher .ts-label { display: none; }
+        .theme-switcher:hover,
+        .theme-switcher:focus-within {
+            /* Override desktop hover transform (which assumes horizontal centering). */
+            transform: translateY(-50%) scale(1.05);
+        }
+        .theme-switcher.is-placed,
+        .theme-switcher.is-placed:hover,
+        .theme-switcher.is-placed:focus-within { transform: none; }
     }
 </style>
 
 <!-- Discreet top-right theme switcher -->
-<div class="theme-switcher" id="themeSwitcher" role="group" aria-label="Theme tone">
+<div class="theme-switcher" id="themeSwitcher" role="group" aria-label="Theme tone" title="Drag to move">
+    <span class="ts-grip" aria-hidden="true">
+        <svg viewBox="0 0 6 10" fill="currentColor"><circle cx="1.5" cy="1.5" r="1"/><circle cx="4.5" cy="1.5" r="1"/><circle cx="1.5" cy="5" r="1"/><circle cx="4.5" cy="5" r="1"/><circle cx="1.5" cy="8.5" r="1"/><circle cx="4.5" cy="8.5" r="1"/></svg>
+    </span>
     <span class="ts-label">Tone</span>
     <button type="button" data-theme-value="high"   title="Default (dark)"></button>
     <button type="button" data-theme-value="light"  title="Light (warm cream)"></button>
@@ -284,6 +321,83 @@
             apply(v);
             try { localStorage.setItem(KEY, v); } catch (err) {}
         });
+
+        /* ---------- Draggable positioning ---------- */
+        var POS_KEY = 'irp-theme-pos';
+        function clampAndPlace(left, top) {
+            var rect = sw.getBoundingClientRect();
+            var maxL = window.innerWidth  - rect.width  - 4;
+            var maxT = window.innerHeight - rect.height - 4;
+            left = Math.max(4, Math.min(left, maxL));
+            top  = Math.max(4, Math.min(top,  maxT));
+            sw.classList.add('is-placed');
+            sw.style.left  = left + 'px';
+            sw.style.top   = top  + 'px';
+            sw.style.right = 'auto';
+        }
+        try {
+            var savedPos = JSON.parse(localStorage.getItem(POS_KEY) || 'null');
+            if (savedPos && typeof savedPos.left === 'number' && typeof savedPos.top === 'number') {
+                requestAnimationFrame(function () { clampAndPlace(savedPos.left, savedPos.top); });
+            }
+        } catch (e) {}
+
+        var dragging = false, moved = false, startX = 0, startY = 0, originL = 0, originT = 0, pid = null;
+        var THRESHOLD = 4;
+
+        sw.addEventListener('pointerdown', function (e) {
+            if (e.target.closest('button[data-theme-value]')) return; /* let buttons click */
+            dragging = true; moved = false; pid = e.pointerId;
+            var rect = sw.getBoundingClientRect();
+            startX = e.clientX; startY = e.clientY;
+            originL = rect.left; originT = rect.top;
+            try { sw.setPointerCapture(pid); } catch (err) {}
+        });
+
+        sw.addEventListener('pointermove', function (e) {
+            if (!dragging) return;
+            var dx = e.clientX - startX, dy = e.clientY - startY;
+            if (!moved && Math.hypot(dx, dy) < THRESHOLD) return;
+            moved = true;
+            sw.classList.add('is-dragging');
+            clampAndPlace(originL + dx, originT + dy);
+        });
+
+        function endDrag(e) {
+            if (!dragging) return;
+            dragging = false;
+            sw.classList.remove('is-dragging');
+            try { if (pid !== null) sw.releasePointerCapture(pid); } catch (err) {}
+            pid = null;
+            if (moved) {
+                try {
+                    var r = sw.getBoundingClientRect();
+                    localStorage.setItem(POS_KEY, JSON.stringify({ left: r.left, top: r.top }));
+                } catch (err) {}
+                /* Swallow the synthetic click that follows a drag. */
+                var swallow = function (ev) { ev.stopPropagation(); ev.preventDefault(); sw.removeEventListener('click', swallow, true); };
+                sw.addEventListener('click', swallow, true);
+            }
+        }
+        sw.addEventListener('pointerup', endDrag);
+        sw.addEventListener('pointercancel', endDrag);
+
+        /* Keep it inside viewport on resize. */
+        window.addEventListener('resize', function () {
+            if (!sw.classList.contains('is-placed')) return;
+            var r = sw.getBoundingClientRect();
+            clampAndPlace(r.left, r.top);
+        });
+
+        /* Double-click the grip to reset to default position. */
+        var grip = sw.querySelector('.ts-grip');
+        if (grip) {
+            grip.addEventListener('dblclick', function () {
+                sw.classList.remove('is-placed');
+                sw.style.left = sw.style.top = sw.style.right = '';
+                try { localStorage.removeItem(POS_KEY); } catch (err) {}
+            });
+        }
     });
 })();
 </script>

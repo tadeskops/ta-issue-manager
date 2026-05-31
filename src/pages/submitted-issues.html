@@ -54,10 +54,10 @@
             </div>
             <div class="flex flex-wrap items-center gap-2 sm:gap-4 justify-end">
                 <a href="https://forms.gle/zFWTnLUdNEGGj7hk9" target="_blank" rel="noopener noreferrer"
-                   class="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold transition-colors text-sm border border-amber-400/30 shadow-lg whitespace-nowrap">
-                    <i class="fas fa-pen-to-square sm:mr-2"></i><span class="hidden sm:inline">Submit New Issue</span><span class="sm:hidden ml-1">Submit</span>
+                   class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold transition-colors text-xs sm:text-sm border border-amber-400/30 shadow-lg whitespace-nowrap">
+                    <i class="fas fa-pen-to-square mr-1.5 sm:mr-2"></i>Submit New Issue
                 </a>
-                <button onclick="goLogin()" class="px-3 sm:px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-sm border border-slate-600/30 whitespace-nowrap" aria-label="Back to Login" title="Back to Login">
+                <button onclick="goLogin()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-xs sm:text-sm border border-slate-600/30 whitespace-nowrap" aria-label="Back to Login" title="Back to Login">
                     <i class="fas fa-arrow-left sm:mr-2"></i><span class="hidden sm:inline">Back to Login</span>
                 </button>
             </div>
@@ -67,24 +67,27 @@
     <!-- Main Container -->
     <div class="max-w-7xl mx-auto p-6">
         <!-- Header -->
-        <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
-                <h2 class="text-3xl font-bold text-slate-100 mb-2"><i class="fas fa-list-check mr-3 gold-accent"></i>All Submitted Issues</h2>
-                <p class="text-slate-400">View all submitted issues from residents</p>
+        <div class="mb-6">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-1">
+                <h2 class="text-xl sm:text-2xl font-bold text-slate-100 flex items-center gap-2 min-w-0">
+                    <i class="fas fa-list-check gold-accent text-lg sm:text-xl flex-shrink-0"></i>
+                    <span class="truncate">All Submitted Issues</span>
+                </h2>
+                <a href="https://docs.google.com/spreadsheets/d/1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU/edit?usp=sharing"
+                   target="_blank" rel="noopener noreferrer"
+                   title="Open in Google Sheets"
+                   class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-600/90 hover:bg-emerald-500 text-white font-medium text-xs transition-all border border-emerald-400/30 shadow whitespace-nowrap flex-shrink-0">
+                    <svg viewBox="0 0 48 48" width="13" height="13" aria-hidden="true" focusable="false">
+                        <path fill="#ffffff" d="M29.41 6H10a2 2 0 0 0-2 2v32a2 2 0 0 0 2 2h28a2 2 0 0 0 2-2V16.59L29.41 6z"/>
+                        <path fill="#cdeacd" d="M29 6v10a2 2 0 0 0 2 2h9L29 6z"/>
+                        <path fill="#0f9d58" d="M14 22h20v16H14z"/>
+                        <path fill="#ffffff" d="M16 24h6v3h-6zm0 5h6v3h-6zm0 5h6v3h-6zm8-10h8v3h-8zm0 5h8v3h-8zm0 5h8v3h-8z"/>
+                    </svg>
+                    <span class="hidden sm:inline">Open in Sheets</span>
+                    <i class="fas fa-arrow-up-right-from-square text-[10px] opacity-70"></i>
+                </a>
             </div>
-            <a href="https://docs.google.com/spreadsheets/d/1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU/edit?usp=sharing"
-               target="_blank" rel="noopener noreferrer"
-               class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-semibold text-sm transition-all border border-emerald-400/30 shadow-lg shadow-emerald-900/30">
-                <!-- Official Google Sheets glyph (simplified, brand-accurate) -->
-                <svg viewBox="0 0 48 48" width="16" height="16" aria-hidden="true" focusable="false">
-                    <path fill="#ffffff" d="M29.41 6H10a2 2 0 0 0-2 2v32a2 2 0 0 0 2 2h28a2 2 0 0 0 2-2V16.59L29.41 6z"/>
-                    <path fill="#cdeacd" d="M29 6v10a2 2 0 0 0 2 2h9L29 6z"/>
-                    <path fill="#0f9d58" d="M14 22h20v16H14z"/>
-                    <path fill="#ffffff" d="M16 24h6v3h-6zm0 5h6v3h-6zm0 5h6v3h-6zm8-10h8v3h-8zm0 5h8v3h-8zm0 5h8v3h-8z"/>
-                </svg>
-                Switch to Google Sheet View
-                <i class="fas fa-external-link-alt text-xs opacity-75"></i>
-            </a>
+            <p class="text-sm text-slate-400">View all submitted issues from residents</p>
         </div>
 
         <!-- Filter Section -->
