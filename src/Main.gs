@@ -736,16 +736,11 @@ function approveIssue(ticketId, userEmail, severity) {
             live[LIVE_COL.SLA_DATE]        = slaDate;
             live[LIVE_COL.REMARKS]         = "Approved by " + (userEmail || "committee");
 
-            // Mark the PENDING row as APPROVED instead of deleting it,
-            // so the public view (which reads PENDING_REVIEW) still shows
-            // this ticket with its updated status.
-            const pendingRowNum = i + 1;
-            pendingSheet.getRange(pendingRowNum, PENDING_COL.SEVERITY + 1).setValue(severity);
-            pendingSheet.getRange(pendingRowNum, PENDING_COL.ACTION_DATE + 1).setValue(now);
-            pendingSheet.getRange(pendingRowNum, PENDING_COL.ACTION_BY + 1).setValue(userEmail || "");
-            pendingSheet.getRange(pendingRowNum, PENDING_COL.STATE + 1).setValue("APPROVED");
-
+            // Strict move semantics: append to LIVE_ISSUES, then delete
+            // the row from PENDING_REVIEW. After this the ticket only
+            // exists in LIVE (and read-only views read LIVE for approved).
             liveSheet.appendRow(live);
+            pendingSheet.deleteRow(i + 1);
 
             return {
                 success: true,
@@ -1083,92 +1078,93 @@ function getIssuesWithStatus() {
     }
 }
 
-// Get Submitted Issues: read PENDING_REVIEW (always-on snapshot of every
-// intake) and enrich each row with the downstream status by joining the
-// ticketId against LIVE_ISSUES and CLOSED_ISSUES. This is the source of
-// truth for the read-only "Submitted Issues" page.
+// Get Submitted Issues: aggregate the lifecycle for the read-only public
+// view. With strict-move semantics every ticket lives in exactly one of
+// PENDING_REVIEW / LIVE_ISSUES / ARCHIVES_ISSUES, so this just unions
+// the three (archives are gated by SUBMITTED_INCLUDE_REJECTED).
 function getSubmittedIssues() {
     try {
-        // Read-only public view. Sources:
-        //   PENDING_REVIEW   -> rows still awaiting committee action
-        //   LIVE_ISSUES      -> overlay: rows that have been approved + their
-        //                       current builder status
-        //   ARCHIVES_ISSUES  -> rejected rows (only included when the
-        //                       SUBMITTED_INCLUDE_REJECTED tunable is "true")
         const includeRejected = String(getTunable("SUBMITTED_INCLUDE_REJECTED") || "false").toLowerCase() === "true";
 
-        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
-        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
-
-        const pendingData = pendingSheet.getDataRange().getValues();
-        const liveData    = liveSheet.getDataRange().getValues();
+        const pendingData = getSheet(SHEETS.PENDING_REVIEW).getDataRange().getValues();
+        const liveData    = getSheet(SHEETS.LIVE_ISSUES).getDataRange().getValues();
         const archiveData = includeRejected
             ? getSheet(SHEETS.ARCHIVES_ISSUES).getDataRange().getValues()
             : [];
 
-        const liveByTicket = {};
-        for (let i = 1; i < liveData.length; i++) {
-            const r = liveData[i];
-            const tid = r[LIVE_COL.TICKET_ID];
-            if (!tid) continue;
-            liveByTicket[String(tid)] = {
-                status:   r[LIVE_COL.BUILDER_STATUS] || r[LIVE_COL.STATUS] || "ASSIGNED",
-                severity: r[LIVE_COL.SEVERITY] || ""
-            };
-        }
-
-        const toIso = function (v) {
-            if (!v) return "";
-            if (v instanceof Date) return v.toISOString();
-            return String(v);
-        };
-
-        const mapRow = function (row) {
-            const tid = String(row[PENDING_COL.TICKET_ID] || "");
-            const state = String(row[PENDING_COL.STATE] || "PENDING_APPROVAL");
-            const live = liveByTicket[tid];
-            // Status displayed to viewers: builder status when ticket has
-            // been promoted to LIVE, otherwise the pending state.
-            const status = (state === "APPROVED" && live) ? String(live.status) : state;
-            const severity = (live && live.severity) || row[PENDING_COL.SEVERITY] || "";
+        // PENDING_REVIEW and ARCHIVES_ISSUES share the PENDING_COL layout.
+        const mapPendingRow = function (row, fallbackState) {
+            const state = String(row[PENDING_COL.STATE] || fallbackState);
             return {
-                ticketId: tid,
-                dateReported: toIso(row[PENDING_COL.DATE_REPORTED]),
+                ticketId:     safeStr_(row[PENDING_COL.TICKET_ID]),
+                dateReported: safeDateIso_(row[PENDING_COL.DATE_REPORTED]),
                 resident: {
-                    name: String(row[PENDING_COL.RESIDENT] || ""),
+                    name:  safeStr_(row[PENDING_COL.RESIDENT]),
                     email: "",
                     phone: ""
                 },
                 location: {
-                    tower: String(row[PENDING_COL.TOWER] || ""),
-                    flat:  String(row[PENDING_COL.FLAT]  || "")
+                    tower: safeStr_(row[PENDING_COL.TOWER]),
+                    flat:  safeStr_(row[PENDING_COL.FLAT])
                 },
                 issue: {
-                    category:    String(row[PENDING_COL.CATEGORY]    || ""),
-                    subcategory: String(row[PENDING_COL.SUBCATEGORY] || ""),
-                    severity:    String(severity),
-                    description: String(row[PENDING_COL.DESCRIPTION] || "")
+                    category:    safeStr_(row[PENDING_COL.CATEGORY]),
+                    subcategory: safeStr_(row[PENDING_COL.SUBCATEGORY]),
+                    severity:    safeStr_(row[PENDING_COL.SEVERITY]),
+                    description: safeStr_(row[PENDING_COL.DESCRIPTION])
                 },
-                status: String(status),
-                state:  state,
-                rejectionReason: String(row[PENDING_COL.REJECTION_REASON] || ""),
-                attachments: splitPhotoLinks_(row[PENDING_COL.PHOTO]).map(String)
+                status:          state,
+                state:           state,
+                rejectionReason: safeStr_(row[PENDING_COL.REJECTION_REASON]),
+                attachments:     splitPhotoLinks_(row[PENDING_COL.PHOTO])
+            };
+        };
+
+        // LIVE_ISSUES has its own column layout (LIVE_COL).
+        const mapLiveRow = function (row) {
+            const status = safeStr_(row[LIVE_COL.BUILDER_STATUS] || row[LIVE_COL.STATUS]) || "ASSIGNED";
+            return {
+                ticketId:     safeStr_(row[LIVE_COL.TICKET_ID]),
+                dateReported: safeDateIso_(row[LIVE_COL.DATE_REPORTED]),
+                resident: {
+                    name:  safeStr_(row[LIVE_COL.RESIDENT]),
+                    email: "",
+                    phone: ""
+                },
+                location: {
+                    tower: safeStr_(row[LIVE_COL.TOWER]),
+                    flat:  safeStr_(row[LIVE_COL.FLAT])
+                },
+                issue: {
+                    category:    safeStr_(row[LIVE_COL.CATEGORY]),
+                    subcategory: safeStr_(row[LIVE_COL.SUBCATEGORY]),
+                    severity:    safeStr_(row[LIVE_COL.SEVERITY]),
+                    description: safeStr_(row[LIVE_COL.DESCRIPTION])
+                },
+                status:          status,
+                state:           "APPROVED",
+                rejectionReason: "",
+                attachments:     splitPhotoLinks_(row[LIVE_COL.PHOTO])
             };
         };
 
         const responses = [];
-        const seen = {};
         for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
-            const m = mapRow(pendingData[i]);
+            const m = mapPendingRow(pendingData[i], "PENDING_APPROVAL");
             if (!m.ticketId) continue;
-            seen[m.ticketId] = true;
+            // Defensive: skip legacy rows whose state was flipped to
+            // APPROVED in-place before strict-move semantics landed.
+            // LIVE_ISSUES is the canonical source for approved tickets.
+            if (m.state === "APPROVED") continue;
             responses.push(m);
         }
+        for (let i = 1; i < liveData.length; i++) {
+            const m = mapLiveRow(liveData[i]);
+            if (m.ticketId) responses.push(m);
+        }
         for (let i = firstDataRow_(archiveData); i < archiveData.length; i++) {
-            const m = mapRow(archiveData[i]);
-            if (!m.ticketId) continue;
-            if (seen[m.ticketId]) continue;
-            responses.push(m);
+            const m = mapPendingRow(archiveData[i], "REJECTED");
+            if (m.ticketId) responses.push(m);
         }
 
         return { success: true, responses: responses, count: responses.length, error: null };
