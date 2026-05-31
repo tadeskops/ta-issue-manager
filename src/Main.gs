@@ -1034,34 +1034,10 @@ function getIssuesWithStatus() {
 // truth for the read-only "Submitted Issues" page.
 function getSubmittedIssues() {
     try {
+        // View page reads ONLY from PENDING_REVIEW. LIVE_ISSUES is the
+        // builder's workspace and must not leak into the public viewer.
         const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
-        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
-        const closedSheet  = getSheet(SHEETS.CLOSED_ISSUES);
-
         const pendingData = pendingSheet.getDataRange().getValues();
-        const liveData    = liveSheet.getDataRange().getValues();
-        const closedData  = closedSheet.getDataRange().getValues();
-
-        const liveByTicket = {};
-        for (let i = 1; i < liveData.length; i++) {
-            const r = liveData[i];
-            const tid = r[LIVE_COL.TICKET_ID];
-            if (!tid) continue;
-            liveByTicket[tid] = {
-                status:   r[LIVE_COL.BUILDER_STATUS] || r[LIVE_COL.STATUS] || "ASSIGNED",
-                severity: r[LIVE_COL.SEVERITY] || ""
-            };
-        }
-        const closedByTicket = {};
-        for (let i = 1; i < closedData.length; i++) {
-            const r = closedData[i];
-            const tid = r[LIVE_COL.TICKET_ID];
-            if (!tid) continue;
-            closedByTicket[tid] = {
-                status:   "CLOSED",
-                severity: r[LIVE_COL.SEVERITY] || ""
-            };
-        }
 
         // Coerce all values to primitives. google.script.run silently
         // returns null when payloads contain mixed Date/empty-string columns
@@ -1077,9 +1053,7 @@ function getSubmittedIssues() {
             const row = pendingData[i];
             const tid = String(row[PENDING_COL.TICKET_ID] || "");
             const state = String(row[PENDING_COL.STATE] || "PENDING_APPROVAL");
-            const enrichment = closedByTicket[tid] || liveByTicket[tid] || null;
-            const status = enrichment ? enrichment.status : state;
-            const severity = (enrichment && enrichment.severity) || row[PENDING_COL.SEVERITY] || "";
+            const severity = row[PENDING_COL.SEVERITY] || "";
 
             responses.push({
                 ticketId: tid,
@@ -1099,7 +1073,7 @@ function getSubmittedIssues() {
                     severity:    String(severity),
                     description: String(row[PENDING_COL.DESCRIPTION] || "")
                 },
-                status: String(status),
+                status: state,
                 state:  state,
                 rejectionReason: String(row[PENDING_COL.REJECTION_REASON] || ""),
                 attachments: splitPhotoLinks_(row[PENDING_COL.PHOTO]).map(String)
