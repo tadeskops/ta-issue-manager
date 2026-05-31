@@ -106,8 +106,8 @@
                             admin: 'admin-dashboard.html' };
             return local[key] || 'index.html';
         }
-        function goSubmitted() { location.href = pageUrl('submitted'); }
-        function goSubmit()    { location.href = pageUrl('submit'); }
+        function goSubmitted() { openTop(pageUrl('submitted')); }
+        function goSubmit()    { openTop(pageUrl('submit')); }
         function switchAccount() {
             try { localStorage.removeItem('IRP_LAST_USER'); } catch(e) {}
             API.signOut();
@@ -142,8 +142,12 @@
 
         function goDashboard() {
             const u = window.IRP_USER || {};
-            if (u.role === 'COMMITTEE') location.href = pageUrl('committee');
-            else if (u.role === 'BUILDER') location.href = pageUrl('builder');
+            // Use openTop (window.open(url,'_top')) so the dashboard URL
+            // (with ?page=...) lives on the OUTER browser address bar, not
+            // just inside the Apps Script iframe. Without this, a refresh
+            // re-runs doGet with no page param and lands back on /login.
+            if (u.role === 'COMMITTEE') openTop(pageUrl('committee'));
+            else if (u.role === 'BUILDER') openTop(pageUrl('builder'));
             else location.reload();
         }
 
