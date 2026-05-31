@@ -27,6 +27,7 @@
             color: #d4af37;
         }
     </style>
+    <?!= include('src/partials/theme') ?>
 </head>
 <body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 min-h-screen flex items-center justify-center px-4">
     <div class="premium-card rounded-2xl p-10 w-full max-w-md border border-slate-700">
@@ -34,7 +35,7 @@
         <div class="text-center mb-8">
             <!-- Logo Only (Compact) -->
             <div class="mb-6">
-                <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-16 mx-auto drop-shadow-lg">
+                <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-16 mx-auto drop-shadow-lg">
             </div>
             <!-- Alternative: Logo with Text (Uncomment to use) -->
             <!-- <div class="mb-6"><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-20 mx-auto drop-shadow-lg"></div> -->
@@ -78,7 +79,6 @@
     </div>
 
     <?!= include('src/partials/api') ?>
-    <script src="../../assets/js/api.js"></script>
     <script>
         function goSubmitted() { location.href = 'submitted-issues.html'; }
         function goSubmit()    { location.href = 'submit-issue.html'; }

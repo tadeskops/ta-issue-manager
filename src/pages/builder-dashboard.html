@@ -40,6 +40,7 @@
             box-shadow: 0 0 15px rgba(217, 119, 6, 0.6), inset 0 0 10px rgba(217, 119, 6, 0.2) !important;
         }
     </style>
+    <?!= include('src/partials/theme') ?>
 </head>
 <body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
     <!-- Navigation -->
@@ -49,7 +50,7 @@
                 <!-- Logo -->
                 <div class="flex items-center gap-4">
                     <!-- Logo Only Version (Compact) -->
-                    <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-12 w-12 drop-shadow-lg">
                     <!-- Alternative: Logo with Text (Uncomment to use) -->
                     <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
                     <div>
@@ -247,7 +248,6 @@
     <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded shadow-lg text-white font-bold hidden z-50"></div>
 
     <?!= include('src/partials/api') ?>
-    <script src="../../assets/js/api.js"></script>
     <script>
         // === Auth (server-trusted via Google sign-in) ===
         // No client-typed email, no sessionStorage. window.IRP_USER is

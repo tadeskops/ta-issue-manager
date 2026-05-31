@@ -92,35 +92,19 @@ function renderDenied_(email, role) {
 /**
  * Allows HTML files to include other HTML/CSS/JS via:
  *   <?!= include('partial-name') ?>
- * (Not used by default — only relevant if you later opt into templating.)
+ * Evaluated through the templating engine so the included partial may
+ * itself use scriptlets (e.g. theme.html reads DEFAULT_THEME from Config).
  */
 function include(filename) {
-    return HtmlService.createHtmlOutputFromFile(filename).getContent();
+    return HtmlService.createTemplateFromFile(filename).evaluate().getContent();
 }
 
 /**
  * Logo URL helper — exposed to client via api_getLogoUrl().
- * Reads CONFIG sheet (key LOGO_URL); falls back to empty string.
+ * Delegates to Config.gs getLogoUrl() which reads CONFIG key LOGO_URL.
  */
 function api_getLogoUrl() {
-    return getLogoUrl_();
-}
-
-function getLogoUrl_() {
-    try {
-        const ss = SpreadsheetApp.openById(SHEET_ID);
-        const sheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-        if (!sheet) return "";
-        const values = sheet.getDataRange().getValues();
-        for (let i = 1; i < values.length; i++) {
-            if (String(values[i][0] || "").trim().toUpperCase() === "LOGO_URL") {
-                return String(values[i][1] || "").trim();
-            }
-        }
-    } catch (e) {
-        Logger.log("getLogoUrl_ fallback: " + e);
-    }
-    return "";
+    return getLogoUrl();
 }
 
 /**
@@ -155,16 +139,17 @@ function api_call(action, payload) {
         switch (action) {
             case "getFormResponses":       return getFormResponses();
             case "getIssuesWithStatus":    return getIssuesWithStatus();
+            case "getSubmittedIssues":     return getSubmittedIssues();
             case "getPendingIssues":       return getPendingIssues();
-            case "approveIssue":           return approveIssue(payload.ticketId, email);
+            case "approveIssue":           return approveIssue(payload.ticketId, email, payload.severity);
             case "rejectIssue":            return rejectIssue(payload.ticketId, payload.reason, email);
             case "getLiveIssues":          return getLiveIssues(payload.filterOption || "ALL");
             case "updateBuilderStatus":    return updateBuilderStatus(payload.ticketId, payload.status, payload.comment, payload.vendor, payload.closureDate);
             case "closeIssue":             return closeIssue(payload.ticketId, payload.reason, email);
             case "reopenIssue":            return reopenIssue(payload.ticketId, payload.reason, email);
-            case "deleteIssue":            return deleteIssue(payload.ticketId, payload.sheet || SHEETS.PENDING_QUEUE);
+            case "deleteIssue":            return deleteIssue(payload.ticketId, payload.sheet || SHEETS.PENDING_REVIEW);
             case "generateTicketId":       return generateTicketId();
-            case "approveIssueWithTicketId": return approveIssueWithTicketId(payload.originalTicketId, payload.newTicketId);
+            case "approveIssueWithTicketId": return approveIssueWithTicketId(payload.originalTicketId, payload.newTicketId, email, payload.severity);
             case "getDashboardMetrics":    return getDashboardMetrics();
             case "syncFormResponses":      return syncFormResponses();
             case "submitIssue":            return submitIssue(payload, email);
@@ -191,12 +176,12 @@ function isActionAllowed_(action, role) {
     ];
     const BUILDER_ALLOWED = [
         "getLiveIssues", "updateBuilderStatus", "closeIssue", "reopenIssue",
-        "getFormResponses", "getIssuesWithStatus", "validateUserAccess",
-        "getDashboardMetrics", "getClientConfig"
+        "getFormResponses", "getIssuesWithStatus", "getSubmittedIssues",
+        "validateUserAccess", "getDashboardMetrics", "getClientConfig"
     ];
     const RESIDENT_ALLOWED = [
         "submitIssue", "getCategoryMaster", "getIssuesWithStatus",
-        "validateUserAccess", "getClientConfig"
+        "getSubmittedIssues", "validateUserAccess", "getClientConfig"
     ];
     if (role === "COMMITTEE") return true; // committee can do everything
     if (role === "BUILDER")   return BUILDER_ALLOWED.indexOf(action) !== -1;

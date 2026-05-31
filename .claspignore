@@ -1,0 +1,5 @@
+# Anything not listed below is pushed to Apps Script.
+# Whitelist src/ + the manifest; ignore everything else.
+**
+!appsscript.json
+!src/**

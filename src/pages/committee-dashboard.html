@@ -50,6 +50,7 @@
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.15);
         }
     </style>
+    <?!= include('src/partials/theme') ?>
 </head>
 <body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
     <!-- Navigation with Premium Branding -->
@@ -59,7 +60,7 @@
                 <!-- Logo -->
             <div class="flex items-center gap-4">
                     <!-- Logo Only Version (Compact) -->
-                    <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-12 w-12 drop-shadow-lg">
                     <!-- Alternative: Logo with Text (Uncomment to use) -->
                     <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
                     <div>
@@ -279,6 +280,17 @@
             <h2 class="text-2xl font-bold mb-6 gold-accent"><i class="fas fa-check-circle mr-3"></i>Approve Issue</h2>
             <div id="approveDetails" class="bg-slate-700/40 border border-amber-500/20 rounded-lg p-5 mb-6 space-y-3 text-sm text-slate-300">
             </div>
+            <div class="mb-6">
+                <label for="approveSeverity" class="block text-sm font-semibold text-amber-300 mb-2">Assign Severity <span class="text-red-400">*</span></label>
+                <select id="approveSeverity" class="w-full px-4 py-3 rounded-lg bg-slate-800/70 border border-amber-500/30 text-slate-100 focus:outline-none focus:border-amber-400">
+                    <option value="">— Select severity —</option>
+                    <option value="Critical">Critical (SLA 1 day)</option>
+                    <option value="High">High (SLA 3 days)</option>
+                    <option value="Medium" selected>Medium (SLA 7 days)</option>
+                    <option value="Low">Low (SLA 15 days)</option>
+                </select>
+                <p class="mt-2 text-xs text-slate-400">SLA due date is computed from severity + report date.</p>
+            </div>
             <div class="flex gap-4">
                 <button onclick="confirmApprove()" class="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-bold transition-all border border-emerald-400/30 shadow-lg">
                     <i class="fas fa-check mr-2"></i>Approve & Assign
@@ -399,7 +411,6 @@
     <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-bold hidden z-50"></div>
 
     <?!= include('src/partials/api') ?>
-    <script src="../../assets/js/api.js"></script>
     <script>
         // === Auth (server-trusted via Google sign-in) ===
         // No client-typed email, no sessionStorage. window.IRP_USER is
@@ -718,30 +729,32 @@
         function openApproveModal(ticketId) {
             const issue = pendingIssues.find(i => i.ticketId === ticketId);
             currentTicketId = ticketId;
+            // Severity from intake is informational only (form no longer
+            // collects it); committee re-confirms via the dropdown below.
             document.getElementById('approveDetails').innerHTML = `
                 <p class="text-slate-200"><strong class="text-amber-300">Ticket ID:</strong> <span class="text-blue-300 font-mono">${issue.ticketId}</span></p>
                 <p class="text-slate-200"><strong class="text-amber-300">Resident:</strong> <span class="text-slate-100">${issue.resident.name}</span></p>
                 <p class="text-slate-200"><strong class="text-amber-300">Location:</strong> <span class="text-slate-100">${issue.location.tower}/${issue.location.flat}</span></p>
                 <p class="text-slate-200"><strong class="text-amber-300">Category:</strong> <span class="text-slate-100">${issue.issue.category} / ${issue.issue.subcategory}</span></p>
-                <p class="text-slate-200"><strong class="text-amber-300">Severity:</strong> <span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span></p>
                 <p class="text-slate-200"><strong class="text-amber-300">Description:</strong> <span class="text-slate-100">${issue.issue.description}</span></p>
             `;
+            const sevSel = document.getElementById('approveSeverity');
+            if (sevSel) sevSel.value = (issue.issue.severity && ['Critical','High','Medium','Low'].indexOf(issue.issue.severity) !== -1)
+                ? issue.issue.severity
+                : 'Medium';
             document.getElementById('approveModal').classList.remove('hidden');
         }
 
         async function confirmApprove() {
+            const severity = document.getElementById('approveSeverity').value;
+            if (!severity) { showToast('✗ Please select a severity', 'error'); return; }
             try {
-                // Generate a new unique ticket ID when approving
-                const newTicketId = await API.generateTicketId();
-                
-                // Approve the issue with the new ticket ID
-                await API.call('approveIssueWithTicketId', { 
-                    originalTicketId: currentTicketId,
-                    newTicketId: newTicketId
+                const res = await API.call('approveIssue', {
+                    ticketId: currentTicketId,
+                    severity: severity
                 });
-                
                 closeModal('approveModal');
-                showToast(`✓ Issue approved! New Ticket ID: ${newTicketId}`, 'success');
+                showToast(`✓ Issue approved (${severity}) — ${res.data && res.data.ticketId || currentTicketId}`, 'success');
                 loadData();
             } catch (error) {
                 showToast('✗ Error: ' + error.message, 'error');

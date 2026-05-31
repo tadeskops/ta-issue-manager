@@ -1,0 +1,280 @@
+<!--
+    ============================================================================
+     SHARED THEME — opt-in lighter tones
+    ============================================================================
+     Default tone is "high" (the original dark navy + gold UI). When the
+     user picks "light" or "medium" from the discreet top-right switcher,
+     a set of CSS overrides activates. The high tone applies NO overrides
+     at all — the page renders exactly as its own CSS defines it.
+
+     Default tone is read from CONFIG row DEFAULT_THEME (Config.gs).
+
+     Include with:  <?!= include('src/partials/theme') ?>
+    ============================================================================
+-->
+<? var __defTheme = (function(){ try { return getTunable('DEFAULT_THEME') || 'high'; } catch(e){ return 'high'; } })(); ?>
+<style>
+    /* ===========================================================
+       Variables for the two lighter tones.
+       The "high" tone defines none — overrides below are scoped so
+       they only fire on light / medium, leaving the original UI alone.
+       =========================================================== */
+    html[data-theme="light"] {
+        --t-bg-1: #f6f1e6;   --t-bg-2: #ece4d0;
+        --t-text: #1f2937;   --t-text-soft: #334155;   --t-text-mute: #475569;
+        --t-card-1: rgba(255,255,255,0.95);
+        --t-card-2: rgba(255,253,247,0.82);
+        --t-card-border: rgba(166,124,0,0.22);
+        --t-card-shadow:
+            0 1px 2px rgba(31,41,55,0.04),
+            0 8px 24px rgba(31,41,55,0.08),
+            0 20px 48px rgba(166,124,0,0.06),
+            inset 0 1px 0 rgba(255,255,255,0.9);
+        --t-surface:  rgba(255,251,242,0.72);
+        --t-border:   rgba(31,41,55,0.12);
+        --t-input-bg: #ffffff;
+        --t-input-border: rgba(31,41,55,0.18);
+        --t-scrim: rgba(45,52,68,0.45);
+        --t-gold: #a67c00;   --t-gold-soft: #d4af37;
+        --t-btn-1: #fdf6e3;  --t-btn-2: #f3e9c8;
+    }
+    html[data-theme="medium"] {
+        --t-bg-1: #ede2c8;   --t-bg-2: #dccaa6;
+        --t-text: #2a241a;   --t-text-soft: #3f372a;   --t-text-mute: #5a4d36;
+        --t-card-1: rgba(255,252,242,0.96);
+        --t-card-2: rgba(252,244,224,0.88);
+        --t-card-border: rgba(140,100,0,0.28);
+        --t-card-shadow:
+            0 2px 4px rgba(60,42,10,0.08),
+            0 10px 28px rgba(60,42,10,0.12),
+            0 24px 56px rgba(166,124,0,0.10),
+            inset 0 1px 0 rgba(255,255,255,0.9);
+        --t-surface:  rgba(255,250,236,0.78);
+        --t-border:   rgba(60,42,10,0.16);
+        --t-input-bg: #fffdf6;
+        --t-input-border: rgba(60,42,10,0.22);
+        --t-scrim: rgba(50,38,18,0.50);
+        --t-gold: #a67c00;   --t-gold-soft: #d4af37;
+        --t-btn-1: #fbe9b8;  --t-btn-2: #e8c982;
+    }
+
+    /* All override rules below activate ONLY for light / medium.
+       The :is() selector keeps things compact and lets the high tone
+       (default) render the page completely unchanged. */
+
+    /* Body canvas */
+    :is(html[data-theme="light"], html[data-theme="medium"]) body,
+    :is(html[data-theme="light"], html[data-theme="medium"]) body[class] {
+        background: linear-gradient(135deg, var(--t-bg-1) 0%, var(--t-bg-2) 100%) !important;
+        background-image: linear-gradient(135deg, var(--t-bg-1) 0%, var(--t-bg-2) 100%) !important;
+        color: var(--t-text) !important;
+        transition: background 280ms ease, color 280ms ease;
+    }
+
+    /* Cards — soft glass on cream with layered shadows */
+    :is(html[data-theme="light"], html[data-theme="medium"]) .premium-card {
+        background: linear-gradient(135deg, var(--t-card-1) 0%, var(--t-card-2) 100%) !important;
+        border: 1px solid var(--t-card-border) !important;
+        border-radius: 16px !important;
+        box-shadow: var(--t-card-shadow) !important;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    /* Gold accents */
+    :is(html[data-theme="light"], html[data-theme="medium"]) .gold-accent { color: var(--t-gold) !important; }
+    :is(html[data-theme="light"], html[data-theme="medium"]) .gold-border { border-color: var(--t-gold) !important; }
+
+    /* Text utilities — flip the white-on-dark scale to dark-on-light */
+    :is(html[data-theme="light"], html[data-theme="medium"]) .text-white,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .text-slate-50,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .text-slate-100,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .text-slate-200 { color: var(--t-text) !important; }
+    :is(html[data-theme="light"], html[data-theme="medium"]) .text-slate-300 { color: var(--t-text-soft) !important; }
+    :is(html[data-theme="light"], html[data-theme="medium"]) .text-slate-400,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .text-slate-500 { color: var(--t-text-mute) !important; }
+    :is(html[data-theme="light"], html[data-theme="medium"]) .placeholder-slate-500::placeholder {
+        color: color-mix(in srgb, var(--t-text-mute) 70%, transparent) !important;
+    }
+
+    /* Dark surface utilities → warm tint */
+    :is(html[data-theme="light"], html[data-theme="medium"]) [class*="bg-slate-700"],
+    :is(html[data-theme="light"], html[data-theme="medium"]) [class*="bg-slate-800"],
+    :is(html[data-theme="light"], html[data-theme="medium"]) [class*="bg-slate-900"] {
+        background-color: var(--t-surface) !important;
+    }
+    :is(html[data-theme="light"], html[data-theme="medium"]) [class*="border-slate-5"],
+    :is(html[data-theme="light"], html[data-theme="medium"]) [class*="border-slate-6"],
+    :is(html[data-theme="light"], html[data-theme="medium"]) [class*="border-slate-7"] {
+        border-color: var(--t-border) !important;
+    }
+
+    /* Inputs — bright white with subtle border, gold focus ring */
+    :is(html[data-theme="light"], html[data-theme="medium"]) input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    :is(html[data-theme="light"], html[data-theme="medium"]) select,
+    :is(html[data-theme="light"], html[data-theme="medium"]) textarea,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .field-input,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .field-select,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .field-textarea {
+        background-color: var(--t-input-bg) !important;
+        color: var(--t-text) !important;
+        border: 1px solid var(--t-input-border) !important;
+    }
+    :is(html[data-theme="light"], html[data-theme="medium"]) input:focus,
+    :is(html[data-theme="light"], html[data-theme="medium"]) select:focus,
+    :is(html[data-theme="light"], html[data-theme="medium"]) textarea:focus {
+        border-color: var(--t-gold) !important;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--t-gold) 28%, transparent) !important;
+        outline: none !important;
+    }
+    :is(html[data-theme="light"], html[data-theme="medium"]) .field-label { color: var(--t-text-soft) !important; }
+
+    /* Modal scrims */
+    :is(html[data-theme="light"], html[data-theme="medium"]) .bg-black\/80,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .bg-black\/70,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .bg-black\/60,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .bg-black\/50 {
+        background-color: var(--t-scrim) !important;
+    }
+
+    /* Dark-slate button gradients → soft cream metal */
+    :is(html[data-theme="light"], html[data-theme="medium"]) .bg-gradient-to-r.from-slate-700,
+    :is(html[data-theme="light"], html[data-theme="medium"]) .bg-gradient-to-r.from-slate-800 {
+        background-image: linear-gradient(135deg, var(--t-btn-1), var(--t-btn-2)) !important;
+        color: var(--t-text) !important;
+    }
+
+    /* Tables */
+    :is(html[data-theme="light"], html[data-theme="medium"]) table thead th { color: var(--t-gold) !important; }
+    :is(html[data-theme="light"], html[data-theme="medium"]) table tbody tr {
+        border-color: color-mix(in srgb, var(--t-text) 8%, transparent) !important;
+    }
+
+    /* Severity pills (submit page) */
+    :is(html[data-theme="light"], html[data-theme="medium"]) .sev-pill {
+        background: var(--t-input-bg) !important;
+        color: var(--t-text-soft) !important;
+        border: 1px solid var(--t-input-border) !important;
+    }
+    :is(html[data-theme="light"], html[data-theme="medium"]) .sev-pill[data-active="1"] {
+        background: linear-gradient(135deg, var(--t-gold-soft), var(--t-gold)) !important;
+        color: #1f2937 !important;
+        border-color: var(--t-gold) !important;
+    }
+
+    /* ===========================================================
+       Theme switcher — top-right, discreet by default.
+       Always visible (in every tone). Only 3 swatches: high / light / medium.
+       =========================================================== */
+    .theme-switcher {
+        position: fixed;
+        top: 10px;
+        right: 12px;
+        z-index: 9999;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 8px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(212,175,55,0.25);
+        border-radius: 999px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        font: 10.5px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #cbd5e1;
+        opacity: 0.40;
+        transition: opacity 200ms ease, transform 200ms ease, background 200ms ease, border-color 200ms ease;
+    }
+    .theme-switcher:hover,
+    .theme-switcher:focus-within {
+        opacity: 1;
+        background: rgba(15,20,25,0.55);
+        border-color: rgba(212,175,55,0.55);
+        transform: translateY(1px);
+    }
+    /* Switcher styling on light/medium: warm card look */
+    :is(html[data-theme="light"], html[data-theme="medium"]) .theme-switcher {
+        background: color-mix(in srgb, var(--t-card-1) 60%, transparent);
+        border-color: color-mix(in srgb, var(--t-card-border) 55%, transparent);
+        color: var(--t-text-soft);
+        box-shadow: 0 2px 8px rgba(31,41,55,0.06);
+    }
+    .theme-switcher .ts-label {
+        padding: 0 4px 0 2px;
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+        font-weight: 600;
+        opacity: 0.85;
+    }
+    .theme-switcher button {
+        width: 14px; height: 14px;
+        border-radius: 50%;
+        border: 1px solid rgba(0,0,0,0.15);
+        cursor: pointer;
+        padding: 0;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.20);
+        transition: transform 160ms ease, width 160ms ease, height 160ms ease, box-shadow 160ms ease;
+    }
+    .theme-switcher:hover button,
+    .theme-switcher:focus-within button { width: 18px; height: 18px; }
+    .theme-switcher button:hover { transform: scale(1.15); }
+    .theme-switcher button.active {
+        box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.4),
+            0 0 0 2px rgba(212,175,55,0.7);
+    }
+    .theme-switcher button[data-theme-value="high"]   { background: linear-gradient(135deg,#1a1f2e,#0f1419); }
+    .theme-switcher button[data-theme-value="light"]  { background: linear-gradient(135deg,#f6f1e6,#ece4d0); }
+    .theme-switcher button[data-theme-value="medium"] { background: linear-gradient(135deg,#ede2c8,#d9c9a3); }
+
+    @media (max-width: 480px) {
+        .theme-switcher { top: 6px; right: 6px; padding: 4px 6px; }
+        .theme-switcher .ts-label { display: none; }
+    }
+</style>
+
+<!-- Discreet top-right theme switcher -->
+<div class="theme-switcher" id="themeSwitcher" role="group" aria-label="Theme tone">
+    <span class="ts-label">Tone</span>
+    <button type="button" data-theme-value="high"   title="Default (dark)"></button>
+    <button type="button" data-theme-value="light"  title="Light (warm cream)"></button>
+    <button type="button" data-theme-value="medium" title="Medium (champagne)"></button>
+</div>
+
+<script>
+(function () {
+    var KEY = 'irp-theme';
+    var VALID = ['high', 'light', 'medium'];
+    var DEFAULT = '<?= __defTheme ?>';
+    if (VALID.indexOf(DEFAULT) === -1) DEFAULT = 'high';
+
+    function apply(v) {
+        if (VALID.indexOf(v) === -1) v = DEFAULT;
+        document.documentElement.setAttribute('data-theme', v);
+        var sw = document.getElementById('themeSwitcher');
+        if (sw) {
+            sw.querySelectorAll('button').forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-theme-value') === v);
+            });
+        }
+    }
+
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    apply(saved || DEFAULT);
+
+    document.addEventListener('DOMContentLoaded', function () {
+        apply(document.documentElement.getAttribute('data-theme') || DEFAULT);
+        var sw = document.getElementById('themeSwitcher');
+        if (!sw) return;
+        sw.addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-theme-value]');
+            if (!btn) return;
+            var v = btn.getAttribute('data-theme-value');
+            apply(v);
+            try { localStorage.setItem(KEY, v); } catch (err) {}
+        });
+    });
+})();
+</script>

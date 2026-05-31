@@ -3,13 +3,15 @@
 //       Update committee / builder email IDs there.
 const SHEET_ID = "1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU"; // Get from Sheets URL
 const SHEETS = {
-    FORM_RESPONSES: "Form Responses 1",
-    PENDING_QUEUE: "PENDING_REVIEW",  // Updated to match actual sheet name
-    LIVE_ISSUES: "LIVE_ISSUES",
-    CLOSED_ISSUES: "CLOSED_ISSUES",
+    FORM_RESPONSES:  "Form Responses 1",
+    PENDING_REVIEW:  "PENDING_REVIEW",
+    LIVE_ISSUES:     "LIVE_ISSUES",
+    CLOSED_ISSUES:   "CLOSED_ISSUES",
     CATEGORY_MASTER: "CATEGORY_MASTER",
-    DASHBOARD: "DASHBOARD",
-    WEEKLY_REVIEW: "WEEKLY_REVIEW"
+    DASHBOARD:       "DASHBOARD",
+    // Spreadsheet-side views maintained by formula; no code reader yet.
+    BUILDER_VIEW:    "BUILDER_VIEW",
+    ARCHIVES_ISSUES: "ARCHIVES_ISSUES"
 };
 
 const SLA_RULES = {
@@ -95,6 +97,15 @@ const LIVE_WIDTH = 23;
 
 // Build a row array of given width filled with empty strings.
 function newRow_(width) { return new Array(width).fill(""); }
+
+// Split a photo cell into an array of URLs. The form & in-portal submit
+// both store multiple Drive links as a comma+space separated string in a
+// single cell; callers want an array.
+function splitPhotoLinks_(cell) {
+    if (!cell) return [];
+    if (Array.isArray(cell)) return cell.filter(Boolean);
+    return String(cell).split(/[,\s]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+}
 // ===== END CONFIG =====
 
 // Get Spreadsheet with error handling
@@ -149,41 +160,34 @@ function testConnection() {
   }
 }
 
-// Generate Ticket ID
+// Generate Ticket ID (TKT-XXXXX). Scans PENDING_REVIEW + LIVE_ISSUES +
+// CLOSED_ISSUES so a single monotonic counter is shared across the
+// lifecycle. Recognises the legacy `TA-` prefix when computing max so
+// historical numbering is not reset.
 function generateTicketID() {
     try {
         const ss = getSpreadsheet();
-        const liveSheet = ss.getSheetByName(SHEETS.LIVE_ISSUES);
-        const closedSheet = ss.getSheetByName(SHEETS.CLOSED_ISSUES);
-        
+        const sheets = [
+            ss.getSheetByName(SHEETS.PENDING_REVIEW),
+            ss.getSheetByName(SHEETS.LIVE_ISSUES),
+            ss.getSheetByName(SHEETS.CLOSED_ISSUES)
+        ];
         let maxNum = 0;
-        
-        // Get max from LIVE_ISSUES
-        if (liveSheet) {
-            const liveData = liveSheet.getDataRange().getValues();
-            for (let i = 1; i < liveData.length; i++) {
-                const ticketId = liveData[i][0];
-                if (ticketId && ticketId.toString().startsWith("TA-")) {
-                    const num = parseInt(ticketId.toString().substring(3));
-                    if (num > maxNum) maxNum = num;
-                }
+        for (let s = 0; s < sheets.length; s++) {
+            const sheet = sheets[s];
+            if (!sheet) continue;
+            const data = sheet.getDataRange().getValues();
+            for (let i = 1; i < data.length; i++) {
+                const raw = data[i][0];
+                if (!raw) continue;
+                const id = String(raw).trim();
+                let num = 0;
+                if (id.indexOf("TKT-") === 0)      num = parseInt(id.substring(4), 10);
+                else if (id.indexOf("TA-") === 0)  num = parseInt(id.substring(3), 10);
+                if (!isNaN(num) && num > maxNum) maxNum = num;
             }
         }
-        
-        // Get max from CLOSED_ISSUES
-        if (closedSheet) {
-            const closedData = closedSheet.getDataRange().getValues();
-            for (let i = 1; i < closedData.length; i++) {
-                const ticketId = closedData[i][0];
-                if (ticketId && ticketId.toString().startsWith("TA-")) {
-                    const num = parseInt(ticketId.toString().substring(3));
-                    if (num > maxNum) maxNum = num;
-                }
-            }
-        }
-        
-        const nextNum = String(maxNum + 1).padStart(4, '0');
-        return `TA-${nextNum}`;
+        return "TKT-" + String(maxNum + 1).padStart(5, "0");
     } catch (error) {
         Logger.log("Error generating ticket ID: " + error.toString());
         throw error;
@@ -200,8 +204,9 @@ function calculateSLADate(severity, reportedDate) {
 
 // On Form Submit Trigger.
 // e.values aligns 1:1 with the bound spreadsheet row -> FORM_COL constants
-// map the indices. If the form definition omits Sub-Category, the slot is
-// simply undefined and stored as "".
+// map the indices. Severity is intentionally NOT collected by the form;
+// the column is preserved in the sheet for historical rows but stays
+// blank on new intake — committee assigns it at approval time.
 function onFormSubmit(e) {
     try {
         const values = e.values || [];
@@ -210,7 +215,7 @@ function onFormSubmit(e) {
             flat:         values[FORM_COL.FLAT]        || "",
             category:     values[FORM_COL.CATEGORY]    || "",
             subCategory:  values[FORM_COL.SUBCATEGORY] || "",
-            severity:     values[FORM_COL.SEVERITY]    || "Medium",
+            severity:     "",
             tower:        values[FORM_COL.TOWER]       || "",
             description:  values[FORM_COL.LOCATION]    || "",
             photoLinks:   values[FORM_COL.PHOTO]       || ""
@@ -226,19 +231,21 @@ function onFormSubmit(e) {
  * submitIssue API action. Generates the ticket id atomically (LockService)
  * and writes one row into PENDING_REVIEW using PENDING_COL constants.
  *
+ * Severity is NOT defaulted here. It stays blank in PENDING_REVIEW until
+ * the committee assigns it at approval time, at which point SLA is also
+ * computed. See approveIssue().
+ *
  * `fields` shape:
  *   { residentName, flat, category, subCategory, severity, tower,
  *     description, photoLinks }   // photoLinks: string (CSV) OR string[]
  *
- * Returns: { ticketId, reportedDate, slaDate }
+ * Returns: { ticketId, reportedDate }
  */
 function createPendingIssue_(fields, submittedBy) {
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
         const reportedDate = new Date();
-        const severity = fields.severity || "Medium";
-        const slaDate  = calculateSLADate(severity, reportedDate);
         const ticketId = generateTicketID();
         const photoCell = Array.isArray(fields.photoLinks)
             ? fields.photoLinks.filter(Boolean).join(", ")
@@ -251,17 +258,17 @@ function createPendingIssue_(fields, submittedBy) {
         row[PENDING_COL.FLAT]          = fields.flat         || "";
         row[PENDING_COL.CATEGORY]      = fields.category     || "";
         row[PENDING_COL.SUBCATEGORY]   = fields.subCategory  || "";
-        row[PENDING_COL.SEVERITY]      = severity;
+        row[PENDING_COL.SEVERITY]      = fields.severity     || "";
         row[PENDING_COL.TOWER]         = fields.tower        || "";
         row[PENDING_COL.PHOTO]         = photoCell;
         row[PENDING_COL.DESCRIPTION]   = fields.description  || "";
         row[PENDING_COL.SUBMITTED_BY]  = submittedBy         || "";
         row[PENDING_COL.STATE]         = "PENDING_APPROVAL";
 
-        getSheet(SHEETS.PENDING_QUEUE).appendRow(row);
-        Logger.log("Pending issue created: " + ticketId + " SLA=" + slaDate);
+        getSheet(SHEETS.PENDING_REVIEW).appendRow(row);
+        Logger.log("Pending issue created: " + ticketId);
 
-        return { ticketId: ticketId, reportedDate: reportedDate, slaDate: slaDate };
+        return { ticketId: ticketId, reportedDate: reportedDate };
     } finally {
         try { lock.releaseLock(); } catch (e) { /* noop */ }
     }
@@ -326,7 +333,6 @@ function submitIssue(payload, submittedBy) {
             data: {
                 ticketId: result.ticketId,
                 reportedDate: result.reportedDate,
-                slaDate: result.slaDate,
                 photoCount: photoLinks.length
             },
             error: null
@@ -382,17 +388,16 @@ function dedupe_(arr) {
 
 // Server-side validation for in-portal submissions.
 // All numeric limits come from CONFIG tunables — keep this aligned with
-// what the browser client sees via getClientConfig().
+// what the browser client sees via getClientConfig(). Severity is NOT
+// validated here — it is assigned by the committee at approval time.
 function validateSubmission_(p) {
     const errors = [];
-    const ALLOWED_SEVERITIES = ["Critical", "High", "Medium", "Low"];
     const descMin   = Number(getTunable("SUBMIT_DESC_MIN"))    || 5;
     const descMax   = Number(getTunable("SUBMIT_DESC_MAX"))    || 1000;
     const maxPhotos = Number(getTunable("SUBMIT_MAX_PHOTOS"))  || 5;
     const maxMB     = Number(getTunable("SUBMIT_MAX_PHOTO_MB")) || 5;
     if (!p.category || String(p.category).trim() === "") errors.push("Category is required");
     if (!p.tower    || String(p.tower).trim()    === "") errors.push("Tower is required");
-    if (!p.severity || ALLOWED_SEVERITIES.indexOf(p.severity) === -1) errors.push("Severity must be Critical/High/Medium/Low");
     if (!p.description || String(p.description).trim().length < descMin) errors.push("Description must be at least " + descMin + " characters");
     if (p.description && String(p.description).length > descMax)        errors.push("Description must be " + descMax + " characters or fewer");
     if (p.residentName && String(p.residentName).length > 80)            errors.push("Resident name too long");
@@ -465,29 +470,30 @@ function uploadSubmissionPhotos_(photos, submittedBy) {
     return links;
 }
 
-// Get Form Responses (Direct from Google Sheet)
+// Get Form Responses (Direct from Google Sheet). Uses FORM_COL indices
+// (not header text) so the API contract is stable even if the bound form
+// changes question wording.
 function getFormResponses() {
     try {
         const sheet = getSheet(SHEETS.FORM_RESPONSES);
         const data = sheet.getDataRange().getValues();
         const responses = [];
-        
-        // Get header row to map column names
-        const headers = data[0];
-        
-        // Process each row (skip header)
+
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
-            const response = {};
-            
-            // Map each column to header name
-            for (let j = 0; j < headers.length; j++) {
-                response[headers[j]] = row[j];
-            }
-            
-            responses.push(response);
+            responses.push({
+                timestamp:    row[FORM_COL.TIMESTAMP]   || "",
+                residentName: row[FORM_COL.RESIDENT]    || "",
+                flat:         row[FORM_COL.FLAT]        || "",
+                category:     row[FORM_COL.CATEGORY]    || "",
+                subCategory:  row[FORM_COL.SUBCATEGORY] || "",
+                severity:     row[FORM_COL.SEVERITY]    || "",
+                tower:        row[FORM_COL.TOWER]       || "",
+                description:  row[FORM_COL.LOCATION]    || "",
+                photoLinks:   splitPhotoLinks_(row[FORM_COL.PHOTO])
+            });
         }
-        
+
         return {
             success: true,
             responses: responses,
@@ -508,7 +514,7 @@ function getFormResponses() {
 function syncFormResponses() {
     try {
         const formSheet = getSheet(SHEETS.FORM_RESPONSES);
-        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
 
         const formData = formSheet.getDataRange().getValues();
         const pendingData = pendingSheet.getDataRange().getValues();
@@ -549,7 +555,7 @@ function syncFormResponses() {
                 flat:         row[FORM_COL.FLAT]        || "",
                 category:     row[FORM_COL.CATEGORY]    || "",
                 subCategory:  row[FORM_COL.SUBCATEGORY] || "",
-                severity:     row[FORM_COL.SEVERITY]    || "Medium",
+                severity:     row[FORM_COL.SEVERITY]    || "",
                 tower:        row[FORM_COL.TOWER]       || "",
                 description:  row[FORM_COL.LOCATION]    || "",
                 photoLinks:   row[FORM_COL.PHOTO]       || ""
@@ -599,7 +605,7 @@ function validateUserAccess(email) {
 // Get Pending Issues
 function getPendingIssues() {
     try {
-        const sheet = getSheet(SHEETS.PENDING_QUEUE);
+        const sheet = getSheet(SHEETS.PENDING_REVIEW);
         const data = sheet.getDataRange().getValues();
         const issues = [];
 
@@ -628,7 +634,7 @@ function getPendingIssues() {
                     severity:    row[PENDING_COL.SEVERITY]    || "",
                     location:    row[PENDING_COL.DESCRIPTION] || "",
                     description: row[PENDING_COL.DESCRIPTION] || "",
-                    photoLinks:  photo ? [photo] : []
+                    photoLinks:  splitPhotoLinks_(photo)
                 },
                 state: state,
                 rejectionReason: row[PENDING_COL.REJECTION_REASON] || "",
@@ -644,10 +650,16 @@ function getPendingIssues() {
 }
 
 // Approve Issue: copy PENDING row into LIVE_ISSUES with status=APPROVED,
-// then remove from PENDING.
-function approveIssue(ticketId, userEmail) {
+// then remove from PENDING. Severity is supplied by the committee at
+// approval time (it is NOT collected on intake). SLA due-date is
+// computed here from severity + reportedDate.
+function approveIssue(ticketId, userEmail, severity) {
     try {
-        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const ALLOWED = ["Critical", "High", "Medium", "Low"];
+        if (!severity || ALLOWED.indexOf(severity) === -1) {
+            return { success: false, data: null, error: "Severity must be Critical/High/Medium/Low" };
+        }
+        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
         const pendingData  = pendingSheet.getDataRange().getValues();
 
@@ -656,7 +668,6 @@ function approveIssue(ticketId, userEmail) {
             if (row[PENDING_COL.TICKET_ID] !== ticketId) continue;
 
             const reportedDate = new Date(row[PENDING_COL.DATE_REPORTED]);
-            const severity     = row[PENDING_COL.SEVERITY] || "Medium";
             const slaDate      = calculateSLADate(severity, reportedDate);
             const now          = new Date();
 
@@ -678,6 +689,10 @@ function approveIssue(ticketId, userEmail) {
             live[LIVE_COL.ACTION_BY]      = userEmail || "";
             live[LIVE_COL.LAST_UPDATED]   = now;
 
+            // Persist committee-chosen severity back on the pending row as
+            // well so audit views see the same value.
+            pendingSheet.getRange(i + 1, PENDING_COL.SEVERITY + 1).setValue(severity);
+
             liveSheet.appendRow(live);
             pendingSheet.deleteRow(i + 1);
 
@@ -686,6 +701,7 @@ function approveIssue(ticketId, userEmail) {
                 data: {
                     ticketId: ticketId,
                     state: "APPROVED",
+                    severity: severity,
                     approvedBy: userEmail,
                     approvedDate: now,
                     slaDate: slaDate
@@ -703,7 +719,7 @@ function approveIssue(ticketId, userEmail) {
 // Reject Issue: mark PENDING row as REJECTED (kept for audit).
 function rejectIssue(ticketId, reason, userEmail) {
     try {
-        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
         const data = pendingSheet.getDataRange().getValues();
 
         for (let i = 1; i < data.length; i++) {
@@ -774,7 +790,7 @@ function getLiveIssues(filterOption) {
                     subcategory: row[LIVE_COL.SUBCATEGORY] || "",
                     severity:    sevRaw,
                     description: row[LIVE_COL.DESCRIPTION] || "",
-                    photoLinks:  photo ? [photo] : []
+                    photoLinks:  splitPhotoLinks_(photo)
                 },
                 builder: {
                     status:        row[LIVE_COL.BUILDER_STATUS]  || "ASSIGNED",
@@ -932,7 +948,7 @@ function reopenIssue(ticketId, reason, userEmail) {
 function getIssuesWithStatus() {
     try {
         const formSheet    = getSheet(SHEETS.FORM_RESPONSES);
-        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
         const closedSheet  = getSheet(SHEETS.CLOSED_ISSUES);
 
@@ -997,18 +1013,93 @@ function getIssuesWithStatus() {
                 issue: {
                     category:    row[FORM_COL.CATEGORY]    || "N/A",
                     subcategory: row[FORM_COL.SUBCATEGORY] || "",
-                    severity:    row[FORM_COL.SEVERITY]    || "Medium",
+                    severity:    row[FORM_COL.SEVERITY]    || "",
                     description: row[FORM_COL.LOCATION]    || "No details provided"
                 },
                 status: hybridStatus,
                 dateReported: row[FORM_COL.TIMESTAMP] || new Date().toISOString(),
-                attachments: row[FORM_COL.PHOTO] ? [row[FORM_COL.PHOTO]] : []
+                attachments: splitPhotoLinks_(row[FORM_COL.PHOTO])
             });
         }
 
         return { success: true, responses: issues, count: issues.length, error: null };
     } catch (error) {
         return { success: false, responses: null, error: "Error fetching issues with status: " + error.toString() };
+    }
+}
+
+// Get Submitted Issues: read PENDING_REVIEW (always-on snapshot of every
+// intake) and enrich each row with the downstream status by joining the
+// ticketId against LIVE_ISSUES and CLOSED_ISSUES. This is the source of
+// truth for the read-only "Submitted Issues" page.
+function getSubmittedIssues() {
+    try {
+        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
+        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
+        const closedSheet  = getSheet(SHEETS.CLOSED_ISSUES);
+
+        const pendingData = pendingSheet.getDataRange().getValues();
+        const liveData    = liveSheet.getDataRange().getValues();
+        const closedData  = closedSheet.getDataRange().getValues();
+
+        const liveByTicket = {};
+        for (let i = 1; i < liveData.length; i++) {
+            const r = liveData[i];
+            const tid = r[LIVE_COL.TICKET_ID];
+            if (!tid) continue;
+            liveByTicket[tid] = {
+                status:   r[LIVE_COL.BUILDER_STATUS] || r[LIVE_COL.STATUS] || "ASSIGNED",
+                severity: r[LIVE_COL.SEVERITY] || ""
+            };
+        }
+        const closedByTicket = {};
+        for (let i = 1; i < closedData.length; i++) {
+            const r = closedData[i];
+            const tid = r[LIVE_COL.TICKET_ID];
+            if (!tid) continue;
+            closedByTicket[tid] = {
+                status:   "CLOSED",
+                severity: r[LIVE_COL.SEVERITY] || ""
+            };
+        }
+
+        const responses = [];
+        for (let i = 1; i < pendingData.length; i++) {
+            const row = pendingData[i];
+            const tid = row[PENDING_COL.TICKET_ID];
+            const state = row[PENDING_COL.STATE] || "PENDING_APPROVAL";
+            const enrichment = closedByTicket[tid] || liveByTicket[tid] || null;
+            const status = enrichment ? enrichment.status : state;
+            const severity = (enrichment && enrichment.severity) || row[PENDING_COL.SEVERITY] || "";
+
+            responses.push({
+                ticketId: tid,
+                dateReported: row[PENDING_COL.DATE_REPORTED],
+                resident: {
+                    name: row[PENDING_COL.RESIDENT] || "",
+                    email: "",
+                    phone: ""
+                },
+                location: {
+                    tower: row[PENDING_COL.TOWER] || "",
+                    flat:  row[PENDING_COL.FLAT]  || ""
+                },
+                issue: {
+                    category:    row[PENDING_COL.CATEGORY]    || "",
+                    subcategory: row[PENDING_COL.SUBCATEGORY] || "",
+                    severity:    severity,
+                    description: row[PENDING_COL.DESCRIPTION] || ""
+                },
+                status: status,
+                state:  state,
+                rejectionReason: row[PENDING_COL.REJECTION_REASON] || "",
+                attachments: splitPhotoLinks_(row[PENDING_COL.PHOTO])
+            });
+        }
+
+        return { success: true, responses: responses, count: responses.length, error: null };
+    } catch (error) {
+        return { success: false, responses: null, error: "Error fetching submitted issues: " + error.toString() };
     }
 }
 
@@ -1042,7 +1133,7 @@ function deleteIssue(ticketId, sheet) {
 // Get Dashboard Metrics
 function getDashboardMetrics() {
     try {
-        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
+        const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
         const closedSheet  = getSheet(SHEETS.CLOSED_ISSUES);
 
@@ -1103,8 +1194,7 @@ function getDashboardMetrics() {
                 towerBreakdown: towerBreakdown,
                 agingIssues: agingIssues,
                 avgClosureTime: parseFloat(avgClosureTime),
-                builderWorkload: totalActive,
-                recentClosed: []
+                builderWorkload: totalActive
             },
             error: null
         };
@@ -1113,107 +1203,23 @@ function getDashboardMetrics() {
     }
 }
 
-// Generate Ticket ID (TKT-XXXXX format) - ensures unique ID across LIVE_ISSUES and CLOSED_ISSUES
+// Server-callable wrapper around generateTicketID(). Kept for backward
+// compatibility with the api_call switch; intake mints the ticket id
+// directly, so most callers no longer need this.
 function generateTicketId() {
     try {
-        const ss = getSpreadsheet();
-        const liveSheet = ss.getSheetByName(SHEETS.LIVE_ISSUES);
-        const closedSheet = ss.getSheetByName(SHEETS.CLOSED_ISSUES);
-        
-        let maxNum = 0;
-        
-        // Get max from LIVE_ISSUES
-        if (liveSheet) {
-            const liveData = liveSheet.getDataRange().getValues();
-            for (let i = 1; i < liveData.length; i++) {
-                const ticketId = liveData[i][0];
-                if (ticketId && ticketId.toString().startsWith("TKT-")) {
-                    const num = parseInt(ticketId.toString().substring(4));
-                    if (num > maxNum) maxNum = num;
-                }
-            }
-        }
-        
-        // Get max from CLOSED_ISSUES
-        if (closedSheet) {
-            const closedData = closedSheet.getDataRange().getValues();
-            for (let i = 1; i < closedData.length; i++) {
-                const ticketId = closedData[i][0];
-                if (ticketId && ticketId.toString().startsWith("TKT-")) {
-                    const num = parseInt(ticketId.toString().substring(4));
-                    if (num > maxNum) maxNum = num;
-                }
-            }
-        }
-        
-        const nextNum = String(maxNum + 1).padStart(5, '0');
-        const newTicketId = `TKT-${nextNum}`;
-        
-        return {
-            success: true,
-            data: { ticketId: newTicketId },
-            error: null
-        };
+        return { success: true, data: { ticketId: generateTicketID() }, error: null };
     } catch (error) {
-        Logger.log("Error generating ticket ID: " + error.toString());
         return { success: false, data: null, error: error.toString() };
     }
 }
 
-// Approve Issue With New Ticket ID - moves pending issue to live with new TKT-ID.
-function approveIssueWithTicketId(originalTicketId, newTicketId) {
-    try {
-        const pendingSheet = getSheet(SHEETS.PENDING_QUEUE);
-        const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
-        const pendingData  = pendingSheet.getDataRange().getValues();
-
-        for (let i = 1; i < pendingData.length; i++) {
-            const row = pendingData[i];
-            if (row[PENDING_COL.TICKET_ID] !== originalTicketId) continue;
-
-            const reportedDate = new Date(row[PENDING_COL.DATE_REPORTED]);
-            const severity     = row[PENDING_COL.SEVERITY] || "Medium";
-            const slaDate      = calculateSLADate(severity, reportedDate);
-            const now          = new Date();
-
-            const live = newRow_(LIVE_WIDTH);
-            live[LIVE_COL.TICKET_ID]      = newTicketId;
-            live[LIVE_COL.DATE_REPORTED]  = reportedDate;
-            live[LIVE_COL.RESIDENT]       = row[PENDING_COL.RESIDENT]    || "";
-            live[LIVE_COL.FLAT]           = row[PENDING_COL.FLAT]        || "";
-            live[LIVE_COL.CATEGORY]       = row[PENDING_COL.CATEGORY]    || "";
-            live[LIVE_COL.SEVERITY]       = severity;
-            live[LIVE_COL.TOWER]          = row[PENDING_COL.TOWER]       || "";
-            live[LIVE_COL.SUBCATEGORY]    = row[PENDING_COL.SUBCATEGORY] || "";
-            live[LIVE_COL.PHOTO]          = row[PENDING_COL.PHOTO]       || "";
-            live[LIVE_COL.DESCRIPTION]    = row[PENDING_COL.DESCRIPTION] || "";
-            live[LIVE_COL.BUILDER_STATUS] = "ASSIGNED";
-            live[LIVE_COL.DATE_ASSIGNED]  = now;
-            live[LIVE_COL.SLA_DATE]       = slaDate;
-            live[LIVE_COL.STATUS]         = "APPROVED";
-            live[LIVE_COL.LAST_UPDATED]   = now;
-
-            liveSheet.appendRow(live);
-            pendingSheet.deleteRow(i + 1);
-
-            return {
-                success: true,
-                data: {
-                    originalTicketId: originalTicketId,
-                    newTicketId: newTicketId,
-                    state: "APPROVED",
-                    approvedDate: new Date(),
-                    slaDate: slaDate
-                },
-                error: null
-            };
-        }
-
-        return { success: false, data: null, error: "Original ticket ID not found: " + originalTicketId };
-    } catch (error) {
-        Logger.log("Error approving issue with ticket ID: " + error.toString());
-        return { success: false, data: null, error: error.toString() };
-    }
+// Deprecated: ticket IDs are now minted at intake (TKT-XXXXX) and never
+// re-issued. Retained as a thin compatibility shim — it ignores
+// newTicketId, accepts the committee-chosen severity, and delegates to
+// approveIssue().
+function approveIssueWithTicketId(originalTicketId, newTicketId, userEmail, severity) {
+    return approveIssue(originalTicketId, userEmail || "", severity);
 }
 
 // Main Post Handler
@@ -1278,7 +1284,7 @@ function doPost(e) {
                 result = reopenIssue(payload.ticketId, payload.reason, userEmail);
                 break;
             case "deleteIssue":
-                result = deleteIssue(payload.ticketId, payload.sheet || SHEETS.PENDING_QUEUE);
+                result = deleteIssue(payload.ticketId, payload.sheet || SHEETS.PENDING_REVIEW);
                 break;
             case "generateTicketId":
                 result = generateTicketId();

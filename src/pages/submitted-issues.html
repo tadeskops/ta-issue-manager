@@ -33,6 +33,7 @@
             border-color: rgba(212, 175, 55, 0.3);
         }
     </style>
+    <?!= include('src/partials/theme') ?>
 </head>
 <body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
     <!-- Navigation -->
@@ -42,7 +43,7 @@
                 <!-- Logo -->
                 <div class="flex items-center gap-4">
                     <!-- Logo Only Version (Compact) -->
-                    <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                    <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-12 w-12 drop-shadow-lg">
                     <!-- Alternative: Logo with Text (Uncomment to use) -->
                     <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
                     <div>
@@ -87,8 +88,8 @@
                     <optgroup label="Sort">
                         <option value="date_desc">Newest first</option>
                         <option value="date_asc">Oldest first</option>
-                        <option value="sev_desc">Sev: Critical → Low</option>
-                        <option value="sev_asc">Sev: Low → Critical</option>
+                        <option class="sev-sort-option" value="sev_desc">Sev: Critical → Low</option>
+                        <option class="sev-sort-option" value="sev_asc">Sev: Low → Critical</option>
                         <option value="cat_asc">Cat: A → Z</option>
                         <option value="cat_desc">Cat: Z → A</option>
                         <option value="tower_asc">Tower: A → Common</option>
@@ -117,7 +118,7 @@
                     <option value="Common Area">Common Area</option>
                 </select>
                 <select id="severityFilter" onchange="filterIssues()"
-                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer">
+                        class="bg-slate-700/30 border border-slate-600/50 rounded-md px-2 py-1 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all text-xs cursor-pointer hidden">
                     <option value="">All Severities</option>
                     <option value="CRITICAL">Critical</option>
                     <option value="HIGH">High</option>
@@ -152,7 +153,6 @@
     </div>
 
     <?!= include('src/partials/api') ?>
-    <script src="../../assets/js/api.js"></script>
     <script>
         // === Auth (server-trusted via Google sign-in) ===
         (async function ensureAuthorized() {
@@ -171,9 +171,32 @@
 
         // Store all issues for filtering
         let allIssues = [];
+        // Feature flags fetched from the server; default to hiding severity
+        // on this read-only view (controlled by
+        // FEATURE_SHOW_SEVERITY_ON_SUBMITTED in CONFIG).
+        let SHOW_SEVERITY = false;
+
+        async function applyFeatureFlags() {
+            try {
+                const cfg = await API.call('getClientConfig');
+                const features = (cfg && cfg.data && cfg.data.features) || (cfg && cfg.features) || {};
+                SHOW_SEVERITY = !!features.FEATURE_SHOW_SEVERITY_ON_SUBMITTED;
+            } catch (e) {
+                SHOW_SEVERITY = false;
+            }
+            const sevFilter = document.getElementById('severityFilter');
+            if (sevFilter) sevFilter.classList.toggle('hidden', !SHOW_SEVERITY);
+            document.querySelectorAll('.sev-sort-option').forEach(opt => {
+                opt.hidden = !SHOW_SEVERITY;
+                opt.disabled = !SHOW_SEVERITY;
+            });
+        }
 
         // Load all issues on page load
-        window.addEventListener('load', loadAllIssues);
+        window.addEventListener('load', async () => {
+            await applyFeatureFlags();
+            loadAllIssues();
+        });
 
         // ========================
         // DATA NORMALIZATION
@@ -213,9 +236,10 @@
 
         async function loadAllIssues() {
             try {
-                // Identity is server-trusted via Google session (HtmlService)
-                // or via fetch fallback for local dev. No client email field.
-                const data = await API.call('getIssuesWithStatus');
+                // PENDING_REVIEW is the source-of-truth snapshot of every
+                // intake; getSubmittedIssues enriches each row with the
+                // current LIVE/CLOSED status by ticketId join.
+                const data = await API.call('getSubmittedIssues');
                 if (data && (data.responses || Array.isArray(data))) {
                     const responses = data.responses || data;
                     allIssues = (responses || []).map(normalizeIssueData);
@@ -301,9 +325,9 @@
                                 </p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getSeverityBadge(issue.issue.severity)}">
+                                ${SHOW_SEVERITY ? `<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getSeverityBadge(issue.issue.severity)}">
                                     ${issue.issue.severity || 'N/A'}
-                                </span>
+                                </span>` : ''}
                                 <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${getStatusBadge(issue.status)}">
                                     <i class="fas ${getStatusIcon(issue.status)} mr-1"></i>${issue.status || 'NEW'}
                                 </span>

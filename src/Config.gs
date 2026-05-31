@@ -41,7 +41,7 @@
 
 // ----- Fallback defaults (used only if CONFIG sheet missing / row blank) -----
 const DEFAULT_COMMITTEE_EMAILS = [
-    "maitreya.jain007@gmail.com",
+    "vibhumaitreya@gmail.com",
     "ta.deskops@gmail.com"
 ];
 const DEFAULT_BUILDER_EMAIL = "vibhumaitreya@gmail.com";
@@ -55,7 +55,8 @@ const DEFAULT_FEATURES = {
     FEATURE_REJECTED_FILTER:    true,  // Rejected filter chip on committee dashboard
     FEATURE_BUILDER_DASHBOARD:  true,  // builder-dashboard page accessible
     FEATURE_ADMIN_DASHBOARD:    true,  // admin-dashboard page (analytics) accessible
-    FEATURE_SUBMITTED_PAGE:     true   // submitted-issues.html accessible
+    FEATURE_SUBMITTED_PAGE:     true,  // submitted-issues.html accessible
+    FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false  // show severity badge/filter/sort on submitted-issues page
 };
 
 // Numeric / string tunables consumed by both server validators and the
@@ -69,7 +70,8 @@ const DEFAULT_TUNABLES = {
     SUBMIT_PHOTO_JPEG_QUALITY: 0.85,       // canvas.toDataURL quality
     SUBMIT_DESC_MIN:           5,          // description min length
     SUBMIT_DESC_MAX:           1000,       // description max length
-    CONFIG_CACHE_TTL_SECONDS:  300         // cache TTL (also informational)
+    CONFIG_CACHE_TTL_SECONDS:  300,        // cache TTL (also informational)
+    DEFAULT_THEME:             "light"      // high (original dark) | light | medium
 };
 
 // ----- Internal constants -----

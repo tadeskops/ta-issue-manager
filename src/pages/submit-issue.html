@@ -49,13 +49,14 @@
         .drop-zone { border: 2px dashed rgba(212,175,55,0.4); border-radius: 0.5rem; padding: 1.25rem; text-align: center; color:#94a3b8; cursor: pointer; transition: all 0.15s; }
         .drop-zone:hover { border-color:#d4af37; color:#e2e8f0; background: rgba(212,175,55,0.05); }
     </style>
+    <?!= include('src/partials/theme') ?>
 </head>
 <body class="min-h-screen">
     <!-- Navigation -->
     <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
         <div class="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center gap-4">
-                <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-12 w-12 drop-shadow-lg">
                 <div>
                     <h1 class="text-xl font-bold gold-accent">The Address</h1>
                     <p class="text-xs text-slate-400">Submit an Issue</p>
@@ -119,16 +120,9 @@
                         <option value="">— Select —</option>
                     </select>
                 </div>
-                <div>
-                    <label class="field-label">Severity <span class="text-red-400">*</span></label>
-                    <div id="severityPills" class="grid grid-cols-4 gap-2">
-                        <button type="button" class="sev-pill" data-sev="Critical">Critical</button>
-                        <button type="button" class="sev-pill" data-sev="High">High</button>
-                        <button type="button" class="sev-pill" data-sev="Medium" data-active="1">Medium</button>
-                        <button type="button" class="sev-pill" data-sev="Low">Low</button>
-                    </div>
-                </div>
             </div>
+            <!-- Severity is intentionally NOT collected on the form; it is
+                 assigned by the technical committee at approval time. -->
 
             <div>
                 <label class="field-label">Describe the issue <span class="text-red-400">*</span></label>
@@ -180,7 +174,6 @@
     <div id="toast" class="hidden fixed bottom-4 right-4 px-5 py-3 rounded-lg shadow-lg text-white font-bold z-50"></div>
 
     <?!= include('src/partials/api') ?>
-    <script src="../../assets/js/api.js"></script>
     <script>
     (async function () {
         const DRAFT_KEY = 'IRP_SUBMIT_DRAFT_V1';
@@ -240,7 +233,6 @@
                 setVal('category',     saved.category);
                 setVal('subCategory',  saved.subCategory);
                 setVal('description',  saved.description);
-                if (saved.severity)    setSeverity(saved.severity);
             }
         } catch (e) { /* ignore */ }
 
@@ -253,11 +245,6 @@
             document.getElementById('descCount').textContent = document.getElementById('description').value.length;
         });
         document.getElementById('descCount').textContent = document.getElementById('description').value.length;
-
-        // Severity pill clicks.
-        document.querySelectorAll('#severityPills .sev-pill').forEach(b => {
-            b.addEventListener('click', () => { setSeverity(b.dataset.sev); saveDraft(); });
-        });
 
         // Photo input.
         document.getElementById('photoInput').addEventListener('change', onPhotoSelect);
@@ -314,17 +301,6 @@
 
     function setVal(id, v) { if (v != null) document.getElementById(id).value = v; }
 
-    function setSeverity(sev) {
-        document.querySelectorAll('#severityPills .sev-pill').forEach(b => {
-            if (b.dataset.sev === sev) b.dataset.active = '1';
-            else delete b.dataset.active;
-        });
-    }
-    function getSeverity() {
-        const el = document.querySelector('#severityPills .sev-pill[data-active="1"]');
-        return el ? el.dataset.sev : 'Medium';
-    }
-
     function saveDraft() {
         try {
             const draft = {
@@ -333,8 +309,7 @@
                 tower:        document.getElementById('tower').value,
                 category:     document.getElementById('category').value,
                 subCategory:  document.getElementById('subCategory').value,
-                description:  document.getElementById('description').value,
-                severity:     getSeverity()
+                description:  document.getElementById('description').value
             };
             localStorage.setItem('IRP_SUBMIT_DRAFT_V1', JSON.stringify(draft));
         } catch (e) { /* ignore quota errors */ }
@@ -347,7 +322,6 @@
             document.getElementById('tower').value = '';
             document.getElementById('category').value = '';
             document.getElementById('subCategory').value = '';
-            setSeverity('Medium');
             photos.length = 0;
             renderPhotos();
             document.getElementById('descCount').textContent = '0';
@@ -426,7 +400,6 @@
             tower:        document.getElementById('tower').value,
             category:     document.getElementById('category').value,
             subCategory:  document.getElementById('subCategory').value,
-            severity:     getSeverity(),
             description:  document.getElementById('description').value.trim(),
             photos:       photos.map(p => ({ name: p.name, mime: p.mime, b64: p.b64 }))
         };
@@ -434,7 +407,6 @@
         const localErrors = [];
         if (!payload.tower)       localErrors.push('Tower is required');
         if (!payload.category)    localErrors.push('Category is required');
-        if (!payload.severity)    localErrors.push('Severity is required');
         if (!payload.description || payload.description.length < DESC_MIN) localErrors.push('Description must be at least ' + DESC_MIN + ' characters');
         if (localErrors.length) { showError(localErrors.join(' · ')); return; }
 

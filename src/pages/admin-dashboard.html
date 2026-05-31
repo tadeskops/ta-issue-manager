@@ -6,13 +6,14 @@
     <title>Dashboard Analytics - TA Issues</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <?!= include('src/partials/theme') ?>
 </head>
 <body class="bg-gray-50">
     <nav class="bg-white shadow">
         <div class="px-4 py-4 flex justify-between items-center">
             <div class="flex items-center gap-4">
                 <!-- Logo Only Version (Compact) -->
-                <img src="../../assets/images/TaLogo.png" alt="The Address" class="h-12 w-12 drop-shadow-lg">
+                <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-12 w-12 drop-shadow-lg">
                 <!-- Alternative: Logo with Text (Uncomment to use) -->
                 <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
                 <h1 class="text-2xl font-bold text-blue-600">The Address - Analytics</h1>
@@ -116,7 +117,6 @@
     </div>
 
     <?!= include('src/partials/api') ?>
-    <script src="../../assets/js/api.js"></script>
     <script>
         // === Auth (server-trusted via Google sign-in) ===
         (async function ensureAuthorized() {

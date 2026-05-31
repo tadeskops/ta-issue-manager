@@ -1,0 +1,58 @@
+name: Deploy to Google Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'appsscript.json'
+      - '.claspignore'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_new_version:
+        description: 'Also publish a new web-app deployment version'
+        type: boolean
+        default: false
+
+concurrency:
+  group: apps-script-deploy
+  cancel-in-progress: false
+
+jobs:
+  push:
+    name: clasp push (+ optional deploy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Write clasp credentials from secret
+        run: |
+          printf '%s' '${{ secrets.CLASPRC_JSON }}' > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+
+      - name: Write project link from secret
+        run: |
+          printf '%s' '${{ secrets.CLASP_JSON }}' > .clasp.json
+
+      - name: clasp push -f
+        run: clasp push -f
+
+      - name: Publish new web-app deployment
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true
+        run: |
+          DESC="Auto-deploy $(date -u +'%Y-%m-%d %H:%M UTC') ${{ github.sha }}"
+          if [ -n "${{ secrets.DEPLOYMENT_ID }}" ]; then
+            clasp update-deployment "${{ secrets.DEPLOYMENT_ID }}" --description "$DESC"
+          else
+            clasp create-deployment --description "$DESC"
+          fi
