@@ -146,12 +146,76 @@ function api_whoAmI() {
     return { email: email, role: getUserRole(email) };
 }
 
+/**
+ * Resolve the caller's identity. Prefers a session token issued by
+ * api_loginWithIdToken() (works on ANONYMOUS deployments where Session
+ * cannot read the visitor's email); falls back to Session.getActiveUser().
+ */
+function resolveCaller_(payload) {
+    var t = payload && payload._session;
+    if (t) {
+        try {
+            var raw = CacheService.getScriptCache().get("sess:" + t);
+            if (raw) {
+                var s = JSON.parse(raw);
+                if (s && s.email) return { email: s.email, role: s.role || getUserRole(s.email) };
+            }
+        } catch (e) { /* fall through */ }
+    }
+    var email = (Session.getActiveUser().getEmail() || "").trim();
+    return { email: email, role: getUserRole(email) };
+}
+
+/**
+ * Verifies a Google Identity Services ID token server-side via Google's
+ * tokeninfo endpoint, checks the email against CONFIG, and (if authorized)
+ * issues a short-lived session token the browser attaches to subsequent
+ * api_call() requests. This is what makes sign-in actually work on the
+ * ANONYMOUS web-app deployment.
+ */
+function api_loginWithIdToken(payload) {
+    payload = payload || {};
+    var token = String(payload.idToken || payload.credential || "").trim();
+    if (!token) return { success: false, error: "Missing idToken" };
+    var expectedAud = "";
+    try { expectedAud = String((getConfig().tunables || {}).GOOGLE_OAUTH_CLIENT_ID || "").trim(); } catch (e) {}
+    if (!expectedAud) return { success: false, error: "GOOGLE_OAUTH_CLIENT_ID not set in CONFIG" };
+    var info;
+    try {
+        var resp = UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(token),
+                                     { muteHttpExceptions: true });
+        if (resp.getResponseCode() !== 200) {
+            return { success: false, error: "Token rejected by Google (" + resp.getResponseCode() + ")" };
+        }
+        info = JSON.parse(resp.getContentText());
+    } catch (e) {
+        return { success: false, error: "Token verification failed: " + e };
+    }
+    if (!info || info.aud !== expectedAud) {
+        return { success: false, error: "Token audience mismatch" };
+    }
+    if (info.email_verified !== true && info.email_verified !== "true") {
+        return { success: false, error: "Email not verified" };
+    }
+    var email = String(info.email || "").trim();
+    if (!email) return { success: false, error: "Token contains no email" };
+    var role = getUserRole(email);
+    if (role === "UNKNOWN") {
+        return { success: false, error: email + " is not authorized (not in CONFIG)", data: { email: email, role: role } };
+    }
+    // Issue a session token (random) and cache the verified identity for 6h.
+    var sessionToken = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+    CacheService.getScriptCache().put("sess:" + sessionToken, JSON.stringify({ email: email, role: role }), 21600);
+    return { success: true, data: { email: email, role: role, sessionToken: sessionToken, expiresInSeconds: 21600 }, error: null };
+}
+
 function api_call(action, payload) {
     payload = payload || {};
-    const email = (Session.getActiveUser().getEmail() || "").trim();
-    const role  = getUserRole(email);
+    var who = resolveCaller_(payload);
+    var email = who.email;
+    var role  = who.role;
     // Public read-only actions are allowed for anonymous visitors (role UNKNOWN).
-    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster"];
+    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster", "loginWithIdToken"];
     if (role === "UNKNOWN" && PUBLIC_ACTIONS.indexOf(action) === -1) {
         return { success: false, error: "Unauthorized: " + (email || "no email") };
     }
@@ -179,6 +243,7 @@ function api_call(action, payload) {
             case "getCategoryMaster":      return getCategoryMaster();
             case "getClientConfig":        return getClientConfig();
             case "validateUserAccess":     return { success: true, data: { email: email, role: role, hasAccess: true }, error: null };
+            case "loginWithIdToken":       return api_loginWithIdToken(payload);
             default:
                 return { success: false, error: "Unknown action: " + action };
         }

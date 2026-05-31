@@ -72,7 +72,8 @@ const DEFAULT_TUNABLES = {
     SUBMIT_DESC_MAX:           1000,       // description max length
     CONFIG_CACHE_TTL_SECONDS:  300,        // cache TTL (also informational)
     DEFAULT_THEME:             "light",     // high (original dark) | light | medium
-    TECH_WEBAPP_URL:           ""            // separate deployment URL that requires Google sign-in (committee/builder). Empty = same URL.
+    TECH_WEBAPP_URL:           "",           // separate deployment URL that requires Google sign-in (committee/builder). Empty = same URL.
+    GOOGLE_OAUTH_CLIENT_ID:    ""            // Google OAuth 2.0 Web Client ID. When set, index.html enables Google Identity Services (One Tap + button) so visitors are auto-signed-in with their Gmail account; server verifies the ID token and matches against CONFIG.
 };
 
 // ----- Internal constants -----
