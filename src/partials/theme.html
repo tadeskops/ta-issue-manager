@@ -9,7 +9,7 @@
 
      Default tone is read from CONFIG row DEFAULT_THEME (Config.gs).
 
-     Include with:  <?!= include('src/partials/theme') ?>
+     Include with:  &lt;?!= include('src/partials/theme') ?&gt;
     ============================================================================
 -->
 <? var __defTheme = (function(){ try { return getTunable('DEFAULT_THEME') || 'high'; } catch(e){ return 'high'; } })(); ?>
