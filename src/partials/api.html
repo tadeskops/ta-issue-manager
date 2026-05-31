@@ -86,7 +86,16 @@ const API = {
 
     signOut() {
         this._user = null;
-        const back = (typeof window !== "undefined" && window.IRP_WEBAPP_URL) || "/";
+        // Land on the PUBLIC (anonymous) deployment after Google logs the
+        // user out — otherwise the continue= URL is the secure deployment
+        // which immediately bounces back to Google's account chooser.
+        var publicUrl = "";
+        try {
+            publicUrl = (window.IRP_CLIENT_CONFIG &&
+                         window.IRP_CLIENT_CONFIG.tunables &&
+                         window.IRP_CLIENT_CONFIG.tunables.PUBLIC_WEBAPP_URL) || "";
+        } catch (e) { /* no client config available */ }
+        const back = publicUrl || (typeof window !== "undefined" && window.IRP_WEBAPP_URL) || "/";
         const url  = "https://accounts.google.com/Logout?continue=" +
                      encodeURIComponent("https://appengine.google.com/_ah/logout?continue=" + back);
         if (typeof window !== "undefined") window.open(url, "_top");
