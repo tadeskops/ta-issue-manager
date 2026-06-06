@@ -522,11 +522,12 @@ function checkRateLimit_(email) {
 // publicly viewable URLs (Drive thumbnail endpoint) that work inside an
 // <img> tag in the web app.
 function uploadSubmissionPhotos_(photos, submittedBy) {
-    const folderId = getAttachmentFolderId();
-    if (!folderId) {
-        throw new Error("ATTACHMENT_FOLDER_ID not set in CONFIG sheet");
-    }
-    const folder = DriveApp.getFolderById(folderId);
+    // Auto-resolves + persists ATTACHMENT_FOLDER_ID on first use, so no
+    // separate operator setup step is required. Throws a clear error if
+    // the canonical Drive path can't be reached (missing folder / no
+    // share access for the script's effective account).
+    const resolved = resolveAttachmentFolder_({ autoSetup: true, makePublic: true });
+    const folder = resolved.folder;
     const links = [];
     const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "UTC", "yyyyMMdd_HHmmss");
     for (let i = 0; i < photos.length; i++) {
@@ -536,21 +537,10 @@ function uploadSubmissionPhotos_(photos, submittedBy) {
         const fileName = stamp + "_" + (submittedBy ? submittedBy.replace(/[^A-Za-z0-9._-]/g, "_") + "_" : "") + safeName;
         const blob = Utilities.newBlob(bytes, ph.mime, fileName);
         const file = folder.createFile(blob);
-        // Force "Anyone with the link can view" so the web app (which may
-        // be served to anonymous visitors) can render the image. Falls
-        // back to ANYONE (search-discoverable) only if the strict variant
-        // is blocked by domain policy.
-        try {
-            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        } catch (e1) {
-            Logger.log("setSharing ANYONE_WITH_LINK failed for " + fileName + ": " + e1);
-            try {
-                file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
-            } catch (e2) {
-                Logger.log("setSharing ANYONE also failed for " + fileName + ": " + e2 +
-                    ". The Drive admin must allow link sharing on this folder or web-app visitors will see broken images.");
-            }
-        }
+        // Force "Anyone with link → Viewer" so the web app (which may be
+        // served to anonymous visitors) can render the image. Helper logs
+        // and falls back to ANYONE if domain policy blocks link sharing.
+        trySharePublic_(file, fileName);
         // Store the embeddable thumbnail URL directly so future readers
         // don't have to translate. splitPhotoLinks_ also normalizes legacy
         // /file/d/<id>/view URLs from the bound Google Form.

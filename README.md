@@ -49,8 +49,8 @@ running is always safe.
 | # | When to run | Function | What it does |
 |---|---|---|---|
 | 1 | First deploy, or after pulling new `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` keys | `setupConfigSheet` | Creates / repopulates the `CONFIG` tab. Preserves existing operator-edited values; only missing keys are appended with defaults. |
-| 2 | First deploy, or if the attachment folder ID is blank | `setupAttachmentFolder` | Walks `My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating the auto-appended ` (File responses)` suffix) and writes the resolved folder ID into the `ATTACHMENT_FOLDER_ID` row of CONFIG. Logs the full path + URL. |
-| 3 | First deploy, or after any new files were added to the attachment folder by Google Forms / Drive | `makeAttachmentFolderPublic` | Sets the attachment folder **and every file inside it** to "Anyone with the link – Viewer" so all photos render inside the web app for any visitor. Falls back to `ANYONE` if the strict variant is blocked, and logs a clear warning if both are blocked by a Workspace policy. |
+| — | _Optional_ — pre-seed the attachment folder ID so the first upload doesn't have to walk Drive | `setupAttachmentFolder` | Walks `My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating the ` (File responses)` suffix), writes the ID into `ATTACHMENT_FOLDER_ID`, and forces public-view on the folder. **Not required** — `uploadSubmissionPhotos_` calls the same resolver lazily on first upload and persists the result. |
+| — | _Optional_ — bulk-publish legacy / Form-uploaded files already inside the folder | `makeAttachmentFolderPublic` | Sets the folder **and every file currently inside it** to "Anyone with the link – Viewer". New uploads are made public automatically by `trySharePublic_`; this only matters for files Google Forms / Drive added before public-view was wired in. Falls back to `ANYONE` if the strict variant is blocked, and logs a clear warning if both are blocked by a Workspace policy. |
 | — | Anytime, to confirm where uploads will land | `whereDoUploadsGo` | Read-only. Prints the configured attachment folder's full path + URL. Does **not** change anything. |
 | — | After editing a CONFIG row by hand | `clearConfigCache` | Forces the next API call to re-read the `CONFIG` sheet (otherwise the cached values stay for up to 5 minutes). |
 
@@ -59,16 +59,20 @@ running is always safe.
 ```
 clasp push
   → in the Apps Script editor:
-      1. setupConfigSheet           (seed CONFIG sheet)
-      2. setupAttachmentFolder      (pin the Drive folder ID)
-      3. makeAttachmentFolderPublic (open up sharing for the web app)
-      4. whereDoUploadsGo           (verify path + URL in the log)
+      1. setupConfigSheet           (seed CONFIG sheet — required)
+  → photo uploads work immediately. On the first upload the script
+    auto-resolves the canonical Drive path, persists the folder ID into
+    CONFIG, and forces public-view on the folder.
+  → optional follow-ups:
+      • setupAttachmentFolder       (pre-seed the ID without an upload)
+      • makeAttachmentFolderPublic  (retro-publish files added before this build)
+      • whereDoUploadsGo            (verify path + URL in the log)
 ```
 
-After step 3, every photo — old Form-uploaded ones, prior in-portal
-submissions, and committee-side uploads added later — renders publicly in
-the web app's `<img>` tags. The URLs stored in the sheet are normalized to
-the Drive thumbnail endpoint (`https://drive.google.com/thumbnail?id=...&sz=w2000`)
+Every photo — old Form-uploaded ones, prior in-portal submissions, and
+committee-side uploads added later — renders publicly in the web app's
+`<img>` tags. The URLs stored in the sheet are normalized to the Drive
+thumbnail endpoint (`https://drive.google.com/thumbnail?id=...&sz=w2000`)
 by `splitPhotoLinks_` / `driveImageUrl_` in `src/Main.gs`, so no front-end
 change is needed when adding new readers.
 

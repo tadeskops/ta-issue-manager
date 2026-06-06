@@ -307,75 +307,188 @@ function parseBool_(val, fallback) {
  * suffix on rename, etc.), so the lookup matches the leading folder name
  * case-insensitively and tolerates the suffix being absent.
  *
- * Run this once from the Apps Script editor. Re-run is safe.
+ * Safe to re-run; idempotent. **NOT required** for normal operation —
+ * `uploadSubmissionPhotos_` calls `resolveAttachmentFolder_({ autoSetup:
+ * true })` lazily on the first upload and persists the result. Operators
+ * only need this function if they want to pre-seed the value or
+ * re-resolve after moving the folder in Drive.
  */
 function setupAttachmentFolder() {
-    const PATH = [
-        "TA_HANDOVER",
-        "ISSUE_UPLOADS",
-        "TA Issue Reporting Portal",        // suffix "(File responses)" tolerated
-        "Upload Photos/Video"               // suffix "(File responses)" tolerated
-    ];
+    const r = resolveAttachmentFolder_({ autoSetup: true, makePublic: true, verbose: true });
+    Logger.log("Attachment folder set:");
+    Logger.log("  Path:     " + r.path);
+    Logger.log("  Folder:   " + r.folder.getName());
+    Logger.log("  ID:       " + r.folderId);
+    Logger.log("  URL:      " + r.url);
+    return { path: r.path, folderId: r.folderId, url: r.url };
+}
 
-    function findChild(parent, wantedName) {
-        const want = wantedName.toLowerCase();
-        const it = parent.getFolders();
-        const candidates = [];
-        while (it.hasNext()) {
-            const f = it.next();
-            const n = f.getName().toLowerCase();
-            if (n === want) return f;
-            if (n.indexOf(want) === 0) candidates.push(f); // tolerates " (File responses)" suffix
+// Default canonical Drive path for in-portal photo uploads. Override by
+// editing this array if your folder layout changes.
+const ATTACHMENT_FOLDER_PATH = [
+    "TA_HANDOVER",
+    "ISSUE_UPLOADS",
+    "TA Issue Reporting Portal",        // suffix "(File responses)" tolerated
+    "Upload Photos/Video"               // suffix "(File responses)" tolerated
+];
+
+/**
+ * Returns the attachment folder, auto-resolving and persisting the id on
+ * first use so operators don't have to run a separate setup function.
+ *
+ * Resolution order:
+ *   1. If `ATTACHMENT_FOLDER_ID` row in CONFIG is set AND opens cleanly,
+ *      return that folder.
+ *   2. Otherwise (blank / opens-fails), if `opts.autoSetup` is truthy,
+ *      walk `ATTACHMENT_FOLDER_PATH` from My Drive root, persist the
+ *      resolved id back into CONFIG, and return the folder. The walk
+ *      tolerates the Google-Forms "(File responses)" suffix.
+ *   3. If `opts.makePublic` is truthy, force the resolved folder to
+ *      "Anyone with link → Viewer" so web-app visitors can render the
+ *      uploaded images. Falls back to ANYONE; logs on policy block.
+ *
+ * Throws a clear error if the path cannot be resolved (e.g. the script
+ * account does not have access to the Form's File-responses folder).
+ *
+ * Caches the resolution in ScriptProperties for ~5 min to avoid the
+ * Drive walk on every upload in a burst.
+ */
+function resolveAttachmentFolder_(opts) {
+    opts = opts || {};
+    const cache = CacheService.getScriptCache();
+    const CACHE_KEY = "IRP_RESOLVED_ATTACHMENT_FOLDER";
+
+    // 1. Try the configured id first.
+    const configuredId = getAttachmentFolderId();
+    if (configuredId) {
+        try {
+            const f = DriveApp.getFolderById(configuredId);
+            if (opts.makePublic) trySharePublic_(f, "folder " + f.getName());
+            return _wrapFolder_(f, configuredId);
+        } catch (e) {
+            Logger.log("Configured ATTACHMENT_FOLDER_ID (" + configuredId + ") could not be opened: " + e);
+            // fall through to autoSetup
         }
-        if (candidates.length === 1) return candidates[0];
-        if (candidates.length > 1) {
-            throw new Error("Ambiguous folder under '" + parent.getName() +
-                "': " + candidates.map(c => c.getName()).join(" | "));
-        }
-        return null;
     }
 
-    // Start from My Drive root.
+    if (!opts.autoSetup) {
+        throw new Error("ATTACHMENT_FOLDER_ID not set in CONFIG sheet");
+    }
+
+    // 2. Cached resolution from a previous walk in the last few minutes.
+    try {
+        const hit = cache.get(CACHE_KEY);
+        if (hit) {
+            const cached = JSON.parse(hit);
+            if (cached && cached.id) {
+                try {
+                    const f = DriveApp.getFolderById(cached.id);
+                    return _wrapFolder_(f, cached.id);
+                } catch (e2) { /* cache stale — fall through and re-walk */ }
+            }
+        }
+    } catch (e3) { /* cache miss is fine */ }
+
+    // 3. Walk the canonical path.
+    if (opts.verbose) Logger.log("Auto-resolving attachment folder by path...");
     let cur = DriveApp.getRootFolder();
     const trail = ["My Drive"];
-    for (const seg of PATH) {
-        const next = findChild(cur, seg);
+    for (let i = 0; i < ATTACHMENT_FOLDER_PATH.length; i++) {
+        const seg = ATTACHMENT_FOLDER_PATH[i];
+        const next = _findChildFolder_(cur, seg);
         if (!next) {
-            throw new Error("Folder not found: " + trail.join(" / ") + " / " + seg +
-                ". Check share permissions or that the path exists.");
+            throw new Error(
+                "Cannot auto-resolve attachment folder. Missing: " +
+                trail.join(" / ") + " / " + seg + ". " +
+                "Either create the folder, share it with the script's effective " +
+                "account, or set ATTACHMENT_FOLDER_ID in the CONFIG sheet manually."
+            );
         }
         cur = next;
         trail.push(cur.getName());
     }
 
     const folderId = cur.getId();
-    const url      = cur.getUrl();
 
-    // Write the id into CONFIG (preserve other rows).
-    const ss = getSpreadsheet();
-    const sheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-    if (!sheet) throw new Error("CONFIG sheet not found — run setupConfigSheet() first.");
-    const values = sheet.getDataRange().getValues();
-    let rowIdx = -1;
-    for (let i = 1; i < values.length; i++) {
-        if (String(values[i][0] || "").trim().toUpperCase() === "ATTACHMENT_FOLDER_ID") {
-            rowIdx = i; break;
+    // 4. Persist into CONFIG so future calls skip the walk entirely.
+    try {
+        const ss = getSpreadsheet();
+        const sheet = ss.getSheetByName(CONFIG_SHEET_NAME);
+        if (sheet) {
+            const values = sheet.getDataRange().getValues();
+            let rowIdx = -1;
+            for (let i = 1; i < values.length; i++) {
+                if (String(values[i][0] || "").trim().toUpperCase() === "ATTACHMENT_FOLDER_ID") {
+                    rowIdx = i; break;
+                }
+            }
+            if (rowIdx === -1) {
+                sheet.appendRow(["ATTACHMENT_FOLDER_ID", folderId,
+                    "Drive folder ID for in-portal photo uploads (auto-resolved on first upload)."]);
+            } else {
+                sheet.getRange(rowIdx + 1, 2).setValue(folderId);
+            }
+            clearConfigCache();
+        } else {
+            Logger.log("CONFIG sheet missing — could not persist auto-resolved folder id. Run setupConfigSheet().");
+        }
+    } catch (e4) {
+        Logger.log("Could not persist ATTACHMENT_FOLDER_ID to CONFIG: " + e4);
+        // Non-fatal: still return the folder so the upload succeeds.
+    }
+
+    try { cache.put(CACHE_KEY, JSON.stringify({ id: folderId }), 300); } catch (e5) { /* noop */ }
+
+    if (opts.makePublic) trySharePublic_(cur, "folder " + cur.getName());
+
+    const wrapped = _wrapFolder_(cur, folderId);
+    wrapped.path = trail.join(" / ");
+    return wrapped;
+}
+
+function _findChildFolder_(parent, wantedName) {
+    const want = String(wantedName).toLowerCase();
+    const it = parent.getFolders();
+    const candidates = [];
+    while (it.hasNext()) {
+        const f = it.next();
+        const n = f.getName().toLowerCase();
+        if (n === want) return f;
+        if (n.indexOf(want) === 0) candidates.push(f); // tolerates " (File responses)" suffix
+    }
+    if (candidates.length === 1) return candidates[0];
+    if (candidates.length > 1) {
+        throw new Error("Ambiguous folder under '" + parent.getName() +
+            "': " + candidates.map(c => c.getName()).join(" | "));
+    }
+    return null;
+}
+
+function _wrapFolder_(folder, id) {
+    return {
+        folder: folder,
+        folderId: id,
+        url: folder.getUrl(),
+        path: ""    // populated by walker; "" when returned from configured-id branch
+    };
+}
+
+// Force "Anyone with the link → Viewer" sharing, falling back to ANYONE
+// when domain policy blocks link sharing. Used by upload paths and the
+// makeAttachmentFolderPublic helper. Never throws — failures are logged.
+function trySharePublic_(node, label) {
+    try {
+        node.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        return "ANYONE_WITH_LINK";
+    } catch (e1) {
+        try {
+            node.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+            return "ANYONE";
+        } catch (e2) {
+            Logger.log("trySharePublic_ failed for " + (label || "node") + ": " + e2);
+            return "FAILED";
         }
     }
-    if (rowIdx === -1) {
-        sheet.appendRow(["ATTACHMENT_FOLDER_ID", folderId,
-            "Drive folder ID for in-portal photo uploads (auto-set by setupAttachmentFolder)."]);
-    } else {
-        sheet.getRange(rowIdx + 1, 2).setValue(folderId);
-    }
-    clearConfigCache();
-
-    Logger.log("Attachment folder set:");
-    Logger.log("  Path:     " + trail.join(" / "));
-    Logger.log("  Folder:   " + cur.getName());
-    Logger.log("  ID:       " + folderId);
-    Logger.log("  URL:      " + url);
-    return { path: trail.join(" / "), folderId: folderId, url: url };
 }
 
 /**
@@ -423,35 +536,20 @@ function whereDoUploadsGo() {
  * logged — you must adjust the domain sharing policy.
  */
 function makeAttachmentFolderPublic() {
-    const id = getAttachmentFolderId();
-    if (!id) throw new Error("ATTACHMENT_FOLDER_ID not set. Run setupAttachmentFolder() first.");
-    const folder = DriveApp.getFolderById(id);
-
-    function publish(node, label) {
-        try {
-            node.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-            return "ANYONE_WITH_LINK";
-        } catch (e1) {
-            try {
-                node.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
-                return "ANYONE (link sharing blocked by domain policy)";
-            } catch (e2) {
-                Logger.log("  ! could not share " + label + ": " + e2);
-                return "FAILED";
-            }
-        }
-    }
+    // Auto-resolve if needed (no setupAttachmentFolder prerequisite).
+    const r = resolveAttachmentFolder_({ autoSetup: true, makePublic: true });
+    const folder = r.folder;
+    const id = r.folderId;
 
     Logger.log("Folder: " + folder.getName() + " (" + id + ")");
-    Logger.log("  -> " + publish(folder, "folder"));
 
     let fileCount = 0, sharedCount = 0;
     const files = folder.getFiles();
     while (files.hasNext()) {
         const f = files.next();
         fileCount++;
-        const r = publish(f, f.getName());
-        if (r !== "FAILED") sharedCount++;
+        const result = trySharePublic_(f, f.getName());
+        if (result !== "FAILED") sharedCount++;
     }
     Logger.log("Files processed: " + sharedCount + " of " + fileCount + " set to public-view.");
     return { folderId: id, filesProcessed: fileCount, filesShared: sharedCount };

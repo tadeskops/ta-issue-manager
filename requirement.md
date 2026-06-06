@@ -123,7 +123,7 @@
 | `COMMITTEE_EMAILS` | `a@x.com, b@x.com` | Comma- or newline-separated |
 | `BUILDER_EMAIL` | `builder@x.com` | Single email |
 | `LOGO_URL` | `https://drive.google.com/uc?id=…` | Optional — falls back to bundled asset |
-| `ATTACHMENT_FOLDER_ID` | `1AbC…xyz` | Drive folder ID for **all** in-portal photo uploads (resident submit page + committee "attach later" uploader). Blank = uploads fail with `ATTACHMENT_FOLDER_ID not set`. Populated by `setupAttachmentFolder` (see §13). |
+| `ATTACHMENT_FOLDER_ID` | `1AbC…xyz` | Drive folder ID for **all** in-portal photo uploads (resident submit page + committee "attach later" uploader). **Auto-populated on first upload** by `resolveAttachmentFolder_({ autoSetup: true })` — walks the canonical path under My Drive and persists the result. Operators can pre-seed it via `setupAttachmentFolder` (see §13.1) or override it with a different folder id manually. |
 
 Feature flags and numeric tunables are stored as additional rows; their canonical defaults live in `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` (`src/Config.gs`). Cached 5 min in `CacheService`; `clearConfigCache()` forces refresh.
 
@@ -286,8 +286,8 @@ All functions live in `src/Config.gs`. Run from the Apps Script editor → funct
 | # | When | Function | What it does |
 |---|---|---|---|
 | 1 | Fresh deploy, or after pulling new `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` | `setupConfigSheet` | Seeds the `CONFIG` tab. Preserves existing operator values; appends only missing keys with defaults. |
-| 2 | Fresh deploy, or if `ATTACHMENT_FOLDER_ID` is blank | `setupAttachmentFolder` | Walks `My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating the ` (File responses)` suffix Google Forms appends) and writes the folder ID into the `ATTACHMENT_FOLDER_ID` row. |
-| 3 | Fresh deploy, **and** every time Google Forms drops new files into that folder | `makeAttachmentFolderPublic` | Sets the folder and every file inside to *Anyone with the link → Viewer*. Falls back to `ANYONE` if domain policy blocks link sharing; logs a warning if both are blocked. |
+| — | _Optional_ — pre-seed `ATTACHMENT_FOLDER_ID` without waiting for the first upload | `setupAttachmentFolder` | Walks `My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating ` (File responses)` suffix), persists the folder id in CONFIG, and forces public-view on the folder. **Not required** — `uploadSubmissionPhotos_` calls the same resolver lazily on first upload via `resolveAttachmentFolder_({ autoSetup: true, makePublic: true })`. |
+| — | _Optional_ — bulk-publish files already inside the attachment folder (Form-uploaded, etc.) | `makeAttachmentFolderPublic` | Walks every file in the folder and re-applies *Anyone with link → Viewer*. New uploads after this build are made public automatically by `trySharePublic_` in the upload path. Falls back to `ANYONE` if domain policy blocks link sharing. |
 | — | Anytime, to verify | `whereDoUploadsGo` | Read-only. Prints the configured folder's full path + URL. Does not change anything. |
 | — | After editing CONFIG by hand | `clearConfigCache` | Forces the next call to re-read CONFIG (5-min cache otherwise). |
 
