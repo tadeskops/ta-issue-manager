@@ -439,6 +439,15 @@
                 console.error('Auth check failed:', e);
                 location.href = 'index.html';
             }
+            // Pull feature flags so optional UI (e.g. committee photo
+            // upload) hides cleanly when disabled in CONFIG.
+            try {
+                const cc = await API.getClientConfig();
+                window.IRP_CLIENT_CONFIG = cc || { features: {}, tunables: {} };
+            } catch (e) {
+                console.warn('getClientConfig failed, using defaults:', e && e.message);
+                window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
+            }
         })();
 
         let pendingIssues = [];
@@ -954,7 +963,7 @@
                         ` : `
                             <div class="rounded-lg border border-dashed border-slate-600 bg-slate-800/40 p-5 text-center">
                                 <p class="text-xs text-slate-500 italic mb-3">No photos attached</p>
-                                ${tab !== 'closed' ? `
+                                ${tab !== 'closed' && (((window.IRP_CLIENT_CONFIG || {}).features || {}).FEATURE_COMMITTEE_PHOTO_ATTACH === true) ? `
                                     <input id="committeePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" onchange="onCommitteePhotoSelected(this)">
                                     <button type="button" onclick="document.getElementById('committeePhotoInput').click()"
                                         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold uppercase tracking-wider transition-all border border-amber-400/30 shadow-lg">
@@ -1013,6 +1022,11 @@
             const files = Array.from(input.files || []);
             input.value = '';
             if (files.length === 0) return;
+            const features = ((window.IRP_CLIENT_CONFIG || {}).features) || {};
+            if (features.FEATURE_COMMITTEE_PHOTO_ATTACH !== true) {
+                showToast('✗ Photo attach is disabled', 'error');
+                return;
+            }
             if (!currentDetailTicket || !currentDetailTab) {
                 showToast('✗ No issue selected', 'error');
                 return;

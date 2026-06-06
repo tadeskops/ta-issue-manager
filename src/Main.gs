@@ -561,6 +561,14 @@ function uploadSubmissionPhotos_(photos, submittedBy) {
  */
 function addPhotosToIssue(ticketId, sheetName, photos, userEmail) {
     try {
+        // Two flags gate this action:
+        //   FEATURE_COMMITTEE_PHOTO_ATTACH — master switch for the
+        //     "attach later" workflow (UI button + this API). Default OFF.
+        //   FEATURE_PHOTO_UPLOAD — global photo-upload kill-switch shared
+        //     with the resident submit page.
+        if (!getFeatureFlag("FEATURE_COMMITTEE_PHOTO_ATTACH")) {
+            return { success: false, data: null, error: "Committee photo attach is disabled. Enable FEATURE_COMMITTEE_PHOTO_ATTACH in the CONFIG sheet." };
+        }
         if (!getFeatureFlag("FEATURE_PHOTO_UPLOAD")) {
             return { success: false, data: null, error: "Photo upload is currently disabled." };
         }

@@ -172,7 +172,7 @@ All requests pass through `api_call(action, payload)` in [Router.gs](Router.gs).
 | `getClientConfig` | ✅ | ✅ | ✅ |
 | `validateUserAccess` | ✅ | ✅ | ✅ |
 
-`addPhotosToIssue` lets the committee attach photos to an existing issue that was submitted without any (e.g. bulk Form imports). `sheet` must be one of `PENDING_REVIEW`, `LIVE_ISSUES`, or `CLOSED_ISSUES`. New URLs are appended (comma-separated) to the row's existing `PHOTO` column. Gated by `FEATURE_PHOTO_UPLOAD`.
+`addPhotosToIssue` lets the committee attach photos to an existing issue that was submitted without any (e.g. bulk Form imports). `sheet` must be one of `PENDING_REVIEW`, `LIVE_ISSUES`, or `CLOSED_ISSUES`. New URLs are appended (comma-separated) to the row's existing `PHOTO` column. Gated by **two** flags — both must be true: `FEATURE_COMMITTEE_PHOTO_ATTACH` (master switch for this feature, **default OFF**) and `FEATURE_PHOTO_UPLOAD` (global photo kill-switch). The committee dashboard also hides the **Upload Photo** button client-side when `FEATURE_COMMITTEE_PHOTO_ATTACH` is false.
 
 Response envelope: `{ success: boolean, data: any, error: string|null }`
 (some legacy actions return `{ success, responses, count, error }` — the
@@ -446,6 +446,7 @@ of any client-supplied value. The submit form has no severity field.
 |---|---|---|
 | `SUBMITTED_INCLUDE_REJECTED` | `"false"` | When `"true"`, `getSubmittedIssues` also unions `ARCHIVES_ISSUES`. Read-only submitted view hides rejected rows by default. |
 | `FEATURE_SHOW_SEVERITY_ON_SUBMITTED` | `"false"` | When `"true"`, severity column is visible on the submitted-issues page. |
+| `FEATURE_COMMITTEE_PHOTO_ATTACH` | `"false"` | When `"true"`, committee detail view shows an **Upload Photo** button on issues without photos and the `addPhotosToIssue` API accepts writes. Default OFF — opt-in via the CONFIG sheet. |
 
 Defaults live in `DEFAULT_TUNABLES` (`src/Config.gs`); CONFIG sheet values
 override.

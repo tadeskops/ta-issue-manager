@@ -56,7 +56,8 @@ const DEFAULT_FEATURES = {
     FEATURE_BUILDER_DASHBOARD:  true,  // builder-dashboard page accessible
     FEATURE_ADMIN_DASHBOARD:    true,  // admin-dashboard page (analytics) accessible
     FEATURE_SUBMITTED_PAGE:     true,  // submitted-issues.html accessible
-    FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false  // show severity badge/filter/sort on submitted-issues page
+    FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,  // show severity badge/filter/sort on submitted-issues page
+    FEATURE_COMMITTEE_PHOTO_ATTACH: false  // committee "Upload Photo" button in detail view + addPhotosToIssue API. OFF by default — opt-in.
 };
 
 // Numeric / string tunables consumed by both server validators and the
