@@ -138,6 +138,59 @@ function driveImageUrl_(url) {
     return "https://drive.google.com/thumbnail?id=" + id + "&sz=w2000";
 }
 
+// Extract a Drive file id from any of the URL shapes we accept.
+// Returns "" if no id can be found. Used by report photo embedder.
+function driveFileIdFromUrl_(url) {
+    if (!url) return "";
+    const s = String(url);
+    let m = s.match(/\/file\/d\/([A-Za-z0-9_-]{10,})/);                 if (m) return m[1];
+    m     = s.match(/[?&]id=([A-Za-z0-9_-]{10,})/);                     if (m) return m[1];
+    m     = s.match(/\/d\/([A-Za-z0-9_-]{10,})/);                       if (m) return m[1];
+    m     = s.match(/^([A-Za-z0-9_-]{20,})$/);                          if (m) return m[1];
+    return "";
+}
+
+// Server-side fetch a Drive image (by file id or any drive URL) and
+// return it as base64 so the client can embed it in a jsPDF report
+// without hitting CORS or redirect-chain issues that the Drive thumbnail
+// endpoint sometimes hits inside the HtmlService iframe.
+//
+// Returns: { success, data: { mimeType, b64, sourceId }, error }.
+//
+// Gated by FEATURE_PDF_REPORT (the only consumer is the Export Report
+// wizard) AND FEATURE_PHOTO_UPLOAD (global photo kill-switch).
+function getReportPhotoB64(fileIdOrUrl, maxW) {
+    try {
+        if (!getFeatureFlag("FEATURE_PDF_REPORT")) {
+            return { success: false, data: null, error: "PDF report is disabled. Enable FEATURE_PDF_REPORT in CONFIG." };
+        }
+        if (!getFeatureFlag("FEATURE_PHOTO_UPLOAD")) {
+            return { success: false, data: null, error: "Photo upload is currently disabled." };
+        }
+        const id = driveFileIdFromUrl_(fileIdOrUrl);
+        if (!id) return { success: false, data: null, error: "Unable to extract Drive file id" };
+        // Cap the requested thumbnail width so we don't pull multi-MB
+        // originals over the wire for a 60 mm PDF cell.
+        const w = (typeof maxW === "number" && maxW > 0 && maxW <= 4000) ? Math.floor(maxW) : 1200;
+        const url = "https://drive.google.com/thumbnail?id=" + id + "&sz=w" + w;
+        const resp = UrlFetchApp.fetch(url, {
+            muteHttpExceptions: true,
+            followRedirects:    true,
+            headers: { "Authorization": "Bearer " + ScriptApp.getOAuthToken() }
+        });
+        const code = resp.getResponseCode();
+        if (code < 200 || code >= 300) {
+            return { success: false, data: null, error: "Drive fetch returned HTTP " + code };
+        }
+        const blob = resp.getBlob();
+        const mime = blob.getContentType() || "image/jpeg";
+        const b64  = Utilities.base64Encode(blob.getBytes());
+        return { success: true, data: { mimeType: mime, b64: b64, sourceId: id }, error: null };
+    } catch (err) {
+        return { success: false, data: null, error: err && err.message ? err.message : String(err) };
+    }
+}
+
 // google.script.run silently delivers `null` to the client success
 // handler when the response contains any value it cannot serialize —
 // most notably an Invalid Date (a Date whose time is NaN, which sheets

@@ -233,6 +233,7 @@ function api_call(action, payload) {
             case "syncFormResponses":        result = syncFormResponses(); break;
             case "submitIssue":              result = submitIssue(payload, email); break;
             case "addPhotosToIssue":         result = addPhotosToIssue(payload.ticketId, payload.sheet, payload.photos, email); break;
+            case "getReportPhotoB64":        result = getReportPhotoB64(payload.fileId || payload.url || "", payload.maxW); break;
             case "getCategoryMaster":        result = getCategoryMaster(); break;
             case "getClientConfig":          result = getClientConfig(); break;
             case "validateUserAccess":       result = { success: true, data: { email: email, role: role, hasAccess: true }, error: null }; break;
@@ -266,11 +267,13 @@ function isActionAllowed_(action, role) {
     const BUILDER_ALLOWED = [
         "getLiveIssues", "updateBuilderStatus", "closeIssue", "reopenIssue",
         "getFormResponses", "getIssuesWithStatus", "getSubmittedIssues",
-        "validateUserAccess", "getDashboardMetrics", "getClientConfig"
+        "validateUserAccess", "getDashboardMetrics", "getClientConfig",
+        "getReportPhotoB64"
     ];
     const RESIDENT_ALLOWED = [
         "submitIssue", "getCategoryMaster", "getIssuesWithStatus",
-        "getSubmittedIssues", "validateUserAccess", "getClientConfig"
+        "getSubmittedIssues", "validateUserAccess", "getClientConfig",
+        "getReportPhotoB64"
     ];
     if (role === "COMMITTEE") return true; // committee can do everything
     if (role === "BUILDER")   return BUILDER_ALLOWED.indexOf(action) !== -1;

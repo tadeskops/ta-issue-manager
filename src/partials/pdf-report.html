@@ -1,0 +1,531 @@
+<!--
+  PDF Issues Report — shared partial.
+
+  Drop on any page that has issue arrays in memory. Exposes
+    window.IRP_REPORT.open({
+      pageContext: "committee" | "builder" | "submitted",
+      title:       "Committee Issues Report",
+      filtersAppliedSummary: "Active=Critical, Closed=All",
+      sources: [
+        {
+          key:   "pending",
+          label: "Pending Approval",
+          color: [59, 130, 246],   // section band
+          data:  pendingIssues,    // array of normalized issue objects
+          enabled: true             // pre-checked in wizard
+        },
+        ...
+      ],
+      // Optional per-view column scoping. If omitted, all 16 catalog
+      // columns appear in the wizard. Provide a subset of catalog keys
+      // (see COLUMN_CATALOG below) to restrict what the user can pick.
+      columnKeys:       ["ticketId", "description", "status"],
+      // Optional override of which of the visible columns are pre-
+      // checked. Defaults to the catalog's `on` flag for each.
+      columnDefaultsOn: ["ticketId", "description", "status"]
+    })
+
+  Gated client-side by FEATURE_PDF_REPORT (see render gate at bottom).
+  The button on each page should also be hidden by the same flag — the
+  open() call defends in case it is invoked from a stale render.
+-->
+
+<!-- jsPDF + autotable from cdnjs (allowed inside HtmlService iframe) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- Wizard modal -->
+<div id="reportWizardModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-50 items-center justify-center p-4" style="display:none;">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-3 border-b border-slate-700 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
+            <h3 class="text-base font-bold text-amber-300 uppercase tracking-wider">
+                <i class="fas fa-file-pdf mr-2"></i>Export Report
+            </h3>
+            <button onclick="IRP_REPORT.close()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+        </div>
+        <div id="reportWizardBody" class="p-5 space-y-5 text-slate-200 text-sm"></div>
+        <div class="px-5 py-3 border-t border-slate-700 flex flex-wrap gap-2 justify-end sticky bottom-0 bg-slate-900">
+            <button id="reportCancelBtn" onclick="IRP_REPORT.close()"
+                class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold uppercase">Cancel</button>
+            <button id="reportPreviewBtn" onclick="IRP_REPORT._generate('preview')"
+                class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold uppercase">
+                <i class="fas fa-eye mr-1"></i>Preview
+            </button>
+            <button id="reportDownloadBtn" onclick="IRP_REPORT._generate('download')"
+                class="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold uppercase">
+                <i class="fas fa-download mr-1"></i>Download
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    "use strict";
+
+    // ----- Column catalog --------------------------------------------------
+    // One canonical list across all sources. Each column knows how to read
+    // a value out of the normalized issue object that getPendingIssues /
+    // getLiveIssues / getClosedIssues / getSubmittedIssues return.
+    var COLUMN_CATALOG = [
+        { key: "ticketId",     label: "Ticket ID",      width: 22, on: true,  always: true,  read: function (i) { return i.ticketId || ""; } },
+        { key: "dateReported", label: "Submitted",      width: 22, on: true,                   read: function (i) { return _shortDate(i.dateReported); } },
+        { key: "tower",        label: "Tower / Unit",   width: 22, on: true,                   read: function (i) {
+            var t = (i.location && i.location.tower) || "";
+            var f = (i.location && i.location.flat) || "";
+            return t && f ? (t + " / " + f) : (t || f); } },
+        { key: "resident",     label: "Resident",       width: 28, on: true,                   read: function (i) { return (i.resident && i.resident.name) || ""; } },
+        { key: "category",     label: "Category",       width: 26, on: true,                   read: function (i) { return (i.issue && i.issue.category) || ""; } },
+        { key: "subcategory",  label: "Subcategory",    width: 26, on: false,                  read: function (i) { return (i.issue && i.issue.subcategory) || ""; } },
+        { key: "severity",     label: "Severity",       width: 18, on: true,                   read: function (i) { return (i.issue && i.issue.severity) || "—"; } },
+        { key: "status",       label: "Status",         width: 22, on: true,                   read: function (i) { return i.state || i.status || (i.builder && i.builder.status) || ""; } },
+        { key: "description",  label: "Description",    width: 60, on: true,                   read: function (i) { return (i.issue && i.issue.description) || ""; } },
+        { key: "slaDue",       label: "SLA Due",        width: 22, on: false,                  read: function (i) { return _shortDate(i.sla && i.sla.dueDate); } },
+        { key: "breached",     label: "Breached",       width: 18, on: false,                  read: function (i) { return (i.sla && i.sla.breached) ? "Yes" : "No"; } },
+        { key: "vendor",       label: "Vendor",         width: 28, on: false,                  read: function (i) { return (i.builder && i.builder.assignedVendor) || ""; } },
+        { key: "remarks",      label: "Builder Remarks", width: 40, on: false,                 read: function (i) { return (i.builder && i.builder.comment) || ""; } },
+        { key: "actionBy",     label: "Action By",      width: 28, on: false,                  read: function (i) { return i.actionBy || i.approvedBy || ""; } },
+        { key: "actionDate",   label: "Action Date",    width: 22, on: false,                  read: function (i) { return _shortDate(i.actionDate || i.lastUpdated); } },
+        { key: "rejectionReason", label: "Rejection",   width: 40, on: false,                  read: function (i) { return i.rejectionReason || ""; } }
+    ];
+
+    var SEV_COLOR = {
+        "CRITICAL": [220, 38, 38],
+        "HIGH":     [234, 88, 12],
+        "MEDIUM":   [202, 138, 4],
+        "LOW":      [37, 99, 235]
+    };
+
+    var _state = {
+        opts:    null,    // last open() args
+        sources: [],      // working copy of source toggles
+        cols:    [],      // working copy of column toggles (subset of catalog)
+        photos:  { enabled: true },
+        running: false
+    };
+
+    function _shortDate(iso) {
+        if (!iso) return "";
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return "";
+        var dd = String(d.getDate()).padStart(2, "0");
+        var mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+        var yy = String(d.getFullYear()).slice(-2);
+        return dd + " " + mon + " " + yy;
+    }
+
+    function _esc(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+            return ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c];
+        });
+    }
+
+    function _featureOn() {
+        var f = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.features) || {};
+        return f.FEATURE_PDF_REPORT === true;
+    }
+
+    // ----- Wizard ----------------------------------------------------------
+
+    function open(opts) {
+        if (!_featureOn()) {
+            if (window.showToast) window.showToast("✗ PDF report is disabled", "error");
+            else alert("PDF report is disabled.");
+            return;
+        }
+        _state.opts = opts || {};
+        _state.sources = (opts.sources || []).map(function (s) {
+            return {
+                key:     s.key,
+                label:   s.label,
+                color:   s.color || [71, 85, 105],
+                data:    Array.isArray(s.data) ? s.data : [],
+                enabled: s.enabled !== false && (Array.isArray(s.data) ? s.data.length : 0) > 0
+            };
+        });
+        // Per-view column scoping. `columnKeys` restricts which catalog
+        // entries appear in the wizard; `columnDefaultsOn` overrides which
+        // of those start checked. Keep ticketId in the visible set even if
+        // the caller forgot it (it is `always`-required).
+        var allowedKeys = Array.isArray(opts.columnKeys) ? opts.columnKeys.slice() : null;
+        if (allowedKeys && allowedKeys.indexOf("ticketId") < 0) allowedKeys.unshift("ticketId");
+        var defaultsOn = Array.isArray(opts.columnDefaultsOn) ? opts.columnDefaultsOn : null;
+        _state.cols = COLUMN_CATALOG
+            .filter(function (c) { return allowedKeys ? allowedKeys.indexOf(c.key) >= 0 : true; })
+            .map(function (c) {
+                var on = defaultsOn ? defaultsOn.indexOf(c.key) >= 0 : !!c.on;
+                return { key: c.key, label: c.label, on: on, always: !!c.always };
+            });
+        _state.photos = { enabled: true };
+        _renderWizard();
+        var modal = document.getElementById("reportWizardModal");
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+    }
+
+    function close() {
+        var modal = document.getElementById("reportWizardModal");
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+        _state.running = false;
+        _setBusy(false);
+    }
+
+    function _renderWizard() {
+        var body = document.getElementById("reportWizardBody");
+        var ctxLabel = (_state.opts && _state.opts.title) || "Issues Report";
+
+        var srcHtml = _state.sources.map(function (s, idx) {
+            var n = s.data.length;
+            var disabled = n === 0;
+            return ''
+                + '<label class="flex items-center gap-3 p-2 rounded ' + (disabled ? "opacity-50" : "hover:bg-slate-800/60") + '">'
+                + '  <input type="checkbox" data-rep-src="' + idx + '" ' + (s.enabled ? "checked" : "") + ' ' + (disabled ? "disabled" : "") + ' class="w-4 h-4">'
+                + '  <span class="inline-block w-3 h-3 rounded-sm" style="background:rgb(' + s.color.join(",") + ')"></span>'
+                + '  <span class="flex-1 text-sm">' + _esc(s.label) + '</span>'
+                + '  <span class="text-xs text-slate-400">' + n + '</span>'
+                + '</label>';
+        }).join("");
+
+        var colHtml = _state.cols.map(function (c, idx) {
+            return ''
+                + '<label class="flex items-center gap-2 p-1 ' + (c.always ? "opacity-60" : "hover:bg-slate-800/60 rounded") + '">'
+                + '  <input type="checkbox" data-rep-col="' + idx + '" ' + (c.on ? "checked" : "") + ' ' + (c.always ? "disabled" : "") + ' class="w-4 h-4">'
+                + '  <span class="text-xs">' + _esc(c.label) + (c.always ? ' <span class="text-[10px] text-slate-500">(required)</span>' : "") + '</span>'
+                + '</label>';
+        }).join("");
+
+        body.innerHTML = ''
+            + '<div>'
+            + '  <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">Title</h4>'
+            + '  <input id="reportTitleInput" type="text" value="' + _esc(ctxLabel) + '" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-white">'
+            + '</div>'
+            + '<div>'
+            + '  <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">Sources</h4>'
+            + '  <div class="space-y-1 border border-slate-700 rounded-lg p-2 bg-slate-900/40">' + srcHtml + '</div>'
+            + '  <p class="text-[10px] text-slate-500 mt-1">Counts reflect the rows currently loaded on this page (filters already applied).</p>'
+            + '</div>'
+            + '<div>'
+            + '  <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">Columns</h4>'
+            + '  <div class="grid grid-cols-2 gap-1 border border-slate-700 rounded-lg p-2 bg-slate-900/40">' + colHtml + '</div>'
+            + '</div>'
+            + '<div>'
+            + '  <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">Photos</h4>'
+            + '  <label class="flex items-center gap-2 mb-1"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (embedded inline under each section)</span></label>'
+            + '  <p class="text-[10px] text-slate-500 mt-1 ml-6">Photos are fetched server-side and may add a few seconds + a few MB to the file.</p>'
+            + '</div>'
+            + '<div id="reportProgress" class="hidden">'
+            + '  <div class="flex items-center gap-2 text-amber-300 text-xs">'
+            + '    <i class="fas fa-spinner fa-spin"></i>'
+            + '    <span id="reportProgressText">Working…</span>'
+            + '  </div>'
+            + '</div>';
+
+        // Wire toggles.
+        body.querySelectorAll("[data-rep-src]").forEach(function (el) {
+            el.addEventListener("change", function () {
+                _state.sources[+el.getAttribute("data-rep-src")].enabled = el.checked;
+            });
+        });
+        body.querySelectorAll("[data-rep-col]").forEach(function (el) {
+            el.addEventListener("change", function () {
+                _state.cols[+el.getAttribute("data-rep-col")].on = el.checked;
+            });
+        });
+        document.getElementById("reportPhotosOn").addEventListener("change", function (e) {
+            _state.photos.enabled = e.target.checked;
+        });
+    }
+
+    function _setBusy(busy) {
+        var prog = document.getElementById("reportProgress");
+        var pBtn = document.getElementById("reportPreviewBtn");
+        var dBtn = document.getElementById("reportDownloadBtn");
+        if (prog) prog.classList.toggle("hidden", !busy);
+        if (pBtn) pBtn.disabled = busy;
+        if (dBtn) dBtn.disabled = busy;
+    }
+    function _progress(text) {
+        var t = document.getElementById("reportProgressText");
+        if (t) t.textContent = text;
+    }
+
+    // ----- PDF generation --------------------------------------------------
+
+    async function _generate(action) {
+        if (_state.running) return;
+        if (!_featureOn()) { close(); return; }
+        if (typeof window.jspdf === "undefined" || !window.jspdf.jsPDF) {
+            alert("PDF library failed to load. Check your internet connection and try again.");
+            return;
+        }
+        var enabled = _state.sources.filter(function (s) { return s.enabled && s.data.length > 0; });
+        if (enabled.length === 0) {
+            alert("Pick at least one source with data.");
+            return;
+        }
+        // Map current wizard toggles back to the corresponding catalog
+        // entries (since cols may be a subset of the catalog).
+        var activeKeys = _state.cols.filter(function (c) { return c.on || c.always; }).map(function (c) { return c.key; });
+        var activeCols = COLUMN_CATALOG.filter(function (c) { return activeKeys.indexOf(c.key) >= 0; });
+        if (activeCols.length === 0) { alert("Pick at least one column."); return; }
+
+        _state.running = true;
+        _setBusy(true);
+        _progress("Building tables…");
+
+        try {
+            // Landscape if many columns or any wide ones; A4 either way.
+            var totalWidth = activeCols.reduce(function (a, c) { return a + c.width; }, 0);
+            var landscape = totalWidth > 200 || activeCols.length > 7;
+            var doc = new window.jspdf.jsPDF({ orientation: landscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
+
+            var titleText = (document.getElementById("reportTitleInput") || {}).value || "Issues Report";
+
+            _drawCover(doc, titleText, enabled);
+
+            // Pre-fetch all photos we'll need (deduped by file id) before
+            // we lay out tables, so addImage calls are synchronous.
+            var photoCache = {};
+            if (_state.photos.enabled) {
+                _progress("Fetching photos…");
+                photoCache = await _prefetchPhotos(enabled);
+            }
+
+            for (var s = 0; s < enabled.length; s++) {
+                _progress("Rendering: " + enabled[s].label);
+                _drawSection(doc, enabled[s], activeCols, photoCache);
+            }
+
+            _drawFooters(doc);
+
+            var fileBase = (titleText || "issues-report")
+                .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+            var stamp = new Date().toISOString().slice(0, 10);
+            var fileName = (fileBase || "issues-report") + "-" + stamp + ".pdf";
+
+            if (action === "download") {
+                doc.save(fileName);
+            } else {
+                // Preview: open blob in a new tab. window.open from inside
+                // the HtmlService iframe is reliable when triggered by a
+                // user gesture (the click that started this generate).
+                var blob = doc.output("blob");
+                var url = URL.createObjectURL(blob);
+                var w = window.open(url, "_blank");
+                if (!w) {
+                    // popup blocked — fall back to download.
+                    doc.save(fileName);
+                }
+            }
+        } catch (err) {
+            console.error("Report failed:", err);
+            alert("Report failed: " + (err && err.message ? err.message : err));
+        } finally {
+            _state.running = false;
+            _setBusy(false);
+        }
+    }
+
+    function _drawCover(doc, titleText, enabled) {
+        var pageW = doc.internal.pageSize.getWidth();
+        var pageH = doc.internal.pageSize.getHeight();
+
+        doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageW, 32, "F");
+        doc.setTextColor(252, 211, 77); doc.setFontSize(10); doc.setFont("helvetica", "bold");
+        doc.text("TA ISSUE REPORTING PORTAL", 14, 14);
+        doc.setTextColor(255, 255, 255); doc.setFontSize(18);
+        doc.text(titleText, 14, 24);
+
+        doc.setTextColor(30, 41, 59); doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        var nowStr = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+        doc.text("Generated: " + nowStr, 14, 44);
+        var who = (window.IRP_USER && window.IRP_USER.email) ? ("By: " + window.IRP_USER.email) : "";
+        if (who) doc.text(who, 14, 50);
+
+        // Summary block.
+        doc.setFontSize(11); doc.setFont("helvetica", "bold");
+        doc.text("Summary", 14, 64);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        var y = 71;
+        enabled.forEach(function (s) {
+            doc.setFillColor(s.color[0], s.color[1], s.color[2]);
+            doc.rect(14, y - 3, 3, 3, "F");
+            doc.text(s.label, 20, y);
+            doc.text(String(s.data.length), 80, y, { align: "right" });
+            y += 6;
+        });
+
+        var note = (_state.opts && _state.opts.filtersAppliedSummary) || "";
+        if (note) {
+            doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+            doc.text("Filters applied on this view: " + note, 14, y + 4, { maxWidth: pageW - 28 });
+        }
+
+        doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+        doc.text("Confidential — for community use only.", 14, pageH - 10);
+
+        doc.addPage();
+    }
+
+    function _drawSection(doc, src, activeCols, photoCache) {
+        var pageW = doc.internal.pageSize.getWidth();
+
+        // Section band.
+        doc.setFillColor(src.color[0], src.color[1], src.color[2]);
+        doc.rect(10, 10, pageW - 20, 8, "F");
+        doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+        doc.text(src.label.toUpperCase() + "  (" + src.data.length + ")", 14, 16);
+
+        var head = [activeCols.map(function (c) { return c.label; })];
+        var body = src.data.map(function (issue) {
+            return activeCols.map(function (c) {
+                var catEntry = COLUMN_CATALOG.find(function (cc) { return cc.key === c.key; });
+                return catEntry ? String(catEntry.read(issue) || "") : "";
+            });
+        });
+
+        doc.autoTable({
+            head: head, body: body,
+            startY: 22,
+            theme: "grid",
+            margin: { left: 10, right: 10 },
+            styles: { fontSize: 8, cellPadding: 1.5, overflow: "linebreak", valign: "top" },
+            headStyles: { fillColor: [30, 41, 59], textColor: [252, 211, 77], fontStyle: "bold", fontSize: 8 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            didParseCell: function (data) {
+                if (data.section !== "body") return;
+                var col = activeCols[data.column.index];
+                if (!col) return;
+                if (col.key === "severity") {
+                    var v = String(data.cell.raw || "").toUpperCase();
+                    var rgb = SEV_COLOR[v];
+                    if (rgb) { data.cell.styles.textColor = rgb; data.cell.styles.fontStyle = "bold"; }
+                }
+                if (col.key === "breached" && String(data.cell.raw) === "Yes") {
+                    data.cell.styles.textColor = [220, 38, 38];
+                    data.cell.styles.fontStyle = "bold";
+                }
+            },
+            didDrawPage: function () { /* footer drawn later */ }
+        });
+
+        // Inline photo strips: walk the rows after the table is drawn.
+        if (_state.photos.enabled) {
+            _drawInlinePhotos(doc, src, photoCache);
+        }
+
+        doc.addPage();
+    }
+
+    function _drawInlinePhotos(doc, src, photoCache) {
+        // Get last autoTable row positions for this section. jsPDF-autotable
+        // exposes `previous.body` rows with their drawn y. We re-render a
+        // compact "Ticket id — [thumbs]" strip beneath the table on a new
+        // page if needed. Simpler & more predictable than mid-row injection.
+        var rows = src.data.filter(function (i) { return i.issue && i.issue.photoLinks && i.issue.photoLinks.length; });
+        if (rows.length === 0) return;
+
+        doc.addPage();
+        doc.setFillColor(src.color[0], src.color[1], src.color[2]);
+        var pageW = doc.internal.pageSize.getWidth();
+        doc.rect(10, 10, pageW - 20, 8, "F");
+        doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+        doc.text(src.label.toUpperCase() + " — PHOTOS", 14, 16);
+
+        var pageH = doc.internal.pageSize.getHeight();
+        var x = 14, y = 26;
+        var thumbW = 36, thumbH = 28, gap = 3;
+        var labelH = 5;
+
+        rows.forEach(function (issue) {
+            var label = (issue.ticketId || "(no id)") + "  —  " + ((issue.location && (issue.location.tower + "/" + issue.location.flat)) || "");
+            // Reserve room for one row of thumbs + label.
+            var thumbs = issue.issue.photoLinks.slice(0, 6);
+            var stripW = thumbs.length * (thumbW + gap);
+            if (y + labelH + thumbH + 4 > pageH - 12) {
+                doc.addPage();
+                y = 16;
+            }
+            doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
+            doc.text(label, 14, y); y += labelH;
+
+            var cx = 14;
+            thumbs.forEach(function (link) {
+                var entry = photoCache[link];
+                if (entry && entry.dataUrl) {
+                    try { doc.addImage(entry.dataUrl, "JPEG", cx, y, thumbW, thumbH, undefined, "FAST"); }
+                    catch (e) { _drawMissing(doc, cx, y, thumbW, thumbH); }
+                } else {
+                    _drawMissing(doc, cx, y, thumbW, thumbH);
+                }
+                cx += thumbW + gap;
+            });
+            y += thumbH + 6;
+        });
+    }
+
+    function _drawMissing(doc, x, y, w, h) {
+        doc.setDrawColor(203, 213, 225); doc.setFillColor(241, 245, 249);
+        doc.rect(x, y, w, h, "FD");
+        doc.setTextColor(148, 163, 184); doc.setFont("helvetica", "italic"); doc.setFontSize(7);
+        doc.text("photo unavailable", x + w / 2, y + h / 2, { align: "center", baseline: "middle" });
+    }
+
+    function _drawFooters(doc) {
+        var pages = doc.internal.getNumberOfPages();
+        var pageW = doc.internal.pageSize.getWidth();
+        var pageH = doc.internal.pageSize.getHeight();
+        for (var p = 1; p <= pages; p++) {
+            doc.setPage(p);
+            doc.setFontSize(8); doc.setTextColor(148, 163, 184);
+            doc.text("TA Issue Reporting Portal", 14, pageH - 6);
+            doc.text("Page " + p + " / " + pages, pageW - 14, pageH - 6, { align: "right" });
+        }
+    }
+
+    // ----- Photo prefetch --------------------------------------------------
+
+    function _prefetchPhotos(enabled) {
+        var unique = {};
+        enabled.forEach(function (s) {
+            s.data.forEach(function (i) {
+                ((i.issue && i.issue.photoLinks) || []).forEach(function (link) {
+                    if (link) unique[link] = true;
+                });
+            });
+        });
+        var links = Object.keys(unique);
+        if (links.length === 0) return Promise.resolve({});
+
+        var cache = {};
+        var i = 0;
+        function next() {
+            if (i >= links.length) return Promise.resolve(cache);
+            var link = links[i++];
+            _progress("Fetching photos… (" + i + " / " + links.length + ")");
+            return window.API.getReportPhotoB64(link, 800)
+                .then(function (resp) {
+                    if (resp && resp.success && resp.data && resp.data.b64) {
+                        cache[link] = { dataUrl: "data:" + (resp.data.mimeType || "image/jpeg") + ";base64," + resp.data.b64 };
+                    } else {
+                        cache[link] = { dataUrl: null, error: (resp && resp.error) || "fetch failed" };
+                    }
+                })
+                .catch(function (err) { cache[link] = { dataUrl: null, error: String(err) }; })
+                .then(next);
+        }
+        return next();
+    }
+
+    // ----- Public ----------------------------------------------------------
+
+    window.IRP_REPORT = {
+        open: open,
+        close: close,
+        _generate: _generate
+    };
+})();
+</script>

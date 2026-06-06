@@ -83,6 +83,7 @@ const API = {
     syncFormResponses()       { return this.call("syncFormResponses"); },
     submitIssue(payload)      { return this.call("submitIssue", payload || {}); },
     addPhotosToIssue(ticketId, sheet, photos) { return this.call("addPhotosToIssue", { ticketId, sheet, photos }); },
+    getReportPhotoB64(fileIdOrUrl, maxW)      { return this.call("getReportPhotoB64", { fileId: fileIdOrUrl, maxW: maxW || 1200 }); },
     getCategoryMaster()       { return this.call("getCategoryMaster"); },
     getClientConfig()         { return this.call("getClientConfig"); },
     diag()                    { return this.call("diag"); },
@@ -108,6 +109,9 @@ const API = {
 if (typeof window !== "undefined" && !window.IRP_USER) {
     window.IRP_USER = { email: "", role: "UNKNOWN" };
 }
+// Expose API on window so cross-script partials (e.g. pdf-report) can
+// reach it without sharing the surrounding script-block scope.
+if (typeof window !== "undefined") window.API = API;
 
 // Shared brief title for issue rows/cards across all pages. Prefers the
 // resident-supplied description (trimmed to one short line); falls back to

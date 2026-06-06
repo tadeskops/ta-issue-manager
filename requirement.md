@@ -168,11 +168,14 @@ All requests pass through `api_call(action, payload)` in [Router.gs](Router.gs).
 | `syncFormResponses` | ✅ | — | — |
 | `submitIssue` | ✅ | ✅ | ✅ |
 | `addPhotosToIssue` (payload: `{ticketId, sheet, photos:[{name,mime,b64}]}`) | ✅ | — | — |
+| `getReportPhotoB64` (payload: `{fileId, maxW}`) | ✅ | ✅ | ✅ |
 | `getCategoryMaster` | ✅ | ✅ | ✅ |
 | `getClientConfig` | ✅ | ✅ | ✅ |
 | `validateUserAccess` | ✅ | ✅ | ✅ |
 
 `addPhotosToIssue` lets the committee attach photos to an existing issue that was submitted without any (e.g. bulk Form imports). `sheet` must be one of `PENDING_REVIEW`, `LIVE_ISSUES`, or `CLOSED_ISSUES`. New URLs are appended (comma-separated) to the row's existing `PHOTO` column. Gated by **two** flags — both must be true: `FEATURE_COMMITTEE_PHOTO_ATTACH` (master switch for this feature, **default OFF**) and `FEATURE_PHOTO_UPLOAD` (global photo kill-switch). The committee dashboard also hides the **Upload Photo** button client-side when `FEATURE_COMMITTEE_PHOTO_ATTACH` is false.
+
+`getReportPhotoB64` is the photo-fetch helper for the **Export Report** PDF wizard. It takes a Drive file id (or any drive URL containing one) and an optional max-width hint, fetches the JPEG bytes server-side via `UrlFetchApp` (avoids browser CORS issues that prevent jsPDF from embedding Drive thumbnails), and returns `{ mimeType, b64, sourceId }`. Gated by **two** flags — both must be true: `FEATURE_PDF_REPORT` (master switch for the report wizard, **default OFF**) and `FEATURE_PHOTO_UPLOAD` (global photo kill-switch). Available to all roles because the report wizard ships on the committee, builder, and read-only submitted views.
 
 Response envelope: `{ success: boolean, data: any, error: string|null }`
 (some legacy actions return `{ success, responses, count, error }` — the
@@ -447,6 +450,7 @@ of any client-supplied value. The submit form has no severity field.
 | `SUBMITTED_INCLUDE_REJECTED` | `"false"` | When `"true"`, `getSubmittedIssues` also unions `ARCHIVES_ISSUES`. Read-only submitted view hides rejected rows by default. |
 | `FEATURE_SHOW_SEVERITY_ON_SUBMITTED` | `"false"` | When `"true"`, severity column is visible on the submitted-issues page. |
 | `FEATURE_COMMITTEE_PHOTO_ATTACH` | `"false"` | When `"true"`, committee detail view shows an **Upload Photo** button on issues without photos and the `addPhotosToIssue` API accepts writes. Default OFF — opt-in via the CONFIG sheet. |
+| `FEATURE_PDF_REPORT` | `"false"` | When `"true"`, every list view (Committee / Builder / Submitted read-only) shows an **Export Report** button that opens a PDF wizard (sources, columns, embedded photos) and the `getReportPhotoB64` API accepts requests. Each view scopes its own column menu (Committee = full 16; Builder drops committee-only fields; Submitted read-only shows Ticket ID + Title + form-entry fields + Status only) — the column catalog and per-view defaults live in `src/partials/pdf-report.html` and each page's `openExportReport()`. Photos are always embedded inline under each section. Default OFF — opt-in via the CONFIG sheet. |
 
 Defaults live in `DEFAULT_TUNABLES` (`src/Config.gs`); CONFIG sheet values
 override.

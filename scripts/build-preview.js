@@ -110,7 +110,9 @@ const SHIM = `
                     FEATURE_BUILDER_DASHBOARD: true,
                     FEATURE_ADMIN_DASHBOARD: true,
                     FEATURE_SUBMITTED_PAGE: true,
-                    FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false
+                    FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,
+                    FEATURE_COMMITTEE_PHOTO_ATTACH: true,
+                    FEATURE_PDF_REPORT: true
                 },
                 tunables: {
                     SUBMIT_RATE_LIMIT_SECONDS: 20,
@@ -130,7 +132,59 @@ const SHIM = `
         }),
         api_getLogoUrl: () => '',
         api_whoAmI: () => ({ email: 'preview@example.com', role: 'COMMITTEE' }),
-        api_call: (action) => ({ success: true, data: (action && action.indexOf('Issues') >= 0) ? [] : null, error: null }),
+        api_call: function (action, payload) {
+            payload = payload || {};
+            // Route getClientConfig through api_call so the unwrap in
+            // API.call (returns result.data) delivers the feature-flag
+            // object to the page exactly like the live deployment.
+            if (action === 'getClientConfig') {
+                return fakes.getClientConfig();
+            }
+            // Preview mock data for the Export Report wizard.
+            const mockIssues = function (state, n) {
+                const out = [];
+                for (let i = 1; i <= n; i++) {
+                    out.push({
+                        ticketId: 'TKT-' + state.slice(0, 3).toUpperCase() + '-' + String(i).padStart(3, '0'),
+                        dateReported: new Date(Date.now() - i * 86400000 * 3).toISOString(),
+                        resident: { name: 'Resident ' + i, email: '', phone: '' },
+                        location: { tower: 'Tower ' + 'ABCDE'.charAt(i % 5), flat: String(100 + i) },
+                        issue: {
+                            category: ['Plumbing','Electrical','Civil','Cleaning'][i % 4],
+                            subcategory: 'Sub ' + i,
+                            severity: ['Critical','High','Medium','Low'][i % 4],
+                            description: 'Sample issue description #' + i + ' for ' + state + ' — leak, crack, or other defect noted by resident.',
+                            photoLinks: i % 2 === 0
+                                ? ['https://drive.google.com/thumbnail?id=preview-photo-' + i + '&sz=w800']
+                                : []
+                        },
+                        builder: { status: state === 'closed' ? 'WORK_COMPLETED' : (state === 'active' ? 'IN_PROGRESS' : 'ASSIGNED'),
+                                   comment: state === 'closed' ? 'Work completed.' : '',
+                                   assignedVendor: state !== 'pending' ? 'Vendor X' : '',
+                                   lastUpdated: new Date().toISOString() },
+                        sla: { dueDate: new Date(Date.now() + 7 * 86400000).toISOString(), breached: i % 5 === 0, daysRemaining: 7 - i },
+                        state: state === 'pending' ? 'PENDING_APPROVAL'
+                             : state === 'rejected' ? 'REJECTED'
+                             : state === 'closed' ? 'CLOSED'
+                             : 'APPROVED',
+                        actionDate: new Date().toISOString(),
+                        actionBy: 'committee@example.com',
+                        rejectionReason: state === 'rejected' ? 'Out of scope.' : ''
+                    });
+                }
+                return out;
+            };
+            if (action === 'getPendingIssues')   return { success: true, data: mockIssues('pending', 3).concat(mockIssues('rejected', 2)), error: null };
+            if (action === 'getLiveIssues')      return { success: true, data: mockIssues('active', 5), error: null };
+            if (action === 'getClosedIssues')    return { success: true, data: mockIssues('closed', 6), error: null };
+            if (action === 'getSubmittedIssues') return { success: true, data: mockIssues('pending', 4).concat(mockIssues('active', 3)).concat(mockIssues('closed', 3)), error: null };
+            if (action === 'getReportPhotoB64') {
+                // 1x1 transparent PNG; enough for jsPDF.addImage to succeed.
+                return { success: true, data: { mimeType: 'image/png', b64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', sourceId: 'preview' }, error: null };
+            }
+            if (action && action.indexOf('Issues') >= 0) return { success: true, data: [], error: null };
+            return { success: true, data: null, error: null };
+        },
         getCurrentUser: () => ({ email: 'preview@example.com', role: 'COMMITTEE' }),
         getWebAppUrl: () => location.pathname.replace(/[^/]+$/, ''),
         getPendingIssues:  () => ({ success: true, data: [], error: null }),

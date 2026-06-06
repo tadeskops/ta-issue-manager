@@ -57,6 +57,11 @@
                    class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold transition-colors text-xs sm:text-sm border border-amber-400/30 shadow-lg whitespace-nowrap">
                     <i class="fas fa-pen-to-square mr-1.5 sm:mr-2"></i>Submit New Issue
                 </a>
+                <button id="exportReportBtn" onclick="openExportReport()"
+                    class="hidden px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold transition-colors text-xs sm:text-sm border border-blue-400/30 shadow-lg whitespace-nowrap"
+                    aria-label="Export Report" title="Export Report">
+                    <i class="fas fa-file-pdf sm:mr-2"></i><span class="hidden sm:inline">Export Report</span>
+                </button>
                 <button onclick="goLogin()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-xs sm:text-sm border border-slate-600/30 whitespace-nowrap" aria-label="Back to Login" title="Back to Login">
                     <i class="fas fa-arrow-left sm:mr-2"></i><span class="hidden sm:inline">Back to Login</span>
                 </button>
@@ -166,6 +171,7 @@
     </div>
 
     <?!= include('src/partials/api') ?>
+    <?!= include('src/partials/pdf-report') ?>
     <script>
         // Back-to-login button. Apps Script renders this page inside a
         // sandboxed iframe where plain location.href is silently dropped,
@@ -174,6 +180,46 @@
             const url = (window.IRP_WEBAPP_URL || '').split('?')[0] || (location.origin + location.pathname);
             try { window.open(url, '_top'); }
             catch (e) { location.href = url; }
+        }
+
+        function openExportReport() {
+            const features = ((window.IRP_CLIENT_CONFIG || {}).features) || {};
+            if (features.FEATURE_PDF_REPORT !== true) {
+                alert('Export Report is disabled.');
+                return;
+            }
+            // Use the currently visible (filtered + searched) list rather
+            // than the full set, so the PDF reflects what the user sees.
+            const visible = (typeof getVisibleIssues === 'function') ? getVisibleIssues() : allIssues;
+            // Split the unified submitted feed into the same buckets the
+            // committee/builder views show, so the resident-facing report
+            // covers all stages on a single export.
+            const stageOf = (i) => String(i.state || i.status || (i.builder && i.builder.status) || '').toUpperCase();
+            const isPending  = (s) => s === 'PENDING' || s === 'PENDING_APPROVAL' || s === '' || s === 'NEW';
+            const isRejected = (s) => s === 'REJECTED';
+            const isClosed   = (s) => s === 'CLOSED' || s === 'RESOLVED' || s === 'WORK_COMPLETED';
+            const pending  = visible.filter(i => { const s = stageOf(i); return isPending(s); });
+            const rejected = visible.filter(i => isRejected(stageOf(i)));
+            const closed   = visible.filter(i => isClosed(stageOf(i)));
+            const active   = visible.filter(i => {
+                const s = stageOf(i); return !isPending(s) && !isRejected(s) && !isClosed(s);
+            });
+            window.IRP_REPORT.open({
+                pageContext: 'submitted',
+                title: 'Community Issues Report',
+                filtersAppliedSummary: 'Current page filters',
+                sources: [
+                    { key: 'pending',  label: 'Pending Approval', color: [59, 130, 246],  data: pending },
+                    { key: 'rejected', label: 'Rejected',         color: [148, 163, 184], data: rejected },
+                    { key: 'active',   label: 'Active',           color: [234, 179,   8], data: active },
+                    { key: 'closed',   label: 'Closed',           color: [34, 197,   94], data: closed }
+                ],
+                // Viewer mode: minimal, form-entry-driven columns only.
+                // Ticket id + title (description) + form fields (tower /
+                // unit, resident, category, severity, submitted) + status.
+                columnKeys:       ['ticketId', 'description', 'tower', 'resident', 'category', 'severity', 'dateReported', 'status'],
+                columnDefaultsOn: ['ticketId', 'description', 'tower', 'category', 'status']
+            });
         }
 
         // === Auth (read-only view; anonymous allowed) ===
@@ -199,8 +245,15 @@
                 const cfg = await API.call('getClientConfig');
                 const features = (cfg && cfg.data && cfg.data.features) || (cfg && cfg.features) || {};
                 SHOW_SEVERITY = !!features.FEATURE_SHOW_SEVERITY_ON_SUBMITTED;
+                // Stash the full client-config for IRP_REPORT to consult.
+                window.IRP_CLIENT_CONFIG = (cfg && cfg.data) || cfg || { features: features, tunables: {} };
+                if (features.FEATURE_PDF_REPORT === true) {
+                    const btn = document.getElementById('exportReportBtn');
+                    if (btn) btn.classList.remove('hidden');
+                }
             } catch (e) {
                 SHOW_SEVERITY = false;
+                window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
             }
             const sevFilter = document.getElementById('severityFilter');
             if (sevFilter) sevFilter.classList.toggle('hidden', !SHOW_SEVERITY);

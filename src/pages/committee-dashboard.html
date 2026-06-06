@@ -78,6 +78,11 @@
                    class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold transition-colors text-xs sm:text-sm border border-amber-400/30 shadow-lg whitespace-nowrap">
                     <i class="fas fa-pen-to-square mr-1.5 sm:mr-2"></i>Submit New Issue
                 </a>
+                <button id="exportReportBtn" onclick="openExportReport()"
+                    class="hidden px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold transition-colors text-xs sm:text-sm border border-blue-400/30 shadow-lg whitespace-nowrap"
+                    aria-label="Export Report" title="Export Report">
+                    <i class="fas fa-file-pdf sm:mr-2"></i><span class="hidden sm:inline">Export Report</span>
+                </button>
                 <button onclick="logout()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white font-semibold transition-colors text-xs sm:text-sm border border-red-500/30 whitespace-nowrap" aria-label="Logout" title="Logout">
                     <i class="fas fa-sign-out-alt sm:mr-2"></i><span class="hidden sm:inline">Logout</span>
                 </button>
@@ -415,6 +420,7 @@
     <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-bold hidden z-50"></div>
 
     <?!= include('src/partials/api') ?>
+    <?!= include('src/partials/pdf-report') ?>
     <script>
         // === Auth (server-trusted via Google sign-in) ===
         // No client-typed email, no sessionStorage. window.IRP_USER is
@@ -447,6 +453,11 @@
             } catch (e) {
                 console.warn('getClientConfig failed, using defaults:', e && e.message);
                 window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
+            }
+            // Reveal Export Report only when the flag is on.
+            if (((window.IRP_CLIENT_CONFIG.features) || {}).FEATURE_PDF_REPORT === true) {
+                const btn = document.getElementById('exportReportBtn');
+                if (btn) btn.classList.remove('hidden');
             }
         })();
 
@@ -1102,6 +1113,34 @@
             }`;
             toast.classList.remove('hidden');
             setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        function openExportReport() {
+            const features = ((window.IRP_CLIENT_CONFIG || {}).features) || {};
+            if (features.FEATURE_PDF_REPORT !== true) {
+                showToast('✗ Export Report is disabled', 'error');
+                return;
+            }
+            // Splits Pending vs Rejected for the cover. Both arrays are
+            // already in memory from getPendingIssues() (which unions
+            // PENDING_REVIEW + ARCHIVES_ISSUES rows).
+            const rejected = pendingIssues.filter(i => String(i.state || '').toUpperCase() === 'REJECTED');
+            const pendingOnly = pendingIssues.filter(i => String(i.state || '').toUpperCase() !== 'REJECTED');
+            const filterNote = [
+                pendingFilter && pendingFilter !== 'ALL' ? 'Pending=' + pendingFilter : '',
+                activeFilter ? 'Active=' + activeFilter : ''
+            ].filter(Boolean).join(', ') || 'none';
+            window.IRP_REPORT.open({
+                pageContext: 'committee',
+                title: 'Committee Issues Report',
+                filtersAppliedSummary: filterNote,
+                sources: [
+                    { key: 'pending',  label: 'Pending Approval', color: [59, 130, 246],  data: pendingOnly },
+                    { key: 'rejected', label: 'Rejected',         color: [148, 163, 184], data: rejected },
+                    { key: 'active',   label: 'Active',           color: [234, 179, 8],   data: activeIssues },
+                    { key: 'closed',   label: 'Closed',           color: [16, 185, 129],  data: closedIssues }
+                ]
+            });
         }
 
         function toggleAutoRefresh() {
