@@ -290,7 +290,22 @@
                 const btn = document.getElementById('exportReportBtn');
                 if (btn) btn.classList.remove('hidden');
             }
+            // Strip SLA UI when FEATURE_SLA is off.
+            if (((window.IRP_CLIENT_CONFIG.features) || {}).FEATURE_SLA !== true) {
+                const slaCard = document.getElementById('kpiBreaches');
+                if (slaCard) {
+                    const card = slaCard.closest('.premium-card');
+                    if (card) card.remove();
+                }
+                const slaTh = document.querySelector('table thead th:nth-child(8)');
+                if (slaTh && /SLA/i.test(slaTh.textContent || '')) slaTh.remove();
+            }
         })();
+
+        function __slaOn() {
+            var f = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.features) || {};
+            return f.FEATURE_SLA === true;
+        }
 
         let allIssues = [];
         let currentTicketId = null;
@@ -412,7 +427,13 @@
             tbody.innerHTML = filtered.map(issue => {
                 const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
                 const statusColor = getStatusColor(issue.builder.status);
-                const rowClass = issue.sla.breached ? 'bg-red-50' : '';
+                const slaOn = __slaOn();
+                const rowClass = (slaOn && issue.sla && issue.sla.breached) ? 'bg-red-50' : '';
+                const slaCell = slaOn
+                    ? `<td class="border p-3 text-center text-sm ${issue.sla.breached ? 'font-bold text-red-600' : 'text-green-600'}">
+                            ${issue.sla.daysRemaining}
+                        </td>`
+                    : '';
                 
                 return `
                     <tr class="border-b issue-row ${rowClass}" id="row-${issue.ticketId}" style="border-left: 3px solid transparent; transition: border-color 0.2s;">
@@ -433,9 +454,7 @@
                             </span>
                         </td>
                         <td class="border p-3 text-center text-sm">${daysOpen}</td>
-                        <td class="border p-3 text-center text-sm ${issue.sla.breached ? 'font-bold text-red-600' : 'text-green-600'}">
-                            ${issue.sla.daysRemaining}
-                        </td>
+                        ${slaCell}
                         <td class="border p-3 text-center">
                             <button onclick="openStatusModal('${issue.ticketId}')" class="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-xs transition-colors" title="Update Status">
                                 <i class="fas fa-edit"></i>
@@ -450,12 +469,14 @@
             const assigned = allIssues.filter(i => i.builder.status === 'ASSIGNED').length;
             const inProgress = allIssues.filter(i => i.builder.status === 'IN_PROGRESS').length;
             const completed = allIssues.filter(i => i.builder.status === 'WORK_COMPLETED').length;
-            const breaches = allIssues.filter(i => i.sla.breached).length;
 
             document.getElementById('kpiAssigned').textContent = assigned;
             document.getElementById('kpiInProgress').textContent = inProgress;
             document.getElementById('kpiCompleted').textContent = completed;
-            document.getElementById('kpiBreaches').textContent = breaches;
+            const breachesEl = document.getElementById('kpiBreaches');
+            if (breachesEl) {
+                breachesEl.textContent = allIssues.filter(i => i.sla && i.sla.breached).length;
+            }
         }
 
         function getSeverityColor(severity) {
@@ -563,8 +584,9 @@
                     <h3 class="font-bold text-lg mb-2">⏱️ Timeline Information</h3>
                     <p><strong>Reported:</strong> ${new Date(issue.dateReported).toLocaleDateString('en-IN')}</p>
                     <p><strong>Days Open:</strong> ${daysOpen} days</p>
+                    ${__slaOn() ? `
                     <p><strong>SLA Due Date:</strong> ${new Date(issue.sla.dueDate).toLocaleDateString('en-IN')}</p>
-                    <p><strong>Days Remaining:</strong> <span class="${issue.sla.breached ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}">${issue.sla.daysRemaining} days</span></p>
+                    <p><strong>Days Remaining:</strong> <span class="${issue.sla.breached ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}">${issue.sla.daysRemaining} days</span></p>` : ''}
                 </div>
 
                 <div class="bg-orange-50 p-4 rounded">
@@ -639,6 +661,8 @@
             const active = allIssues.filter(i => String((i.builder && i.builder.status) || '').toUpperCase() !== 'WORK_COMPLETED');
             const closed = allIssues.filter(i => String((i.builder && i.builder.status) || '').toUpperCase() === 'WORK_COMPLETED');
             const filterNote = builderStatusFilter ? 'Status=' + builderStatusFilter : 'none';
+            const slaOn = __slaOn();
+            const slaCols = slaOn ? ['slaDue', 'breached'] : [];
             window.IRP_REPORT.open({
                 pageContext: 'builder',
                 title: 'Builder Tasks Report',
@@ -652,11 +676,11 @@
                 columnKeys: [
                     'ticketId', 'dateReported', 'tower', 'resident',
                     'category', 'severity', 'status', 'description',
-                    'slaDue', 'breached', 'vendor', 'remarks'
+                    ...slaCols, 'vendor', 'remarks'
                 ],
                 columnDefaultsOn: [
                     'ticketId', 'tower', 'category', 'severity', 'status',
-                    'description', 'slaDue', 'breached'
+                    'description', ...slaCols
                 ]
             });
         }

@@ -988,11 +988,17 @@ function getLiveIssues(filterOption) {
         const data = sheet.getDataRange().getValues();
         const issues = [];
         const today = new Date();
+        const slaOn = getFeatureFlag("FEATURE_SLA");
+
+        // BREACHED filter is meaningless when SLA is off — return empty.
+        if (filterOption === "BREACHED" && !slaOn) {
+            return { success: true, data: [], error: null };
+        }
 
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
             const sevRaw = String(row[LIVE_COL.SEVERITY] || "");
-            const slaDateRaw = row[LIVE_COL.SLA_DATE] ? new Date(row[LIVE_COL.SLA_DATE]) : null;
+            const slaDateRaw = (slaOn && row[LIVE_COL.SLA_DATE]) ? new Date(row[LIVE_COL.SLA_DATE]) : null;
             const isBreached = slaDateRaw ? today > slaDateRaw : false;
 
             if (filterOption === "CRITICAL" && sevRaw.toUpperCase() !== "CRITICAL") continue;
@@ -1460,12 +1466,13 @@ function getDashboardMetrics() {
 
         const today = new Date();
         let totalClosureTime = 0;
+        const slaOn = getFeatureFlag("FEATURE_SLA");
 
         for (let i = 1; i < liveData.length; i++) {
             const r = liveData[i];
             const category = String(r[LIVE_COL.CATEGORY] || "Uncategorised");
             const tower    = String(r[LIVE_COL.TOWER]    || "Unknown");
-            const sla      = r[LIVE_COL.SLA_DATE] ? new Date(r[LIVE_COL.SLA_DATE]) : null;
+            const sla      = (slaOn && r[LIVE_COL.SLA_DATE]) ? new Date(r[LIVE_COL.SLA_DATE]) : null;
             const updated  = r[LIVE_COL.DATE_ASSIGNED] ? new Date(r[LIVE_COL.DATE_ASSIGNED]) : null;
 
             if (sla && today > sla) slaBreaches++;

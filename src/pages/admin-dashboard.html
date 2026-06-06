@@ -144,7 +144,33 @@
                 console.error('Auth check failed:', e);
                 location.href = 'index.html';
             }
+            // Load feature flags for optional UI gating.
+            try {
+                const cc = await API.getClientConfig();
+                window.IRP_CLIENT_CONFIG = cc || { features: {}, tunables: {} };
+            } catch (e) {
+                console.warn('getClientConfig failed, using defaults:', e && e.message);
+                window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
+            }
+            // Strip SLA UI when FEATURE_SLA is off.
+            if (((window.IRP_CLIENT_CONFIG.features) || {}).FEATURE_SLA !== true) {
+                const slaKpi = document.getElementById('kpiSLA');
+                if (slaKpi) {
+                    const card = slaKpi.closest('.bg-orange-100');
+                    if (card) card.remove();
+                }
+                const slaTbody = document.getElementById('slaTable');
+                if (slaTbody) {
+                    const card = slaTbody.closest('.bg-white');
+                    if (card) card.remove();
+                }
+            }
         })();
+
+        function __slaOn() {
+            var f = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.features) || {};
+            return f.FEATURE_SLA === true;
+        }
 
         let metrics = null;
         let allIssues = [];
@@ -170,7 +196,8 @@
             document.getElementById('kpiActive').textContent = metrics.totalActive;
             document.getElementById('kpiClosed').textContent = metrics.totalClosed;
             document.getElementById('kpiCritical').textContent = metrics.criticalPending;
-            document.getElementById('kpiSLA').textContent = metrics.slaBreaches;
+            const slaKpi = document.getElementById('kpiSLA');
+            if (slaKpi) slaKpi.textContent = metrics.slaBreaches;
         }
 
         function renderCharts() {
@@ -262,14 +289,17 @@
             document.getElementById('agingTable').innerHTML = agingHtml;
 
             // SLA Breaches
-            const slaIssues = allIssues.filter(i => i.sla.breached);
-            const slaHtml = slaIssues.length === 0
-                ? '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">No SLA breaches</td></tr>'
-                : slaIssues.map(i => {
-                    const daysOverdue = Math.abs(i.sla.daysRemaining);
-                    return `<tr class="border-b bg-red-50"><td class="px-4 py-2 font-bold" title="${i.ticketId}">${window.briefTitle(i)}</td><td class="px-4 py-2 text-red-600 font-bold">${daysOverdue}</td><td class="px-4 py-2">${i.issue.category}</td></tr>`;
-                }).join('');
-            document.getElementById('slaTable').innerHTML = slaHtml;
+            const slaTbody = document.getElementById('slaTable');
+            if (slaTbody) {
+                const slaIssues = allIssues.filter(i => i.sla && i.sla.breached);
+                const slaHtml = slaIssues.length === 0
+                    ? '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">No SLA breaches</td></tr>'
+                    : slaIssues.map(i => {
+                        const daysOverdue = Math.abs(i.sla.daysRemaining);
+                        return `<tr class="border-b bg-red-50"><td class="px-4 py-2 font-bold" title="${i.ticketId}">${window.briefTitle(i)}</td><td class="px-4 py-2 text-red-600 font-bold">${daysOverdue}</td><td class="px-4 py-2">${i.issue.category}</td></tr>`;
+                    }).join('');
+                slaTbody.innerHTML = slaHtml;
+            }
         }
 
         function logout() {

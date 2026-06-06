@@ -58,7 +58,8 @@ const DEFAULT_FEATURES = {
     FEATURE_SUBMITTED_PAGE:     true,  // submitted-issues.html accessible
     FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,  // show severity badge/filter/sort on submitted-issues page
     FEATURE_COMMITTEE_PHOTO_ATTACH: false,  // committee "Upload Photo" button in detail view + addPhotosToIssue API. OFF by default — opt-in.
-    FEATURE_PDF_REPORT:         false   // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. OFF by default — opt-in.
+    FEATURE_PDF_REPORT:         false,  // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. OFF by default — opt-in.
+    FEATURE_SLA:                false   // SLA KPIs, SLA Days column, BREACHED filter, and sla:{} sub-object on issue APIs. OFF by default — opt-in.
 };
 
 // Numeric / string tunables consumed by both server validators and the

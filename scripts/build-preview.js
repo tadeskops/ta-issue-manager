@@ -112,7 +112,8 @@ const SHIM = `
                     FEATURE_SUBMITTED_PAGE: true,
                     FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,
                     FEATURE_COMMITTEE_PHOTO_ATTACH: true,
-                    FEATURE_PDF_REPORT: true
+                    FEATURE_PDF_REPORT: true,
+                    FEATURE_SLA: false
                 },
                 tunables: {
                     SUBMIT_RATE_LIMIT_SECONDS: 20,

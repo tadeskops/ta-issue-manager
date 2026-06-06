@@ -459,7 +459,32 @@
                 const btn = document.getElementById('exportReportBtn');
                 if (btn) btn.classList.remove('hidden');
             }
+            // Strip SLA UI when FEATURE_SLA is off.
+            if (((window.IRP_CLIENT_CONFIG.features) || {}).FEATURE_SLA !== true) {
+                const slaToggleBtn = document.querySelector('button[onclick="toggleSLASection()"]');
+                if (slaToggleBtn) slaToggleBtn.remove();
+                const slaSection = document.getElementById('slaSection');
+                if (slaSection) slaSection.remove();
+                const breachedOpt = document.querySelector('#activeTab select option[value="BREACHED"]');
+                if (breachedOpt) breachedOpt.remove();
+                const slaTh = document.querySelector('#activeTab thead th:nth-child(8)');
+                if (slaTh) slaTh.remove();
+                // Strip "(SLA X days)" label suffixes from the approve modal.
+                const sel = document.getElementById('approveSeverity');
+                if (sel) {
+                    Array.prototype.forEach.call(sel.options, function (o) {
+                        o.text = o.text.replace(/\s*\(SLA[^)]*\)\s*$/, '');
+                    });
+                }
+                const slaNote = document.querySelector('#approveModal p.mt-2.text-xs.text-slate-400');
+                if (slaNote && /SLA/i.test(slaNote.textContent || '')) slaNote.remove();
+            }
         })();
+
+        function __slaOn() {
+            var f = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.features) || {};
+            return f.FEATURE_SLA === true;
+        }
 
         let pendingIssues = [];
         let activeIssues = [];
@@ -710,9 +735,13 @@
                 return;
             }
 
+            const slaOn = __slaOn();
             tbody.innerHTML = filtered.map(issue => {
                 const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
-                const rowClass = issue.sla.breached ? 'bg-red-950/30 border-red-600/30' : '';
+                const rowClass = (slaOn && issue.sla && issue.sla.breached) ? 'bg-red-950/30 border-red-600/30' : '';
+                const slaCell = slaOn
+                    ? `<td class="p-4 text-center text-sm font-bold ${issue.sla.breached ? 'text-red-400' : 'text-emerald-400'}">${issue.sla.daysRemaining}d ${issue.sla.breached ? '⚠️' : '✓'}</td>`
+                    : '';
                 return `
                     <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors ${rowClass} issue-row" id="row-${issue.ticketId}">
                         <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'active')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button></td>
@@ -722,7 +751,7 @@
                         <td class="p-4"><span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span></td>
                         <td class="p-4 hidden lg:table-cell text-xs"><span class="bg-blue-900/50 text-blue-200 px-2 py-1 rounded font-semibold">${issue.builder.status || 'ASSIGNED'}</span></td>
                         <td class="p-4 text-center text-sm font-bold text-amber-300">${daysOpen} days</td>
-                        <td class="p-4 text-center text-sm font-bold ${issue.sla.breached ? 'text-red-400' : 'text-emerald-400'}">${issue.sla.daysRemaining}d ${issue.sla.breached ? '⚠️' : '✓'}</td>
+                        ${slaCell}
                         <td class="p-4 text-center space-x-1">
                             <button onclick="openQuickViewModal('${issue.ticketId}', 'active')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
                             <button onclick="openCloseModal('${issue.ticketId}')" class="px-2 py-1 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg" title="Close Issue"><i class="fas fa-check-double"></i></button>
@@ -765,7 +794,8 @@
             document.getElementById('kpiActive').textContent = activeIssues.length;
             document.getElementById('kpiClosed').textContent = (closedIssues && closedIssues.length) || metrics.totalClosed || 0;
             document.getElementById('kpiCritical').textContent = activePending.filter(i => i.issue.severity === 'Critical').length;
-            document.getElementById('kpiSLA').textContent = activeIssues.filter(i => i.sla.breached).length;
+            const slaEl = document.getElementById('kpiSLA');
+            if (slaEl) slaEl.textContent = activeIssues.filter(i => i.sla && i.sla.breached).length;
         }
 
         function getSeverityColor(severity) {
@@ -950,10 +980,11 @@
                             <p class="text-xs text-slate-400 mb-2">DAYS OPEN</p>
                             <p class="text-sm font-bold text-amber-400">${daysOpen}d</p>
                         </div>
+                        ${__slaOn() ? `
                         <div class="text-center">
                             <p class="text-xs text-slate-400 mb-2">SLA STATUS</p>
                             <p class="text-sm font-bold ${tab === 'active' && issue.sla.breached ? 'text-red-400' : 'text-emerald-400'}">${tab === 'active' ? (issue.sla.breached ? '⚠️ Breached' : '✓ On Track') : '⏳ Pending'}</p>
-                        </div>
+                        </div>` : ''}
                     </div>
 
                     <!-- Description -->

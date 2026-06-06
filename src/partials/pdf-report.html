@@ -127,6 +127,13 @@
         return f.FEATURE_PDF_REPORT === true;
     }
 
+    function _slaOn() {
+        var f = (window.IRP_CLIENT_CONFIG && window.IRP_CLIENT_CONFIG.features) || {};
+        return f.FEATURE_SLA === true;
+    }
+
+    var SLA_COL_KEYS = ["slaDue", "breached"];
+
     // ----- Wizard ----------------------------------------------------------
 
     function open(opts) {
@@ -152,7 +159,9 @@
         var allowedKeys = Array.isArray(opts.columnKeys) ? opts.columnKeys.slice() : null;
         if (allowedKeys && allowedKeys.indexOf("ticketId") < 0) allowedKeys.unshift("ticketId");
         var defaultsOn = Array.isArray(opts.columnDefaultsOn) ? opts.columnDefaultsOn : null;
+        var slaOn = _slaOn();
         _state.cols = COLUMN_CATALOG
+            .filter(function (c) { return slaOn || SLA_COL_KEYS.indexOf(c.key) < 0; })
             .filter(function (c) { return allowedKeys ? allowedKeys.indexOf(c.key) >= 0 : true; })
             .map(function (c) {
                 var on = defaultsOn ? defaultsOn.indexOf(c.key) >= 0 : !!c.on;
