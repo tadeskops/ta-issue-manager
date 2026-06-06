@@ -89,6 +89,86 @@ If any answer is "no", finish the doc update before closing out.
   `Session.getActiveUser()` + `getUserRole()`, never from a
   client-supplied payload field.
 
+## 2.1 Significant new features must be feature-flag gated
+
+Any change that adds a **significant new feature** must ship behind a
+`FEATURE_*` flag in `DEFAULT_FEATURES` (`src/Config.gs`), enforced on
+both server and client, and the agent must explicitly justify the
+chosen default in the PR/commit body.
+
+### How to decide if a change qualifies
+
+A change qualifies as "significant" — and therefore needs a flag —
+if **any** of the following is true:
+
+- It adds a new API action (a new `case` in `api_call`).
+- It adds a new UI affordance the user can interact with (a new button,
+  panel, page, modal, drag-drop zone, file picker, etc.).
+- It writes to a sheet, Drive, or any external system in a code path
+  that did not previously write there.
+- It changes a role's capabilities (committee/builder/resident gains a
+  new action).
+- It is opinionated enough that an operator might reasonably want to
+  turn it off in production without a code change (regulatory, scope,
+  cost, perf, or "we don't want this team to see it yet" reasons).
+
+A change does **not** need a flag if it is purely:
+
+- A bug fix that restores documented behavior.
+- A refactor with zero observable change.
+- Cosmetic (whitespace, copy edits, log message tweaks).
+- A schema migration / setup helper that an operator runs explicitly.
+- A change to local-dev / preview tooling that doesn't ship to Apps
+  Script.
+
+### Default-state policy
+
+When a flag is added, the agent must choose a default and **state the
+reason** in the commit message:
+
+| Default the flag to… | …when |
+|---|---|
+| `false` (off, opt-in) | The feature is new, write-capable, role-scoped, irreversible (writes to live sheets / Drive / sends notifications), or the user hasn't asked for it to be enabled by default. **This is the safe default.** |
+| `true` (on) | The user has explicitly asked for it on by default, OR the feature is purely additive read-only UX with negligible blast radius (e.g. a new sort option on an existing list), AND turning it off would leave the page in a broken state. |
+
+**Default to `false` when in doubt.** A flag that ships off can be
+turned on by editing the `CONFIG` sheet; a flag that ships on and
+breaks something requires a redeploy to fix.
+
+### Implementation requirements
+
+1. Add the flag to `DEFAULT_FEATURES` in `src/Config.gs` with a one-line
+   comment describing what it gates.
+2. Server-side: every API action that participates in the feature must
+   call `getFeatureFlag("FEATURE_X")` and return a clear error when
+   it's off (`"<Feature> is disabled. Enable FEATURE_X in CONFIG."`).
+   Do not rely on the client gate alone — the API can be called by any
+   authenticated user with the network panel open.
+3. Client-side: the relevant page must read `window.IRP_CLIENT_CONFIG.features.FEATURE_X`
+   (loaded via `API.getClientConfig()`) and:
+   - hide / not render the affordance when the flag is false;
+   - re-check the flag inside the action handler as a defensive guard
+     against stale renders.
+4. `requirement.md` updates: add a row to §19.7 (or the relevant
+   tunables/features table) with the default value and effect; if the
+   feature exposes a new API action, note both the role allow-list AND
+   the gating flag(s) in §7.
+5. If two flags both gate the action (e.g. a master switch + a global
+   kill-switch), say so explicitly in `requirement.md` — both must be
+   true for the action to run.
+
+### How to verify before finishing the task
+
+- [ ] Did this change add a new `case` in `api_call`, a new visible UI
+      affordance, or a new external write path?
+- [ ] If yes → is there a `FEATURE_*` row in `DEFAULT_FEATURES`?
+- [ ] Is the flag enforced on both server (`getFeatureFlag`) and client
+      (render gate + handler re-check)?
+- [ ] Is the default explicitly justified in the commit body?
+- [ ] Is `requirement.md` updated with the new flag row?
+
+If any answer is "no", finish the gating before closing out.
+
 ## 3. Source-control & push policy
 
 These rules apply to **every** git/clasp operation the agent runs in
