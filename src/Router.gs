@@ -232,6 +232,7 @@ function api_call(action, payload) {
             case "getDashboardMetrics":      result = getDashboardMetrics(); break;
             case "syncFormResponses":        result = syncFormResponses(); break;
             case "submitIssue":              result = submitIssue(payload, email); break;
+            case "addPhotosToIssue":         result = addPhotosToIssue(payload.ticketId, payload.sheet, payload.photos, email); break;
             case "getCategoryMaster":        result = getCategoryMaster(); break;
             case "getClientConfig":          result = getClientConfig(); break;
             case "validateUserAccess":       result = { success: true, data: { email: email, role: role, hasAccess: true }, error: null }; break;
@@ -260,7 +261,7 @@ function isActionAllowed_(action, role) {
     const COMMITTEE_ONLY = [
         "approveIssue", "rejectIssue", "deleteIssue",
         "generateTicketId", "approveIssueWithTicketId",
-        "syncFormResponses"
+        "syncFormResponses", "addPhotosToIssue"
     ];
     const BUILDER_ALLOWED = [
         "getLiveIssues", "updateBuilderStatus", "closeIssue", "reopenIssue",

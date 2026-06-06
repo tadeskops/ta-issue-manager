@@ -99,11 +99,43 @@ function newRow_(width) { return new Array(width).fill(""); }
 
 // Split a photo cell into an array of URLs. The form & in-portal submit
 // both store multiple Drive links as a comma+space separated string in a
-// single cell; callers want an array.
+// single cell; callers want an array. Each URL is normalized to a form
+// that renders inside an <img> tag (Drive's /file/d/<id>/view URL does
+// not — it's an HTML viewer page, not the image bytes).
 function splitPhotoLinks_(cell) {
     if (!cell) return [];
-    if (Array.isArray(cell)) return cell.filter(Boolean);
-    return String(cell).split(/[,\s]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    const raw = Array.isArray(cell)
+        ? cell.filter(Boolean)
+        : String(cell).split(/[,\s]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    return raw.map(driveImageUrl_);
+}
+
+// Convert a Drive URL (in any of the common formats) to a public,
+// img-tag-embeddable URL. Non-Drive URLs are returned unchanged so the
+// helper is safe to apply blindly.
+//   Inputs we handle:
+//     https://drive.google.com/file/d/<ID>/view?usp=...
+//     https://drive.google.com/open?id=<ID>
+//     https://drive.google.com/uc?id=<ID>&export=...
+//     https://drive.google.com/thumbnail?id=<ID>&sz=...
+//     https://docs.google.com/uc?id=<ID>
+//   Output:
+//     https://drive.google.com/thumbnail?id=<ID>&sz=w2000
+//   The /thumbnail endpoint streams JPEG bytes (works in <img>), honors
+//   "Anyone with link" sharing, and avoids the redirect chain that the
+//   /uc?export=view endpoint sometimes triggers inside the Apps Script
+//   iframe.
+function driveImageUrl_(url) {
+    if (!url) return "";
+    const s = String(url);
+    if (s.indexOf("drive.google.com") === -1 && s.indexOf("docs.google.com") === -1) return s;
+    let id = "";
+    let m = s.match(/\/file\/d\/([A-Za-z0-9_-]{10,})/);
+    if (m) id = m[1];
+    if (!id) { m = s.match(/[?&]id=([A-Za-z0-9_-]{10,})/);  if (m) id = m[1]; }
+    if (!id) { m = s.match(/\/d\/([A-Za-z0-9_-]{10,})/);     if (m) id = m[1]; }
+    if (!id) return s;
+    return "https://drive.google.com/thumbnail?id=" + id + "&sz=w2000";
 }
 
 // google.script.run silently delivers `null` to the client success
@@ -487,7 +519,8 @@ function checkRateLimit_(email) {
 }
 
 // Upload base64-encoded photos to the configured Drive folder and return
-// shareable URLs. Throws if the folder is not configured/accessible.
+// publicly viewable URLs (Drive thumbnail endpoint) that work inside an
+// <img> tag in the web app.
 function uploadSubmissionPhotos_(photos, submittedBy) {
     const folderId = getAttachmentFolderId();
     if (!folderId) {
@@ -503,12 +536,103 @@ function uploadSubmissionPhotos_(photos, submittedBy) {
         const fileName = stamp + "_" + (submittedBy ? submittedBy.replace(/[^A-Za-z0-9._-]/g, "_") + "_" : "") + safeName;
         const blob = Utilities.newBlob(bytes, ph.mime, fileName);
         const file = folder.createFile(blob);
+        // Force "Anyone with the link can view" so the web app (which may
+        // be served to anonymous visitors) can render the image. Falls
+        // back to ANYONE (search-discoverable) only if the strict variant
+        // is blocked by domain policy.
         try {
             file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        } catch (e) { /* sharing may be restricted by domain policy — keep URL */ }
-        links.push(file.getUrl());
+        } catch (e1) {
+            Logger.log("setSharing ANYONE_WITH_LINK failed for " + fileName + ": " + e1);
+            try {
+                file.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.VIEW);
+            } catch (e2) {
+                Logger.log("setSharing ANYONE also failed for " + fileName + ": " + e2 +
+                    ". The Drive admin must allow link sharing on this folder or web-app visitors will see broken images.");
+            }
+        }
+        // Store the embeddable thumbnail URL directly so future readers
+        // don't have to translate. splitPhotoLinks_ also normalizes legacy
+        // /file/d/<id>/view URLs from the bound Google Form.
+        links.push(driveImageUrl_(file.getUrl()));
     }
     return links;
+}
+
+/**
+ * Append uploaded photos to an existing issue row (PENDING_REVIEW,
+ * LIVE_ISSUES, or CLOSED_ISSUES). Used by the committee dashboard to
+ * attach photos to issues that were submitted without any.
+ *
+ * payload shape: { ticketId, sheet, photos: [{name, mime, b64}, ...] }
+ *   sheet: "PENDING_REVIEW" | "LIVE_ISSUES" | "CLOSED_ISSUES"
+ *
+ * Returns: { success, data: { ticketId, photoLinks }, error }
+ */
+function addPhotosToIssue(ticketId, sheetName, photos, userEmail) {
+    try {
+        if (!getFeatureFlag("FEATURE_PHOTO_UPLOAD")) {
+            return { success: false, data: null, error: "Photo upload is currently disabled." };
+        }
+        if (!ticketId) return { success: false, data: null, error: "ticketId is required" };
+        if (!Array.isArray(photos) || photos.length === 0) {
+            return { success: false, data: null, error: "No photos provided" };
+        }
+
+        // Reuse the submission validator (photos-only branch).
+        const v = validateSubmission_({
+            category: "x", tower: "x",
+            description: "placeholder description",
+            photos: photos
+        });
+        if (!v.ok) {
+            // Strip the placeholder-field errors we forced through above.
+            const errs = v.errors.filter(function (e) {
+                return e.indexOf("Photo") === 0 || e.indexOf("photos") !== -1;
+            });
+            if (errs.length) {
+                return { success: false, data: null, error: "Validation failed: " + errs.join("; ") };
+            }
+        }
+
+        const sn = String(sheetName || SHEETS.PENDING_REVIEW);
+        let photoColIdx;
+        if (sn === SHEETS.PENDING_REVIEW)      photoColIdx = PENDING_COL.PHOTO;
+        else if (sn === SHEETS.LIVE_ISSUES)    photoColIdx = LIVE_COL.PHOTO;
+        else if (sn === SHEETS.CLOSED_ISSUES)  photoColIdx = LIVE_COL.PHOTO;
+        else return { success: false, data: null, error: "Unsupported sheet: " + sn };
+
+        const sheet = getSheet(sn);
+        const data = sheet.getDataRange().getValues();
+        const ticketColIdx = (sn === SHEETS.PENDING_REVIEW) ? PENDING_COL.TICKET_ID : LIVE_COL.TICKET_ID;
+
+        let rowIndex = -1;
+        for (let i = 1; i < data.length; i++) {
+            if (String(data[i][ticketColIdx]) === String(ticketId)) { rowIndex = i; break; }
+        }
+        if (rowIndex === -1) {
+            return { success: false, data: null, error: "Ticket not found on " + sn + ": " + ticketId };
+        }
+
+        const newLinks = uploadSubmissionPhotos_(photos, userEmail || "");
+        const existingCell = data[rowIndex][photoColIdx];
+        const existing = splitPhotoLinks_(existingCell);
+        const merged = existing.concat(newLinks);
+        const cellValue = merged.join(", ");
+
+        // Sheet rows are 1-based; data array is 0-based.
+        sheet.getRange(rowIndex + 1, photoColIdx + 1).setValue(cellValue);
+        Logger.log("addPhotosToIssue: " + ticketId + " on " + sn + " (+" + newLinks.length + " photos by " + (userEmail || "?") + ")");
+
+        return {
+            success: true,
+            data: { ticketId: ticketId, photoLinks: merged, addedCount: newLinks.length },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("addPhotosToIssue error: " + error);
+        return { success: false, data: null, error: error.toString() };
+    }
 }
 
 // Get Form Responses (Direct from Google Sheet). Uses FORM_COL indices

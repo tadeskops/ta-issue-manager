@@ -82,6 +82,7 @@ const API = {
     approveIssueWithTicketId(o, n) { return this.call("approveIssueWithTicketId", { originalTicketId: o, newTicketId: n }); },
     syncFormResponses()       { return this.call("syncFormResponses"); },
     submitIssue(payload)      { return this.call("submitIssue", payload || {}); },
+    addPhotosToIssue(ticketId, sheet, photos) { return this.call("addPhotosToIssue", { ticketId, sheet, photos }); },
     getCategoryMaster()       { return this.call("getCategoryMaster"); },
     getClientConfig()         { return this.call("getClientConfig"); },
     diag()                    { return this.call("diag"); },

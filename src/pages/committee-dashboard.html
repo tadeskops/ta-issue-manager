@@ -449,6 +449,8 @@
         let activeFilter = ''; // '' | CRITICAL | AGING | BREACHED
         let currentTicketId = null;
         let currentSheet = 'PENDING_REVIEW';
+        let currentDetailTicket = null;
+        let currentDetailTab = null;
         let autoRefreshEnabled = true;
         let autoRefreshInterval = null;
         let showSLABreaches = false; // Configuration: default hidden
@@ -879,9 +881,14 @@
                 selectedRow.classList.add('bg-slate-700/20');
             }
 
-            const allIssuesArray = tab === 'pending' ? pendingIssues : activeIssues;
+            const allIssuesArray = tab === 'pending' ? pendingIssues
+                                  : tab === 'closed' ? closedIssues
+                                  : activeIssues;
             const issue = allIssuesArray.find(i => i.ticketId === ticketId);
             if (!issue) return;
+
+            currentDetailTicket = ticketId;
+            currentDetailTab = tab;
 
             const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
             
@@ -945,7 +952,18 @@
                                 `).join('')}
                             </div>
                         ` : `
-                            <p class="text-xs text-slate-500 italic">No photos attached</p>
+                            <div class="rounded-lg border border-dashed border-slate-600 bg-slate-800/40 p-5 text-center">
+                                <p class="text-xs text-slate-500 italic mb-3">No photos attached</p>
+                                ${tab !== 'closed' ? `
+                                    <input id="committeePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" onchange="onCommitteePhotoSelected(this)">
+                                    <button type="button" onclick="document.getElementById('committeePhotoInput').click()"
+                                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold uppercase tracking-wider transition-all border border-amber-400/30 shadow-lg">
+                                        <i class="fas fa-camera"></i>
+                                        <span id="committeePhotoBtnLabel">Upload Photo</span>
+                                    </button>
+                                    <p class="text-[10px] text-slate-500 mt-2">JPEG / PNG / WEBP &middot; up to 5 images</p>
+                                ` : ''}
+                            </div>
                         `}
                     </div>
                 </div>
@@ -953,6 +971,84 @@
 
             document.getElementById('detailedViewContent').innerHTML = detailedContent;
             document.getElementById('detailedViewModal').classList.remove('hidden');
+        }
+
+        // Map detail-view tab to backend sheet name.
+        function _sheetForTab(tab) {
+            if (tab === 'pending') return 'PENDING_REVIEW';
+            if (tab === 'active')  return 'LIVE_ISSUES';
+            if (tab === 'closed')  return 'CLOSED_ISSUES';
+            return 'PENDING_REVIEW';
+        }
+
+        // Resize an image file in the browser to keep payload small (mirrors
+        // submit-issue.html). Returns { b64, mime }.
+        function resizeImageToB64_(file, maxDim, quality) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(reader.error);
+                reader.onload = () => {
+                    const img = new Image();
+                    img.onerror = () => reject(new Error('Image decode failed'));
+                    img.onload = () => {
+                        let { width, height } = img;
+                        if (width > maxDim || height > maxDim) {
+                            const k = Math.min(maxDim / width, maxDim / height);
+                            width  = Math.round(width  * k);
+                            height = Math.round(height * k);
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width; canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                        resolve({ b64: dataUrl.split(',')[1], mime: 'image/jpeg' });
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function onCommitteePhotoSelected(input) {
+            const files = Array.from(input.files || []);
+            input.value = '';
+            if (files.length === 0) return;
+            if (!currentDetailTicket || !currentDetailTab) {
+                showToast('✗ No issue selected', 'error');
+                return;
+            }
+
+            const btnLabel = document.getElementById('committeePhotoBtnLabel');
+            if (btnLabel) btnLabel.textContent = 'Uploading…';
+
+            try {
+                const photos = [];
+                for (const f of files) {
+                    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) {
+                        showToast('Only JPEG/PNG/WEBP allowed', 'error');
+                        continue;
+                    }
+                    const { b64, mime } = await resizeImageToB64_(f, 1600, 0.85);
+                    photos.push({ name: f.name, mime: mime, b64: b64 });
+                }
+                if (photos.length === 0) {
+                    if (btnLabel) btnLabel.textContent = 'Upload Photo';
+                    return;
+                }
+
+                const sheet = _sheetForTab(currentDetailTab);
+                const ticketId = currentDetailTicket;
+                const tab = currentDetailTab;
+                await API.addPhotosToIssue(ticketId, sheet, photos);
+                showToast(`✓ ${photos.length} photo${photos.length > 1 ? 's' : ''} uploaded`, 'success');
+                await loadData();
+                // Re-open the detail view so the new photos are visible right away.
+                openDetailedView(ticketId, tab);
+            } catch (err) {
+                console.error(err);
+                showToast('✗ Upload failed: ' + (err.message || err), 'error');
+                if (btnLabel) btnLabel.textContent = 'Upload Photo';
+            }
         }
 
         async function confirmDelete() {

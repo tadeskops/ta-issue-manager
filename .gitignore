@@ -35,6 +35,10 @@ yarn-error.log*
 ### Generated local preview (scripts/build-preview.js output)
 preview/
 
+### Reference material — local notes, source PDFs, sample images
+# Never push; this folder is for working reference only.
+ref/
+
 ### clasp — local project link and auth (never commit credentials)
 .clasp.json
 .clasprc.json

@@ -1,0 +1,194 @@
+# Repository instructions for AI coding agents
+
+These rules apply to **every** task in this repository (issue triage,
+feature work, refactors, bug fixes, doc edits, anything). They are
+binding — do not skip them because the user did not restate them in the
+current request.
+
+## 1. `requirement.md` is the spec — keep it in sync
+
+`requirement.md` at the repo root is the **single source of truth** for
+this project's behavior, roles, sheet schemas, API actions, config keys,
+and feature flags. Any code change that affects observable behavior MUST
+be reflected in `requirement.md` in the same change.
+
+### When you MUST update `requirement.md`
+
+Update it whenever a change touches any of the following:
+
+- **Roles or capabilities** — a role gains/loses an action, a new role is
+  added, the role-resolution logic changes.
+- **API actions** — a new `case` is added to `api_call` in
+  [`src/Router.gs`](../src/Router.gs), an action is renamed/removed, its
+  allow-list (`COMMITTEE_ONLY` / `BUILDER_ALLOWED` / `RESIDENT_ALLOWED`)
+  changes, or its payload shape changes.
+- **Sheet schemas** — a column is added/removed/reordered in any of
+  `PENDING_REVIEW`, `LIVE_ISSUES`, `CLOSED_ISSUES`, `ARCHIVES_ISSUES`,
+  `CATEGORY_MASTER`, `CONFIG`, or `Form Responses 1`. Update the
+  corresponding `*_COL` constant table description.
+- **Config keys** — a new row in `DEFAULT_FEATURES`, `DEFAULT_TUNABLES`,
+  or any other `CONFIG`-sheet key consumed by code.
+- **Pages / routing** — a page is added/removed from `PAGE_MAP`, the URL
+  contract changes, or a feature flag starts/stops gating a page.
+- **External integrations** — Drive folder layout, Google Form fields,
+  scopes added to `appsscript.json`, etc.
+- **Setup runbook** — a new bootstrap function appears (`setupX`,
+  `migrateY`). It MUST be added both to `requirement.md`'s setup section
+  and to the **Apps Script setup runbook** table in `README.md`.
+
+### When you do NOT need to update `requirement.md`
+
+- Pure refactors with zero observable change.
+- Cosmetic changes (whitespace, comment clarification, typo fixes in
+  source comments).
+- Local-dev / preview-server / build-script edits that don't ship to
+  Apps Script.
+
+### How to update
+
+1. Read the existing `requirement.md` section that is affected.
+2. Edit **in place** — preserve heading numbering and the tabular style.
+   Do not append "changelog" entries; the file is a spec, not a log.
+3. If the change is substantial (new role, new action set, new sheet),
+   add a new numbered subsection in the appropriate top-level section
+   rather than overloading an existing bullet.
+4. Cross-check that the README's setup runbook is also up-to-date if a
+   new function needs to be run by an operator.
+
+### How to verify before finishing the task
+
+Before reporting a task as complete, mentally walk through this
+checklist:
+
+- [ ] Did this change touch a `case` in `api_call`, a `*_COL` constant,
+      a `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` key, a `PAGE_MAP` entry,
+      or a `setup*` / `migrate*` function?
+- [ ] If yes → is `requirement.md` updated in the same commit?
+- [ ] If a new operator-run function exists → is the **README runbook
+      table** updated too?
+
+If any answer is "no", finish the doc update before closing out.
+
+## 2. Other standing rules
+
+- **Do not create stray markdown files** to document changes — keep
+  history in commit messages / PR descriptions. The only docs that ship
+  with the repo are `README.md`, `requirement.md`, and the files under
+  `.github/`. Anything else under `docs/` or root should be discussed
+  with the user first.
+- **`.gs` files are not parsed locally.** After editing function
+  boundaries (signatures, braces, top-level returns), audit the file
+  with a brace-depth scan before pushing — Apps Script will only surface
+  the syntax error after `clasp push`.
+- **Honor existing patterns.** Sheet reads use `*_COL` constants, never
+  magic indices. API calls use `API.call(action, payload)` from
+  [`src/partials/api.html`](../src/partials/api.html), never raw
+  `google.script.run`. Drive sharing goes through
+  `uploadSubmissionPhotos_` / `driveImageUrl_`, never inline.
+- **Server-trust user identity.** Email/role come from
+  `Session.getActiveUser()` + `getUserRole()`, never from a
+  client-supplied payload field.
+
+## 3. Source-control & push policy
+
+These rules apply to **every** git/clasp operation the agent runs in
+this repo. They are non-negotiable.
+
+### 3.1 `ref/` is local-only — never push
+
+The repo-root `ref/` folder holds working reference material (sample
+PDFs, exported CSVs, WhatsApp photo dumps, scratch notes). It is listed
+in [`.gitignore`](../.gitignore) and **must never** be committed or
+pushed under any circumstance.
+
+- Do not `git add ref/`, `git add -f ref/`, or run `git add .` from
+  inside `ref/`.
+- Do not propose moving files out of `ref/` into a tracked folder
+  without the user's explicit instruction.
+- If a file under `ref/` is genuinely needed in the deployed app, copy
+  it into `assets/` (or another tracked folder) and reference the copy.
+
+### 3.2 Always list changes and ask before pushing
+
+The agent must **not** run any push command on its own initiative.
+Before any of the following, stop and present the user with a confirmation
+prompt that lists every change:
+
+- `git push` (any remote, any branch)
+- `git push --force` / `--force-with-lease` (in addition, call out the
+  destructive nature explicitly)
+- `clasp push` / `clasp push -f` (deploys to Apps Script)
+- `clasp deploy` / `clasp version`
+- Any GitHub Actions or CI trigger that pushes to a remote
+
+#### Confirmation template
+
+Use exactly this shape — adapt the bullets to the actual diff:
+
+```
+Ready to push. Please confirm.
+
+Target:      <github / apps-script / both>
+Remote:      <e.g. origin (https://github.com/tadeskops/ta-issue-manager.git)>
+Branch:      <e.g. main>
+Git account: tadeskops <ta.deskops@gmail.com>   ← must be tadeskops
+
+Files changed (vs origin/<branch>):
+  M src/Main.gs              — added addPhotosToIssue + Drive URL normalizer
+  M src/Router.gs            — wired addPhotosToIssue + allow-list
+  M src/Config.gs            — setupAttachmentFolder, makeAttachmentFolderPublic
+  M src/pages/committee-dashboard.html — Upload Photo button in detail view
+  M README.md                — setup runbook
+  M requirement.md           — §5.1 / §7 / §13.1 / §19.13
+
+Commit message (proposed):
+  feat(committee): attach photos to existing issues + Drive public-view
+
+Proceed? (yes / no / edit)
+```
+
+The user must answer **yes** (or an equivalent like "push it") before
+the agent runs the push. "no" / silence / a question = do not push.
+
+If the user gives a blanket "push everything you do" instruction at any
+point, the agent still lists the changes once per push but may skip the
+explicit yes/no prompt for that session only.
+
+### 3.3 Pushes must use the `tadeskops` git account
+
+Every push to GitHub from this repo must originate from the `tadeskops`
+account (`ta.deskops@gmail.com`). Before any `git push`:
+
+1. Run a pre-push identity check:
+
+   ```powershell
+   git config user.name      # must be exactly: tadeskops
+   git config user.email     # must be exactly: ta.deskops@gmail.com
+   git remote get-url origin # must point at github.com/tadeskops/...
+   ```
+
+2. If any of those three values does not match, **abort the push** and
+   tell the user which value is wrong and how to fix it (`git config
+   user.name tadeskops`, etc.). Do not "fix it silently" — the user
+   may have other repos that should keep a different identity.
+
+3. Never reconfigure `user.name`, `user.email`, the remote URL, or
+   credentials without explicit user instruction in the same turn.
+
+4. If a future commit's `Author:` would not be `tadeskops`, surface
+   that fact in the confirmation block in §3.2 (`Git account:` line
+   highlights the mismatch) and ask the user how to proceed.
+
+### 3.4 Apps Script (`clasp`) pushes — same rules
+
+`clasp push` deploys directly to the live Apps Script project — there
+is no PR review buffer. Follow §3.2 for confirmation, and additionally:
+
+- Run the `.gs` brace-depth audit (per §2) on every changed `.gs` file
+  *before* prompting the user.
+- Mention which Apps Script deployment will be affected (the secure
+  deployment, the public one, or both — see `requirement.md` §19.8).
+- After a successful `clasp push`, list any operator-run functions
+  that must be re-run (`setupConfigSheet`, `setupAttachmentFolder`,
+  `makeAttachmentFolderPublic`, etc. — see README runbook).
+

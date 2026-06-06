@@ -123,8 +123,9 @@
 | `COMMITTEE_EMAILS` | `a@x.com, b@x.com` | Comma- or newline-separated |
 | `BUILDER_EMAIL` | `builder@x.com` | Single email |
 | `LOGO_URL` | `https://drive.google.com/uc?id=…` | Optional — falls back to bundled asset |
+| `ATTACHMENT_FOLDER_ID` | `1AbC…xyz` | Drive folder ID for **all** in-portal photo uploads (resident submit page + committee "attach later" uploader). Blank = uploads fail with `ATTACHMENT_FOLDER_ID not set`. Populated by `setupAttachmentFolder` (see §13). |
 
-Cached 5 min in `CacheService`; `clearConfigCache()` forces refresh.
+Feature flags and numeric tunables are stored as additional rows; their canonical defaults live in `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` (`src/Config.gs`). Cached 5 min in `CacheService`; `clearConfigCache()` forces refresh.
 
 ---
 
@@ -166,9 +167,12 @@ All requests pass through `api_call(action, payload)` in [Router.gs](Router.gs).
 | `getDashboardMetrics` | ✅ | ✅ | — |
 | `syncFormResponses` | ✅ | — | — |
 | `submitIssue` | ✅ | ✅ | ✅ |
+| `addPhotosToIssue` (payload: `{ticketId, sheet, photos:[{name,mime,b64}]}`) | ✅ | — | — |
 | `getCategoryMaster` | ✅ | ✅ | ✅ |
 | `getClientConfig` | ✅ | ✅ | ✅ |
 | `validateUserAccess` | ✅ | ✅ | ✅ |
+
+`addPhotosToIssue` lets the committee attach photos to an existing issue that was submitted without any (e.g. bulk Form imports). `sheet` must be one of `PENDING_REVIEW`, `LIVE_ISSUES`, or `CLOSED_ISSUES`. New URLs are appended (comma-separated) to the row's existing `PHOTO` column. Gated by `FEATURE_PHOTO_UPLOAD`.
 
 Response envelope: `{ success: boolean, data: any, error: string|null }`
 (some legacy actions return `{ success, responses, count, error }` — the
@@ -272,11 +276,22 @@ Resident Name · Flat Number · Category · Sub-Category · Tower · Exact Locat
 | Setting | Value |
 |---|---|
 | Manifest | [appsscript.json](appsscript.json) (`USER_ACCESSING`, `ANYONE`) |
-| Required scopes | `spreadsheets`, `userinfo.email`, `script.container.ui`, `script.send_mail`, `drive.readonly` |
-| One-time | Run `setupConfigSheet` to create the `CONFIG` tab |
-| Deploy as | Web app, *Execute as: User accessing the web app*, *Who has access: Anyone with a Google account* |
+| Required scopes | `spreadsheets`, `userinfo.email`, `script.container.ui`, `script.send_mail`, `drive` (read + write for uploads) |
+| Deploy as | Web app, *Execute as: User accessing the web app*, *Who has access: Anyone with a Google account* (secure deployment) plus a sibling public deployment (`USER_DEPLOYING` / `ANYONE_ANONYMOUS`) for intake — see §19.8 |
 
-Full steps in [DEPLOYMENT_AUTH.md](DEPLOYMENT_AUTH.md).
+### 13.1 Apps Script setup runbook (one-time, in order)
+
+All functions live in `src/Config.gs`. Run from the Apps Script editor → function dropdown → Run. All are idempotent.
+
+| # | When | Function | What it does |
+|---|---|---|---|
+| 1 | Fresh deploy, or after pulling new `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` | `setupConfigSheet` | Seeds the `CONFIG` tab. Preserves existing operator values; appends only missing keys with defaults. |
+| 2 | Fresh deploy, or if `ATTACHMENT_FOLDER_ID` is blank | `setupAttachmentFolder` | Walks `My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating the ` (File responses)` suffix Google Forms appends) and writes the folder ID into the `ATTACHMENT_FOLDER_ID` row. |
+| 3 | Fresh deploy, **and** every time Google Forms drops new files into that folder | `makeAttachmentFolderPublic` | Sets the folder and every file inside to *Anyone with the link → Viewer*. Falls back to `ANYONE` if domain policy blocks link sharing; logs a warning if both are blocked. |
+| — | Anytime, to verify | `whereDoUploadsGo` | Read-only. Prints the configured folder's full path + URL. Does not change anything. |
+| — | After editing CONFIG by hand | `clearConfigCache` | Forces the next call to re-read CONFIG (5-min cache otherwise). |
+
+Full operator steps in [DEPLOYMENT_AUTH.md](DEPLOYMENT_AUTH.md) and the **Apps Script setup runbook** table in `README.md`.
 
 ---
 
@@ -545,3 +560,38 @@ older clasp versions silently tolerated this.
 `/*` only matches top-level non-hidden entries; `/.*` covers root-level
 dotfiles (`.github`, `.gitignore`, `.claspignore`). The `src/` directory
 is then never excluded, so its full contents are walked and pushed.
+
+### 19.13 Drive `/file/d/<id>/view` URLs do **not** render in `<img>` tags
+
+**Symptom:** Photos uploaded via the Google Form (or older portal
+submissions) showed as broken images in the web app, even though clicking
+the link in a new tab worked.
+
+**Root cause:** `DriveApp.File.getUrl()` returns the **HTML viewer** URL
+(`https://drive.google.com/file/d/<id>/view?...`). The browser fetches an
+entire Drive HTML page, not the image bytes, so `<img src=...>` fails.
+Additionally, the legacy `?export=view` endpoint sometimes triggers a
+redirect chain that the Apps Script iframe blocks.
+
+**Rule:** Every photo URL returned to the client must be normalized via
+`driveImageUrl_(url)` in `src/Main.gs`, which rewrites any Drive URL
+(`/file/d/<id>/view`, `?id=<id>`, `/open?id=<id>`, `/uc?...`) to the
+thumbnail endpoint:
+
+```
+https://drive.google.com/thumbnail?id=<ID>&sz=w2000
+```
+
+This endpoint streams JPEG bytes, honors *Anyone with the link* sharing,
+and works inside `<img>`. `splitPhotoLinks_` applies the normalization
+automatically for **every** reader (`getPendingIssues`, `getLiveIssues`,
+`getClosedIssues`, `getFormResponses`, etc.), so callers never need to
+convert URLs themselves.
+
+**Companion rule:** Files in the attachment folder must be publicly
+viewable for any web-app visitor (the public deployment serves anonymous
+users — see §19.8). `uploadSubmissionPhotos_` forces
+`ANYONE_WITH_LINK → VIEW` on every new upload (falling back to `ANYONE`
+and logging on policy block). For legacy / Form-uploaded files, run
+`makeAttachmentFolderPublic` once (§13.1) to retroactively open up the
+entire folder.
