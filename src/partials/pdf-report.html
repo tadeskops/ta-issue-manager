@@ -88,8 +88,20 @@
         { key: "remarks",      label: "Builder Remarks", width: 40, on: false,                 read: function (i) { return (i.builder && i.builder.comment) || ""; } },
         { key: "actionBy",     label: "Action By",      width: 28, on: false,                  read: function (i) { return i.actionBy || i.approvedBy || ""; } },
         { key: "actionDate",   label: "Action Date",    width: 22, on: false,                  read: function (i) { return _shortDate(i.actionDate || i.lastUpdated); } },
-        { key: "rejectionReason", label: "Rejection",   width: 40, on: false,                  read: function (i) { return i.rejectionReason || ""; } }
+        { key: "rejectionReason", label: "Rejection",   width: 40, on: false,                  read: function (i) { return i.rejectionReason || ""; } },
+        // Photos column renders thumbnails inline via the autoTable
+        // didDrawCell hook. read() joins the Drive links with a | sentinel
+        // so didParseCell / didDrawCell can recover the list without an
+        // out-of-band map. Width + min height come from columnStyles in
+        // _drawSection. Active only when the wizard's photos checkbox is on.
+        { key: "photos",       label: "Photos",         width: 50, on: true,                    read: function (i) {
+            var links = (i.issue && i.issue.photoLinks) || [];
+            return Array.isArray(links) ? links.join("|") : ""; } }
     ];
+
+    // Inline thumbnail geometry (mm). Same constants drive the end-of-section
+    // gallery so the two surfaces stay visually consistent.
+    var INLINE_THUMB = { w: 18, h: 14, gap: 1.5, pad: 1, perRowCap: 4 };
 
     var SEV_COLOR = {
         "CRITICAL": [220, 38, 38],
@@ -222,7 +234,7 @@
             + '</div>'
             + '<div>'
             + '  <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">Photos</h4>'
-            + '  <label class="flex items-center gap-2 mb-1"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (embedded inline under each section)</span></label>'
+            + '  <label class="flex items-center gap-2 mb-1"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (inline in each row + gallery at the end of each section)</span></label>'
             + '  <p class="text-[10px] text-slate-500 mt-1 ml-6">Photos are fetched server-side and may add a few seconds + a few MB to the file.</p>'
             + '</div>'
             + '<div id="reportProgress" class="hidden">'
@@ -278,6 +290,12 @@
         // Map current wizard toggles back to the corresponding catalog
         // entries (since cols may be a subset of the catalog).
         var activeKeys = _state.cols.filter(function (c) { return c.on || c.always; }).map(function (c) { return c.key; });
+        // The photos checkbox is the master switch — when it's off, drop
+        // the photos column from the table too (otherwise we'd render
+        // empty cells where the thumbs would have been).
+        if (!_state.photos.enabled) {
+            activeKeys = activeKeys.filter(function (k) { return k !== "photos"; });
+        }
         var activeCols = COLUMN_CATALOG.filter(function (c) { return activeKeys.indexOf(c.key) >= 0; });
         if (activeCols.length === 0) { alert("Pick at least one column."); return; }
 
@@ -396,6 +414,23 @@
             });
         });
 
+        // Pin a fixed width + minimum height on the photos column so the
+        // inline thumbnails have room. Other columns stay auto-sized.
+        var photoColW = INLINE_THUMB.perRowCap * INLINE_THUMB.w
+                      + (INLINE_THUMB.perRowCap - 1) * INLINE_THUMB.gap
+                      + 2 * INLINE_THUMB.pad;
+        var columnStyles = {};
+        activeCols.forEach(function (c, idx) {
+            if (c.key === "photos") {
+                columnStyles[idx] = {
+                    cellWidth: photoColW,
+                    minCellHeight: INLINE_THUMB.h + 2 * INLINE_THUMB.pad,
+                    halign: "left",
+                    valign: "top"
+                };
+            }
+        });
+
         doc.autoTable({
             head: head, body: body,
             startY: 22,
@@ -404,6 +439,7 @@
             styles: { fontSize: 8, cellPadding: 1.5, overflow: "linebreak", valign: "top" },
             headStyles: { fillColor: [30, 41, 59], textColor: [252, 211, 77], fontStyle: "bold", fontSize: 8 },
             alternateRowStyles: { fillColor: [248, 250, 252] },
+            columnStyles: columnStyles,
             didParseCell: function (data) {
                 if (data.section !== "body") return;
                 var col = activeCols[data.column.index];
@@ -417,6 +453,51 @@
                     data.cell.styles.textColor = [220, 38, 38];
                     data.cell.styles.fontStyle = "bold";
                 }
+                if (col.key === "photos") {
+                    // Suppress text; thumbs are drawn in didDrawCell. Grow
+                    // the row to fit the thumbnail grid.
+                    var links = String(data.cell.raw || "").split("|").filter(Boolean);
+                    data.cell.text = [""];
+                    data.cell._photoLinks = links;
+                    if (links.length) {
+                        var perRow = INLINE_THUMB.perRowCap;
+                        var rows = Math.ceil(links.length / perRow);
+                        var needed = rows * INLINE_THUMB.h
+                                   + (rows - 1) * INLINE_THUMB.gap
+                                   + 2 * INLINE_THUMB.pad;
+                        if (needed > (data.cell.styles.minCellHeight || 0)) {
+                            data.cell.styles.minCellHeight = needed;
+                        }
+                    }
+                }
+            },
+            didDrawCell: function (data) {
+                if (data.section !== "body") return;
+                var col = activeCols[data.column.index];
+                if (!col || col.key !== "photos") return;
+                if (!_state.photos.enabled) return;
+                var links = data.cell._photoLinks ||
+                    String(data.cell.raw || "").split("|").filter(Boolean);
+                if (!links.length) return;
+                var cellX = data.cell.x, cellY = data.cell.y;
+                var cellW = data.cell.width;
+                var perRow = Math.max(1, Math.min(
+                    INLINE_THUMB.perRowCap,
+                    Math.floor((cellW - 2 * INLINE_THUMB.pad + INLINE_THUMB.gap) / (INLINE_THUMB.w + INLINE_THUMB.gap))
+                ));
+                links.forEach(function (link, idx) {
+                    var r = Math.floor(idx / perRow);
+                    var c = idx % perRow;
+                    var x = cellX + INLINE_THUMB.pad + c * (INLINE_THUMB.w + INLINE_THUMB.gap);
+                    var y = cellY + INLINE_THUMB.pad + r * (INLINE_THUMB.h + INLINE_THUMB.gap);
+                    var entry = photoCache[link];
+                    if (entry && entry.dataUrl) {
+                        try { doc.addImage(entry.dataUrl, "JPEG", x, y, INLINE_THUMB.w, INLINE_THUMB.h, undefined, "FAST"); }
+                        catch (e) { _drawMissing(doc, x, y, INLINE_THUMB.w, INLINE_THUMB.h); }
+                    } else {
+                        _drawMissing(doc, x, y, INLINE_THUMB.w, INLINE_THUMB.h);
+                    }
+                });
             },
             didDrawPage: function () { /* footer drawn later */ }
         });

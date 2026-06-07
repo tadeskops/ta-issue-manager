@@ -216,9 +216,10 @@
                 ],
                 // Viewer mode: minimal, form-entry-driven columns only.
                 // Ticket id + title (description) + form fields (tower /
-                // unit, resident, category, severity, submitted) + status.
-                columnKeys:       ['ticketId', 'description', 'tower', 'resident', 'category', 'severity', 'dateReported', 'status'],
-                columnDefaultsOn: ['ticketId', 'description', 'tower', 'category', 'status']
+                // unit, resident, category, severity, submitted) + status
+                // + inline photos.
+                columnKeys:       ['ticketId', 'description', 'tower', 'resident', 'category', 'severity', 'dateReported', 'status', 'photos'],
+                columnDefaultsOn: ['ticketId', 'description', 'tower', 'category', 'status', 'photos']
             });
         }
 
