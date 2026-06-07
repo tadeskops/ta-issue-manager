@@ -30,6 +30,15 @@
 //                                ids without going through the form.
 //                                Surgical — never touches non-duplicated
 //                                rows.
+//   normalizeLegacyTicketIds()-> scan all four issue sheets, find every
+//                                TICKET_ID that does NOT match
+//                                /^TKT-\d{5}$/ (e.g. legacy "TA-0001"
+//                                pasted from an assessment dump), and
+//                                assign each a fresh TKT-NNNNN via
+//                                generateTicketID. Singletons included
+//                                — dedupe only handles same-id collisions,
+//                                this handles bad-shape ids regardless
+//                                of duplication.
 //
 // Drive folder names (per-ticket photo folders) are NOT renamed by
 // renumberAllTicketIds — the new id may not match the legacy folder
@@ -303,5 +312,59 @@ function dedupeTicketIds() {
     } catch (error) {
         Logger.log("[dedupe] FAILED: " + error.toString());
         return { success: false, data: null, error: "Dedupe failed: " + error.toString() };
+    }
+}
+
+// Normalize every TICKET_ID across the four issue sheets to the
+// canonical TKT-NNNNN shape. Any id that does NOT match /^TKT-\d{5}$/
+// (e.g. legacy "TA-0001", "TA-13", "AUDIT-7", or even an empty cell on
+// a row that has data in the other columns) gets a fresh TKT-NNNNN via
+// generateTicketID — which honours the hardened max-scan + counter so
+// the new ids never collide with surviving canonical ids.
+//
+// Unlike dedupeTicketIds(), this catches singleton bad-shape ids too
+// (e.g. one-off "TA-0001" pasted from an assessment dump). Use this
+// after any direct-to-sheet paste of legacy assessment / audit data.
+//
+// Returns: { success, data:{ renamed:[{sheet,row,oldId,newId}], scanned, skipped }, error }.
+function normalizeLegacyTicketIds() {
+    try {
+        try { backupSheetToGit(); }
+        catch (e) { Logger.log("[normalize] backup failed (continuing): " + e); }
+
+        const ss = getSpreadsheet();
+        const canonical = /^TKT-\d{5}$/;
+        const renamed = [];
+        let scanned = 0;
+        let skipped = 0;
+
+        RECOVERY_TICKET_SHEETS.forEach(function (cfg) {
+            const sheet = ss.getSheetByName(cfg.name);
+            if (!sheet) { Logger.log("[normalize] sheet not found, skip: " + cfg.name); return; }
+            const last = sheet.getLastRow();
+            if (last < 2) return;
+            const data = sheet.getRange(2, 1, last - 1, 1).getValues();
+            for (let i = 0; i < data.length; i++) {
+                const oldId = String(data[i][0] || "").trim();
+                if (!oldId) continue; // truly blank row — skip
+                scanned++;
+                if (canonical.test(oldId)) { skipped++; continue; }
+                const newId = generateTicketID();
+                sheet.getRange(i + 2, 1).setValue(newId);
+                renamed.push({ sheet: cfg.name, row: i + 2, oldId: oldId, newId: newId });
+                Logger.log("[normalize] " + cfg.name + " r" + (i + 2) +
+                           " " + oldId + " -> " + newId);
+            }
+        });
+
+        Logger.log("[normalize] DONE — scanned=" + scanned + " renamed=" + renamed.length + " skipped=" + skipped);
+        return {
+            success: true,
+            data: { renamed: renamed, scanned: scanned, skipped: skipped },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("[normalize] FAILED: " + error.toString());
+        return { success: false, data: null, error: "Normalize failed: " + error.toString() };
     }
 }

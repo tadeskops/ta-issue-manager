@@ -279,6 +279,15 @@ backup to GitHub before any write:
   `TKT-NNNNN` id (via `generateTicketID()`) to every other occurrence.
   Non-duplicated rows are never touched, so existing photo folders and
   external references survive intact.
+- `normalizeLegacyTicketIds()` (`src/Recovery.gs`) — companion to
+  `dedupeTicketIds()` for the "external paste introduced bad-shape ids"
+  scenario, **including singletons** (e.g. one-off `TA-0001` audit row
+  pasted from an assessment dump). Scans all four issue sheets and
+  reissues a fresh `TKT-NNNNN` id (via `generateTicketID()`) for every
+  row whose id does not match `^TKT-\d{5}$`. Use after any direct
+  paste of legacy / audit data into the sheets — `dedupeTicketIds`
+  alone will not catch a unique `TA-0001` because there's nothing to
+  deduplicate against.
 
 ---
 
