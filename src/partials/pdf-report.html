@@ -49,16 +49,18 @@
         <div class="px-5 py-3 border-t border-slate-700 flex flex-wrap items-center gap-2 sticky bottom-0 bg-slate-900">
             <!-- Inline progress lives in the footer beside the action
                  buttons so the user sees the rotating disk + status text
-                 right next to the (disabled) Preview/Download controls. -->
-            <div id="reportProgress" class="hidden flex-1 min-w-[180px] flex items-center gap-2">
+                 right next to the (disabled) Preview/Download controls.
+                 Wrapped in its own dark slate pill so the amber text is
+                 readable regardless of the surrounding footer surface. -->
+            <div id="reportProgress" class="hidden flex-1 min-w-[180px] flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-amber-500/50 shadow-sm">
                 <div class="relative flex-shrink-0">
-                    <div class="w-6 h-6 rounded-full border-[3px] border-amber-500/20 border-t-amber-300 animate-spin"></div>
+                    <div class="w-6 h-6 rounded-full border-[3px] border-amber-500/30 border-t-amber-300 animate-spin"></div>
                     <i class="fas fa-file-pdf absolute inset-0 m-auto text-amber-300 text-[10px]"></i>
                 </div>
                 <div class="flex-1 min-w-0">
-                    <div id="reportProgressText" class="text-amber-200 text-[11px] font-semibold truncate">Working…</div>
-                    <div class="mt-1 h-1 rounded bg-slate-800 overflow-hidden">
-                        <div id="reportProgressBar" class="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-200" style="width:0%"></div>
+                    <div id="reportProgressText" class="text-amber-100 text-[11px] font-semibold truncate">Working…</div>
+                    <div class="mt-1 h-1.5 rounded bg-slate-700 overflow-hidden">
+                        <div id="reportProgressBar" class="h-full bg-gradient-to-r from-amber-300 to-orange-400 transition-all duration-200" style="width:0%"></div>
                     </div>
                 </div>
             </div>
