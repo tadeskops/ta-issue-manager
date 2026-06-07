@@ -51,3 +51,4 @@ ref/
 *.swo
 *.bak
 *~diag.json
+COMMIT_MSG.tmp
