@@ -140,7 +140,8 @@ const SHIM = `
                     WEEKLY_REPORT_PUBLIC_URL: 'https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf',
                     FULL_REPORT_PUBLIC_URL: 'https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf'
                 },
-                logoUrl: ''
+                logoUrl: '',
+                attachmentFolderUrl: 'https://drive.google.com/drive/folders/preview-folder-id'
             },
             error: null
         }),

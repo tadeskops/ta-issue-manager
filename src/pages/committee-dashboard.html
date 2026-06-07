@@ -1135,14 +1135,37 @@
 
                     <!-- Photos -->
                     <div class="border-t border-slate-700 pt-4">
-                        <p class="text-xs text-slate-400 mb-3">PHOTOS</p>
                         ${issue.issue.photoLinks && issue.issue.photoLinks.length > 0 ? `
-                            <div class="grid grid-cols-2 gap-3">
-                                ${issue.issue.photoLinks.map((link, idx) => `
-                                    <img src="${link}" alt="Photo ${idx + 1}" class="w-full h-32 object-cover rounded" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22%3E%3Crect fill=%22%23374151%22 width=%22400%22 height=%22300%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 font-size=%2220%22 fill=%22%239CA3AF%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22%3EPhoto unavailable%3C/text%3E%3C/svg%3E'">
-                                `).join('')}
+                            <div class="flex justify-between items-center mb-3">
+                                <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">
+                                    <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.issue.photoLinks.length})
+                                </p>
+                                ${(((window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl) || '') ? `
+                                    <a href="${(window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl}"
+                                       target="_blank" rel="noopener noreferrer"
+                                       class="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
+                                        <i class="fab fa-google-drive"></i> Open Drive folder
+                                    </a>` : ''}
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                ${issue.issue.photoLinks.map((link, idx) => {
+                                    const fileId = extractDriveFileId(link);
+                                    const thumb = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w800` : link;
+                                    const viewer = fileId ? `https://drive.google.com/file/d/${fileId}/view` : link;
+                                    return `
+                                        <a href="${viewer}" target="_blank" rel="noopener noreferrer"
+                                           class="group relative block rounded-lg overflow-hidden border border-slate-600/40 hover:border-amber-400/60 bg-slate-800/40 transition-all aspect-square">
+                                            <img src="${thumb}" alt="Photo ${idx + 1}" loading="lazy"
+                                                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                 onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs p-2 text-center\\'><i class=\\'fas fa-file-image text-2xl mb-2\\'></i>Preview unavailable<span class=\\'text-amber-400 mt-1\\'>Click to open</span></div>'">
+                                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-2">
+                                                <span class="text-white text-xs font-semibold"><i class="fas fa-external-link-alt mr-1"></i>View Full Size</span>
+                                            </div>
+                                        </a>`;
+                                }).join('')}
                             </div>
                         ` : `
+                            <p class="text-xs text-slate-400 mb-3">PHOTOS</p>
                             <div class="rounded-lg border border-dashed border-slate-600 bg-slate-800/40 p-5 text-center">
                                 <p class="text-xs text-slate-500 italic mb-3">No photos attached</p>
                                 ${tab !== 'closed' && (((window.IRP_CLIENT_CONFIG || {}).features || {}).FEATURE_COMMITTEE_PHOTO_ATTACH === true) ? `
@@ -1170,6 +1193,14 @@
             if (tab === 'active')  return 'LIVE_ISSUES';
             if (tab === 'closed')  return 'CLOSED_ISSUES';
             return 'PENDING_REVIEW';
+        }
+
+        function extractDriveFileId(url) {
+            if (!url) return null;
+            const m = String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+                      String(url).match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+                      String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);
+            return m ? m[1] : null;
         }
 
         // Resize an image file in the browser to keep payload small (mirrors

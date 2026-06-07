@@ -487,11 +487,12 @@
                                         <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">
                                             <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.attachments.length})
                                         </p>
-                                        <a href="https:\u002f\u002fdrive.google.com\u002fdrive\u002ffolders\u002f1oJDZT_bokWitmmgDlfulTBsjKlGdcGcPaqjJ92OEMgxQnwftLnZHWiq2NOLl7zIEq3lW53FZ?usp=sharing"
+                                        ${(((window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl) || '') ? `
+                                        <a href="${(window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl}"
                                            target="_blank" rel="noopener noreferrer"
                                            class="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
                                             <i class="fab fa-google-drive"></i> Open Drive folder
-                                        </a>
+                                        </a>` : ''}
                                     </div>
                                     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                         ${issue.attachments.map(att => {

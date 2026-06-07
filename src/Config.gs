@@ -175,7 +175,10 @@ function getClientConfig() {
             data: {
                 features: features,
                 tunables: tunables,
-                logoUrl:  cfg.logoUrl || ""
+                logoUrl:  cfg.logoUrl || "",
+                attachmentFolderUrl: cfg.attachmentFolderId
+                    ? "https://drive.google.com/drive/folders/" + cfg.attachmentFolderId
+                    : ""
             },
             error: null
         };
