@@ -329,6 +329,11 @@
         _state.running = true;
         _setBusy(true);
         _progress("Building tables…", 5);
+        // When a success path schedules its own delayed reset (so the
+        // "Downloaded…" / "Preview opened…" status stays visible) it
+        // sets this flag so the finally-block doesn't immediately wipe
+        // the progress strip.
+        var deferredReset = false;
 
         try {
             // Landscape if many columns or any wide ones; A4 either way.
@@ -376,6 +381,9 @@
             _progress("Done — opening file", 100);
             if (action === "download") {
                 doc.save(fileName);
+                _progress("Downloaded — closing…", 100);
+                deferredReset = true;
+                setTimeout(function () { close(); }, 1200);
             } else {
                 // Preview: open blob in a new tab. window.open from inside
                 // the HtmlService iframe is reliable when triggered by a
@@ -386,14 +394,26 @@
                 if (!w) {
                     // popup blocked — fall back to download.
                     doc.save(fileName);
+                    _progress("Popup blocked — downloaded instead", 100);
+                    deferredReset = true;
+                    setTimeout(function () { close(); }, 1500);
+                } else {
+                    _progress("Preview opened in new tab", 100);
+                    deferredReset = true;
+                    setTimeout(function () {
+                        _state.running = false;
+                        _setBusy(false);
+                    }, 1500);
                 }
             }
         } catch (err) {
             console.error("Report failed:", err);
             alert("Report failed: " + (err && err.message ? err.message : err));
         } finally {
-            _state.running = false;
-            _setBusy(false);
+            if (!deferredReset) {
+                _state.running = false;
+                _setBusy(false);
+            }
         }
     }
 
