@@ -270,6 +270,15 @@ backup to GitHub before any write:
   promoted tickets are not duplicated). Drops the cached
   `TICKET_COUNTER` so new pending ids are minted from the surviving
   live/closed max via `generateTicketID()`.
+- `dedupeTicketIds()` (`src/Recovery.gs`) — surgical fix for the
+  "external paste introduced duplicate ids" scenario (e.g. an assessment
+  CSV import seeded three rows with the same legacy `TA-0001`). Scans
+  all four issue sheets, keeps the row with the earliest
+  `DATE_REPORTED` for each id (tiebreak: sheet order in
+  `RECOVERY_TICKET_SHEETS`, then row index), and assigns a fresh
+  `TKT-NNNNN` id (via `generateTicketID()`) to every other occurrence.
+  Non-duplicated rows are never touched, so existing photo folders and
+  external references survive intact.
 
 ---
 

@@ -21,6 +21,15 @@
 //                                rows that already exist in LIVE_ISSUES
 //                                or CLOSED_ISSUES. The fallback when
 //                                pending data was lost / corrupted.
+//   dedupeTicketIds()         -> scan all four issue sheets, keep the
+//                                FIRST occurrence of each TICKET_ID
+//                                (earliest date-reported), and assign
+//                                fresh TKT-NNNNN ids (via generateTicketID)
+//                                to the rest. Used when an external
+//                                paste / import introduced duplicate
+//                                ids without going through the form.
+//                                Surgical — never touches non-duplicated
+//                                rows.
 //
 // Drive folder names (per-ticket photo folders) are NOT renamed by
 // renumberAllTicketIds — the new id may not match the legacy folder
@@ -205,5 +214,94 @@ function recoverPendingFromForm() {
     } catch (error) {
         Logger.log("[recover] FAILED: " + error.toString());
         return { success: false, data: null, error: "Recovery failed: " + error.toString() };
+    }
+}
+
+// Surgical de-duplication: scan PENDING_REVIEW + LIVE_ISSUES +
+// CLOSED_ISSUES + ARCHIVES_ISSUES, find any TICKET_ID that appears more
+// than once globally, keep the row with the earliest DATE_REPORTED
+// (tiebreak: lower sheet index in RECOVERY_TICKET_SHEETS, then lower
+// row index), and assign a fresh TKT-NNNNN id (via generateTicketID,
+// which honours the hardened max-scan + counter) to every other
+// occurrence. Non-duplicated rows are never touched.
+//
+// Use this when an external paste / CSV import seeded multiple rows
+// with the same legacy id (e.g. three "TA-0001" rows from an
+// assessment import) without going through the form's id generator.
+//
+// Returns: { success, data: { renamed:[{sheet,row,oldId,newId}], scanned, error }, error }.
+function dedupeTicketIds() {
+    try {
+        try { backupSheetToGit(); }
+        catch (e) { Logger.log("[dedupe] backup failed (continuing): " + e); }
+
+        const ss = getSpreadsheet();
+        const all = []; // { sheetName, sheetIdx, rowIndex, oldId, dateMs }
+
+        RECOVERY_TICKET_SHEETS.forEach(function (cfg, sheetIdx) {
+            const sheet = ss.getSheetByName(cfg.name);
+            if (!sheet) { Logger.log("[dedupe] sheet not found, skip: " + cfg.name); return; }
+            const last = sheet.getLastRow();
+            if (last < 2) return;
+            const width = Math.max(cfg.idCol, cfg.dateCol) + 1;
+            const data = sheet.getRange(2, 1, last - 1, width).getValues();
+            for (let i = 0; i < data.length; i++) {
+                const r = data[i];
+                const oldId = String(r[cfg.idCol] || "").trim();
+                if (!oldId) continue;
+                const dt = r[cfg.dateCol];
+                const ms = dt instanceof Date
+                    ? dt.getTime()
+                    : (dt ? new Date(dt).getTime() : 0);
+                all.push({
+                    sheetName: cfg.name,
+                    sheetIdx:  sheetIdx,
+                    rowIndex:  i + 2, // header + 1-based
+                    oldId:     oldId,
+                    dateMs:    isNaN(ms) ? 0 : ms
+                });
+            }
+        });
+
+        // Bucket by id.
+        const buckets = {};
+        all.forEach(function (e) {
+            if (!buckets[e.oldId]) buckets[e.oldId] = [];
+            buckets[e.oldId].push(e);
+        });
+
+        const renamed = [];
+        Object.keys(buckets).forEach(function (id) {
+            const rows = buckets[id];
+            if (rows.length < 2) return; // not a duplicate
+            // Pick the keeper: earliest date, tiebreak by sheet index,
+            // then by row index. Stable + deterministic.
+            rows.sort(function (a, b) {
+                if (a.dateMs !== b.dateMs) return a.dateMs - b.dateMs;
+                if (a.sheetIdx !== b.sheetIdx) return a.sheetIdx - b.sheetIdx;
+                return a.rowIndex - b.rowIndex;
+            });
+            const keepers = rows.slice(0, 1);
+            const losers  = rows.slice(1);
+            losers.forEach(function (e) {
+                const sheet = ss.getSheetByName(e.sheetName);
+                if (!sheet) return;
+                const newId = generateTicketID();
+                sheet.getRange(e.rowIndex, 1).setValue(newId);
+                renamed.push({ sheet: e.sheetName, row: e.rowIndex, oldId: e.oldId, newId: newId });
+                Logger.log("[dedupe] " + e.sheetName + " r" + e.rowIndex +
+                           " " + e.oldId + " -> " + newId);
+            });
+        });
+
+        Logger.log("[dedupe] DONE — scanned=" + all.length + " renamed=" + renamed.length);
+        return {
+            success: true,
+            data: { renamed: renamed, scanned: all.length },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("[dedupe] FAILED: " + error.toString());
+        return { success: false, data: null, error: "Dedupe failed: " + error.toString() };
     }
 }
