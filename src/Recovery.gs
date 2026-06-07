@@ -368,3 +368,137 @@ function normalizeLegacyTicketIds() {
         return { success: false, data: null, error: "Normalize failed: " + error.toString() };
     }
 }
+
+// One-shot diagnostic for the "new form submission did not create a
+// ticket" / "TA-0001 rows keep showing up" situation. Read-only — does
+// NOT change anything in the sheet. Run from the Apps Script editor and
+// View → Logs.
+//
+// Reports:
+//   - trigger state: is onFormSubmit wired up to the bound spreadsheet?
+//   - row counts: Form Responses 1 vs PENDING_REVIEW.
+//   - last 5 rows of each (timestamp + resident + flat + ticketId) so
+//     the operator can see whether their most recent submission landed.
+//   - non-canonical ticket ids still in PENDING_REVIEW (any id that
+//     does not match /^TKT-\d{5}$/) — these are pasted/imported, not
+//     intake-generated, and need normalizeLegacyTicketIds.
+//   - a one-line diagnosis: "ALL OK", "TRIGGER MISSING — run
+//     installFormSubmitTrigger", "LEGACY ROWS — run
+//     normalizeLegacyTicketIds", or both.
+function diagSubmissionPipeline() {
+    try {
+        const ss = getSpreadsheet();
+        const ssId = ss.getId();
+
+        // --- 1. Trigger state ---
+        const triggers = ScriptApp.getProjectTriggers();
+        const formTriggers = triggers.filter(function (t) {
+            return t.getHandlerFunction() === "onFormSubmit";
+        });
+        const triggerOk = formTriggers.some(function (t) {
+            try {
+                return String(t.getEventType()) === "ON_FORM_SUBMIT" &&
+                       t.getTriggerSourceId() === ssId;
+            } catch (e) { return false; }
+        });
+
+        Logger.log("[diag] === SUBMISSION PIPELINE DIAGNOSTIC ===");
+        Logger.log("[diag] spreadsheet id: " + ssId);
+        Logger.log("[diag] total project triggers: " + triggers.length);
+        Logger.log("[diag] onFormSubmit triggers: " + formTriggers.length +
+                   " (matching this spreadsheet: " + (triggerOk ? "YES" : "NO") + ")");
+
+        // --- 2. Form Responses 1 vs PENDING_REVIEW ---
+        const formSheet = ss.getSheetByName(SHEETS.FORM_RESPONSES);
+        const pendingSheet = ss.getSheetByName(SHEETS.PENDING_REVIEW);
+        const formCount = formSheet ? Math.max(formSheet.getLastRow() - 1, 0) : -1;
+        const pendingCount = pendingSheet ? Math.max(pendingSheet.getLastRow() - 1, 0) : -1;
+        Logger.log("[diag] Form Responses 1 data rows: " + formCount);
+        Logger.log("[diag] PENDING_REVIEW data rows:    " + pendingCount);
+
+        function tail(sheet, n, idColIdx, dateColIdx, residentColIdx, flatColIdx) {
+            if (!sheet) return [];
+            const last = sheet.getLastRow();
+            if (last < 2) return [];
+            const start = Math.max(2, last - n + 1);
+            const data = sheet.getRange(start, 1, last - start + 1, sheet.getLastColumn()).getValues();
+            return data.map(function (r, i) {
+                const d = r[dateColIdx];
+                const ts = d instanceof Date ? d.toISOString() : String(d || "");
+                return {
+                    row:      start + i,
+                    ticketId: idColIdx != null ? String(r[idColIdx] || "") : "(form-no-id)",
+                    date:     ts,
+                    resident: String(r[residentColIdx] || ""),
+                    flat:     String(r[flatColIdx] || "")
+                };
+            });
+        }
+
+        const formTail = tail(formSheet, 5, null,
+            FORM_COL.TIMESTAMP, FORM_COL.RESIDENT, FORM_COL.FLAT);
+        const pendingTail = tail(pendingSheet, 5,
+            PENDING_COL.TICKET_ID, PENDING_COL.DATE_REPORTED,
+            PENDING_COL.RESIDENT, PENDING_COL.FLAT);
+
+        Logger.log("[diag] Last 5 Form Responses 1 rows:");
+        formTail.forEach(function (r) {
+            Logger.log("[diag]   r" + r.row + " ts=" + r.date +
+                       " resident=" + r.resident + " flat=" + r.flat);
+        });
+        Logger.log("[diag] Last 5 PENDING_REVIEW rows:");
+        pendingTail.forEach(function (r) {
+            Logger.log("[diag]   r" + r.row + " id=" + r.ticketId +
+                       " ts=" + r.date + " resident=" + r.resident + " flat=" + r.flat);
+        });
+
+        // --- 3. Non-canonical ids still in PENDING_REVIEW + LIVE_ISSUES ---
+        const canonical = /^TKT-\d{5}$/;
+        const legacy = [];
+        ["PENDING_REVIEW", "LIVE_ISSUES", "CLOSED_ISSUES", "ARCHIVES_ISSUES"].forEach(function (name) {
+            const sh = ss.getSheetByName(name);
+            if (!sh) return;
+            const last = sh.getLastRow();
+            if (last < 2) return;
+            const ids = sh.getRange(2, 1, last - 1, 1).getValues();
+            for (let i = 0; i < ids.length; i++) {
+                const id = String(ids[i][0] || "").trim();
+                if (id && !canonical.test(id)) {
+                    legacy.push({ sheet: name, row: i + 2, id: id });
+                }
+            }
+        });
+        Logger.log("[diag] non-canonical ticket ids found: " + legacy.length);
+        legacy.slice(0, 20).forEach(function (e) {
+            Logger.log("[diag]   " + e.sheet + " r" + e.row + " id=" + e.id);
+        });
+        if (legacy.length > 20) Logger.log("[diag]   ... and " + (legacy.length - 20) + " more");
+
+        // --- 4. Diagnosis ---
+        const issues = [];
+        if (!triggerOk) issues.push("TRIGGER MISSING — run installFormSubmitTrigger()");
+        if (legacy.length) issues.push("LEGACY IDS — run normalizeLegacyTicketIds() to reissue " + legacy.length + " row(s)");
+        const diagnosis = issues.length ? issues.join(" | ") : "ALL OK";
+        Logger.log("[diag] DIAGNOSIS: " + diagnosis);
+        Logger.log("[diag] === END ===");
+
+        return {
+            success: true,
+            data: {
+                spreadsheetId: ssId,
+                triggerOk:     triggerOk,
+                triggerCount:  formTriggers.length,
+                formRows:      formCount,
+                pendingRows:   pendingCount,
+                formTail:      formTail,
+                pendingTail:   pendingTail,
+                legacyIds:     legacy,
+                diagnosis:     diagnosis
+            },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("[diag] FAILED: " + error.toString());
+        return { success: false, data: null, error: error.toString() };
+    }
+}
