@@ -242,6 +242,26 @@ infer counts from `getDashboardMetrics` alone.
   is a deprecated shim retained for any legacy clients — it ignores
   `newTicketId` and delegates to `approveIssue`.
 
+### 9.1 Recovery functions
+
+When the spreadsheet drifts (duplicate ids, missing pending rows, etc.)
+operators run these from the Apps Script editor — both take a full XLSX
+backup to GitHub before any write:
+
+- `renumberAllTicketIds()` (`src/Recovery.gs`) — rewrites `TICKET_ID`
+  across `PENDING_REVIEW` + `LIVE_ISSUES` + `CLOSED_ISSUES` +
+  `ARCHIVES_ISSUES` as a single monotonic `TKT-NNNNN` series sorted by
+  `DATE_REPORTED` ascending. Resets `TICKET_COUNTER` to the new max.
+  Drive folder names are **not** renamed; existing photos still resolve
+  because they reference the folder by Drive id, not name.
+- `recoverPendingFromForm()` (`src/Recovery.gs`) — wipes
+  `PENDING_REVIEW` data rows and re-imports every row from
+  `Form Responses 1` whose `{timestamp,resident,flat}` signature is not
+  already present in `LIVE_ISSUES` or `CLOSED_ISSUES` (so already-
+  promoted tickets are not duplicated). Drops the cached
+  `TICKET_COUNTER` so new pending ids are minted from the surviving
+  live/closed max via `generateTicketID()`.
+
 ---
 
 ## 10. SLA Rules
