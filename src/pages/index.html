@@ -50,9 +50,17 @@
         <button id="submitBtn" onclick="goSubmit()" class="hidden"></button>
 
         <!-- View Submitted Issues Button (Primary Action) -->
-        <button onclick="goSubmitted()" class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold py-4 rounded-lg transition-all border border-blue-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider mb-6">
-            <i class="fas fa-eye mr-2"></i>View Submitted Issues (Read Only)
-        </button>
+        <div class="flex items-stretch gap-2 mb-6">
+            <button onclick="goSubmitted()" class="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold py-4 rounded-lg transition-all border border-blue-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider">
+                <i class="fas fa-eye mr-2"></i>View Submitted Issues (Read Only)
+            </button>
+            <a id="weeklyReportBtn" href="#" target="_blank" rel="noopener noreferrer"
+               class="hidden flex-shrink-0 inline-flex flex-col items-center justify-center w-14 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white rounded-lg transition-all border border-amber-400/30 shadow-lg hover:shadow-xl"
+               title="View weekly anonymised status report (PDF)" aria-label="View weekly status report">
+                <i class="fas fa-file-pdf text-base"></i>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Report</span>
+            </a>
+        </div>
 
         <!-- OR Divider -->
         <div class="flex items-center gap-4 my-6">
@@ -185,6 +193,18 @@
             try {
                 const cc = await API.getClientConfig();
                 window.IRP_CLIENT_CONFIG = cc || {};
+            } catch (e) { /* non-fatal */ }
+
+            // Weekly anonymised report link (gated by FEATURE_WEEKLY_REPORT_BACKUP
+            // AND a non-empty WEEKLY_REPORT_PUBLIC_URL — both must be set).
+            try {
+                const cc = window.IRP_CLIENT_CONFIG || {};
+                const flagOn = !!(cc.features && cc.features.FEATURE_WEEKLY_REPORT_BACKUP);
+                const url = (cc.tunables && cc.tunables.WEEKLY_REPORT_PUBLIC_URL) || '';
+                if (flagOn && url) {
+                    const a = document.getElementById('weeklyReportBtn');
+                    if (a) { a.href = url; a.classList.remove('hidden'); }
+                }
             } catch (e) { /* non-fatal */ }
 
             let u = { email: '', role: 'UNKNOWN' };

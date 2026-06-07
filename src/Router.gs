@@ -234,6 +234,7 @@ function api_call(action, payload) {
             case "submitIssue":              result = submitIssue(payload, email); break;
             case "addPhotosToIssue":         result = addPhotosToIssue(payload.ticketId, payload.sheet, payload.photos, email); break;
             case "getReportPhotoB64":        result = getReportPhotoB64(payload.fileId || payload.url || "", payload.maxW); break;
+            case "commitFullReportPdf":      result = commitFullReportPdf(payload.b64 || "", payload.source || ""); break;
             case "getCategoryMaster":        result = getCategoryMaster(); break;
             case "getClientConfig":          result = getClientConfig(); break;
             case "validateUserAccess":       result = { success: true, data: { email: email, role: role, hasAccess: true }, error: null }; break;
@@ -268,7 +269,7 @@ function isActionAllowed_(action, role) {
         "getLiveIssues", "updateBuilderStatus", "closeIssue", "reopenIssue",
         "getFormResponses", "getIssuesWithStatus", "getSubmittedIssues",
         "validateUserAccess", "getDashboardMetrics", "getClientConfig",
-        "getReportPhotoB64"
+        "getReportPhotoB64", "commitFullReportPdf"
     ];
     const RESIDENT_ALLOWED = [
         "submitIssue", "getCategoryMaster", "getIssuesWithStatus",

@@ -59,6 +59,7 @@ const DEFAULT_FEATURES = {
     FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,  // show severity badge/filter/sort on submitted-issues page
     FEATURE_COMMITTEE_PHOTO_ATTACH: false,  // committee "Upload Photo" button in detail view + addPhotosToIssue API. OFF by default — opt-in.
     FEATURE_PDF_REPORT:         false,  // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. OFF by default — opt-in.
+    FEATURE_WEEKLY_REPORT_BACKUP: false, // Weekly anonymised PDF committed to GitHub (TA_IAP_Report.pdf) + login-page "View Report" button. OFF by default — opt-in (operator must also set GITHUB_TOKEN, install trigger, and set WEEKLY_REPORT_PUBLIC_URL for the button to render).
     FEATURE_SLA:                false   // SLA KPIs, SLA Days column, BREACHED filter, and sla:{} sub-object on issue APIs. OFF by default — opt-in.
 };
 
@@ -77,7 +78,9 @@ const DEFAULT_TUNABLES = {
     DEFAULT_THEME:             "light",     // high (original dark) | light | medium
     TECH_WEBAPP_URL:           "",           // separate deployment URL that requires Google sign-in (committee/builder). Empty = same URL.
     PUBLIC_WEBAPP_URL:         "",           // public (anonymous) deployment URL — used as the landing page after sign-out. Empty = current URL.
-    SUBMITTED_INCLUDE_REJECTED: "false"      // read-only "Submitted Issues" view: include rejected (archived) rows. Default off → public sees only pending + live.
+    SUBMITTED_INCLUDE_REJECTED: "false",     // read-only "Submitted Issues" view: include rejected (archived) rows. Default off → public sees only pending + live.
+    WEEKLY_REPORT_PUBLIC_URL:  "",           // Raw URL to TA_IAP_Report.pdf (anonymised, pending+active only). When non-empty AND FEATURE_WEEKLY_REPORT_BACKUP is on, the login page shows a small "View Report" link beside the read-only button. Recommended: https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf
+    FULL_REPORT_PUBLIC_URL:    ""            // Raw URL to TA_IAP_Full_Report.pdf (full content incl. closed+rejected). When non-empty AND FEATURE_WEEKLY_REPORT_BACKUP is on, dashboard pages show a small "View Full Report" icon. Distribute the URL only to authorised personnel — the file contains resident names and flat numbers. Recommended: https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf
 };
 
 // ----- Internal constants -----

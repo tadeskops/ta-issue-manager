@@ -300,6 +300,38 @@
         if (b && typeof pct === "number") b.style.width = Math.max(0, Math.min(100, pct)) + "%";
     }
 
+    // Optional auto-commit hook. When FEATURE_WEEKLY_REPORT_BACKUP is on
+    // (and the API surface is available), ship the rendered PDF bytes to
+    // the server which overwrites the committed TA_IAP_Full_Report.pdf
+    // in the git backup. Public/anonymous visitors hit role=UNKNOWN so
+    // the call is rejected by the router; harmless. Fire-and-forget.
+    function _maybeCommitFullReport(doc) {
+        var cc = window.IRP_CLIENT_CONFIG || {};
+        var on = !!(cc.features && cc.features.FEATURE_WEEKLY_REPORT_BACKUP);
+        if (!on) return;
+        // Pages must explicitly opt in. Public read-only pages
+        // (submitted-issues.html, login) MUST NOT set this flag — the
+        // PDF they render only contains pending+active rows and would
+        // overwrite the full report with incomplete data.
+        if (!window.IRP_AUTO_COMMIT_FULL_REPORT) return;
+        if (!(window.API && typeof API.call === "function")) return;
+        var dataUrl = doc.output("datauristring");
+        // datauristring -> "data:application/pdf;filename=...;base64,XXXX"
+        var b64 = (dataUrl.split(",")[1] || "");
+        if (!b64) return;
+        var src = (function () {
+            try {
+                var p = (location.search.match(/[?&]page=([^&]+)/) || [])[1];
+                if (p) return decodeURIComponent(p);
+                var path = (location.pathname || "").split("/").pop().replace(/\.html$/, "");
+                return path || "unknown";
+            } catch (e) { return "unknown"; }
+        })();
+        API.call("commitFullReportPdf", { b64: b64, source: src })
+            .then(function (info) { console.log("commitFullReportPdf ok:", info); })
+            .catch(function (err) { console.warn("commitFullReportPdf failed (ignored):", err); });
+    }
+
     // ----- PDF generation --------------------------------------------------
 
     async function _generate(action) {
@@ -406,6 +438,13 @@
                     }, 1500);
                 }
             }
+
+            // Fire-and-forget: when FEATURE_WEEKLY_REPORT_BACKUP is on,
+            // ship the rendered PDF to the server so it overwrites the
+            // committed TA_IAP_Full_Report.pdf in the git backup. Failures
+            // are swallowed (logged only) — they must NOT disrupt the
+            // user's local download / preview.
+            try { _maybeCommitFullReport(doc); } catch (e) { console.warn("commitFullReport skipped:", e); }
         } catch (err) {
             console.error("Report failed:", err);
             alert("Report failed: " + (err && err.message ? err.message : err));

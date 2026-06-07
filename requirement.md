@@ -307,6 +307,8 @@ Resident Name · Flat Number · Category · Sub-Category · Tower · Exact Locat
 |---|---|---|
 | `onFormSubmit` | On form submit | Create ticket in `PENDING_REVIEW` |
 | `clearConfigCache` *(optional)* | Hourly | Pick up CONFIG edits without manual run |
+| `weeklyBackupJob` *(optional)* | Mondays ~02:00 IST | XLSX snapshot of the spreadsheet committed to `backups/ta-issue-manager.xlsx`. Installed by `installWeeklyBackupTrigger` once `GITHUB_TOKEN` is set. |
+| `weeklyReportJob` *(optional, gated by `FEATURE_WEEKLY_REPORT_BACKUP`)* | Mondays ~03:00 IST | Builds two PDF status reports server-side and commits both to GitHub: `backups/TA_IAP_Report.pdf` (anonymised — pending+active only, resident name and flat number redacted to `—`) and `backups/TA_IAP_Full_Report.pdf` (full content — pending+active+closed+rejected, no photos in the server fallback). Installed by `installWeeklyReportTrigger`. The full-report file is also overwritten on demand whenever a committee/builder clicks **Export Report** on a dashboard (the wizard streams the rendered PDF — including photos — back to the server via `commitFullReportPdf`); the weekly trigger is the fallback when nobody exported that week. See §19.14. |
 
 ---
 
@@ -487,6 +489,9 @@ of any client-supplied value. The submit form has no severity field.
 | `FEATURE_SHOW_SEVERITY_ON_SUBMITTED` | `"false"` | When `"true"`, severity column is visible on the submitted-issues page. |
 | `FEATURE_COMMITTEE_PHOTO_ATTACH` | `"false"` | When `"true"`, committee detail view shows an **Upload Photo** button on issues without photos and the `addPhotosToIssue` API accepts writes. Default OFF — opt-in via the CONFIG sheet. |
 | `FEATURE_PDF_REPORT` | `"false"` | When `"true"`, every list view (Committee / Builder / Submitted read-only) shows an **Export Report** button that opens a PDF wizard (sources, columns, embedded photos) and the `getReportPhotoB64` API accepts requests. Each view scopes its own column menu (Committee = full 17 incl. `photos`; Builder drops committee-only fields; Submitted read-only shows Ticket ID + Title + form-entry fields + Status + `photos` only) — the column catalog and per-view defaults live in `src/partials/pdf-report.html` and each page's `openExportReport()`. The first page opens with a compact title header (portal + title band + single meta line of generated/by/source-counts/filters) and the first section's list begins immediately below — no full cover page. Photos are embedded **only inline in the Photos column** (thumbnail grid sized by `INLINE_THUMB`); there is no separate end-of-section gallery. The wizard's "Include photos" master switch gates inline rendering and, when off, also drops the Photos column from the table. Default OFF — opt-in via the CONFIG sheet. |
+| `FEATURE_WEEKLY_REPORT_BACKUP` | `"false"` | When `"true"`, two PDF status reports are committed to GitHub (see §19.14): **(a)** `backups/TA_IAP_Report.pdf` — anonymised, pending+active only, resident name and flat number redacted to `—` (login page exposes this via a small **View Report** icon when `WEEKLY_REPORT_PUBLIC_URL` is also set); **(b)** `backups/TA_IAP_Full_Report.pdf` — full content including closed+rejected rows, names, flats, descriptions, and photos when pushed from the dashboard wizard (committee/builder/admin dashboards expose this via a small **View Full Report** icon when `FULL_REPORT_PUBLIC_URL` is also set). Both files are refreshed by the weekly trigger `weeklyReportJob` (Mondays ~03:00 IST, installed via `installWeeklyReportTrigger`); the full file is **also** overwritten whenever a committee or builder clicks **Export Report** on a dashboard (the wizard streams the rendered bytes back via `commitFullReportPdf`). Both files require the `GITHUB_TOKEN` script property and a configured `BACKUP_REPO`. Default OFF — opt-in via the CONFIG sheet. |
+| `WEEKLY_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Report.pdf` (the anonymised public copy) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf`. When empty, the **login-page** "View Report" icon stays hidden even if `FEATURE_WEEKLY_REPORT_BACKUP` is on. |
+| `FULL_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Full_Report.pdf` (the full report including names, flats, and closed/rejected rows) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf`. When empty, the small **View Full Report** icon on the committee/builder/admin dashboards stays hidden. **Privacy note:** distribute this URL only to authorised personnel — the file contains residents' names and flat numbers. |
 | `FEATURE_SLA` | `"false"` | When `"true"`, every list view (Committee / Builder / Admin) shows SLA breach KPI cards, the **SLA Days** column, the **SLA Breached** filter option, the **SLA Status / Due Date / Days Remaining** detail-modal block, and the PDF wizard exposes `slaDue` + `breached` columns. The `getLiveIssues` API still returns a `sla:{}` sub-object (with placeholder `dueDate:""`, `breached:false`, `daysRemaining:null` when off), and `getDashboardMetrics.slaBreaches` is forced to `0` when off so existing clients don't NPE. SLA due-date is still **computed and written** to `LIVE_ISSUES.SLA_DATE` at `approveIssue` time regardless of the flag, so flipping it on later "just works". The approve-modal severity labels also drop the `(SLA X day)` suffix and the helper note `SLA due date is computed…` when off. Default OFF — opt-in via the CONFIG sheet. |
 
 Defaults live in `DEFAULT_TUNABLES` (`src/Config.gs`); CONFIG sheet values
@@ -637,3 +642,78 @@ users — see §19.8). `uploadSubmissionPhotos_` forces
 and logging on policy block). For legacy / Form-uploaded files, run
 `makeAttachmentFolderPublic` once (§13.1) to retroactively open up the
 entire folder.
+
+### 19.14 Weekly PDF status report — dual-file model
+
+**Goal.** Operators want a static PDF snapshot of the issue queue
+checked into the GitHub mirror so it survives Sheet edits, accidental
+deletions, and Apps Script outages, and can be linked from the public
+login page (anonymised) or shared with authorised personnel (full
+content). The feature is gated by `FEATURE_WEEKLY_REPORT_BACKUP` (default
+**off**) and ships **two** files at the same `BACKUP_REPO`:
+
+| File path (in repo) | Default scope | Content | Surfaced where |
+|---|---|---|---|
+| `backups/TA_IAP_Report.pdf` | Pending + Active only | Per-issue table (Ticket / Date / Tower / Category / Severity / Status / Description). **Resident name and flat number are redacted to `—`.** No photos. | Login page small **View Report** icon (when `WEEKLY_REPORT_PUBLIC_URL` is also set). |
+| `backups/TA_IAP_Full_Report.pdf` | Pending + Active + Closed + Rejected | Per-issue table including resident name, full Tower / Flat, descriptions. Photos are embedded **only** when the file was pushed from the wizard (see below); the server fallback is text-only. | Committee / Builder / Admin dashboards small **View Full Report** icon (when `FULL_REPORT_PUBLIC_URL` is also set). |
+
+**Two write paths converge on the same files.**
+
+1. **Wizard auto-commit (full file only).** Whenever a committee or
+   builder clicks **Export Report** on a signed-in dashboard, the
+   existing client-side wizard renders the PDF as today (jsPDF +
+   `jspdf-autotable`, optional photos), then — fire-and-forget — base64-
+   encodes the bytes and calls `commitFullReportPdf(b64, source)` on the
+   server. The server validates the `%PDF` magic bytes, enforces a 30 MB
+   size cap, and upserts the file via the existing
+   `backup_putToGit_` helper. Failures never block the user's local
+   download / preview. Only the **three signed-in dashboard pages**
+   opt into this hook by setting `window.IRP_AUTO_COMMIT_FULL_REPORT =
+   true` after `getClientConfig` succeeds — the public
+   `submitted-issues.html` and login pages must NOT set the flag,
+   because their wizard renders only pending+active rows and would
+   overwrite the full report with incomplete data. As a defence in
+   depth, the router's `commitFullReportPdf` action is on the
+   `BUILDER_ALLOWED` allow-list (committees inherit it) — anonymous /
+   resident callers are rejected at the API gate even if the flag
+   leaks.
+
+2. **Weekly server fallback (both files).** A time-based trigger
+   `weeklyReportJob` runs Mondays ~03:00 IST (installed via
+   `installWeeklyReportTrigger`) and rebuilds **both** files using
+   `DocumentApp` server-side. The anonymised file always overwrites; the
+   full file overwrites too, so a quiet week (no manual export) still
+   refreshes the snapshot. `DocumentApp` cannot reliably embed Drive
+   photos at scale, so the server-built copy of `TA_IAP_Full_Report.pdf`
+   is text-only — the wizard-pushed copy (when available) is the
+   richer one.
+
+**Implementation pointers.** All logic lives in
+[`src/WeeklyReport.gs`](../src/WeeklyReport.gs):
+
+- `weeklyReport_props_()` reads `GITHUB_TOKEN` / `BACKUP_REPO` /
+  `BACKUP_BRANCH` from script properties (reusing
+  `backup_props_()` from `src/Backup.gs`) plus `WEEKLY_REPORT_DIR`
+  (default `backups`), `WEEKLY_REPORT_FILE` (default
+  `TA_IAP_Report.pdf`), `WEEKLY_FULL_REPORT_FILE` (default
+  `TA_IAP_Full_Report.pdf`).
+- `weeklyReport_renderPdfBlob_(rows, stats, variant)` — `variant ∈
+  { "ANONYMISED", "FULL" }`. Different per-issue table headers; no
+  photos in either server build.
+- `generateWeeklyReportPdf(reason)` and `generateFullReportPdf(reason)`
+  are also exposed as standalone runnable functions for one-off
+  rebuilds (operator runbook in `README.md`).
+- `commitFullReportPdf(b64, source)` accepts the wizard's bytes;
+  rejects anything where the first three decoded bytes don't match the
+  `%PDF` signature (37 80 68 70) or where the payload exceeds 30 MB.
+
+**Privacy stance.** The login-page link must remain safe to expose to
+any anonymous visitor of the issue tracker. Resident names and flat
+numbers are PII; descriptions, tower, category, status, and severity are
+considered acceptable in aggregate (and the operator can still leave
+`WEEKLY_REPORT_PUBLIC_URL` empty if the residents disagree — the file
+is then committed but not surfaced anywhere). The full report, by
+contrast, is gated on its own URL tunable AND distributed only via
+authorised channels — the operator should keep the GitHub repo private
+**or** treat the file as authenticated-only.
+

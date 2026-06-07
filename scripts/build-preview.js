@@ -113,6 +113,7 @@ const SHIM = `
                     FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,
                     FEATURE_COMMITTEE_PHOTO_ATTACH: true,
                     FEATURE_PDF_REPORT: true,
+                    FEATURE_WEEKLY_REPORT_BACKUP: true,
                     FEATURE_SLA: false
                 },
                 tunables: {
@@ -125,7 +126,9 @@ const SHIM = `
                     SUBMIT_DESC_MIN: 5,
                     SUBMIT_DESC_MAX: 1000,
                     CONFIG_CACHE_TTL_SECONDS: 300,
-                    DEFAULT_THEME: '${DEFAULT_THEME}'
+                    DEFAULT_THEME: '${DEFAULT_THEME}',
+                    WEEKLY_REPORT_PUBLIC_URL: 'https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf',
+                    FULL_REPORT_PUBLIC_URL: 'https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf'
                 },
                 logoUrl: ''
             },
@@ -210,6 +213,11 @@ const SHIM = `
                 for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
                 const b64 = swatches[Math.abs(h) % swatches.length];
                 return { success: true, data: { mimeType: 'image/png', b64: b64, sourceId: 'preview' }, error: null };
+            }
+            if (action === 'commitFullReportPdf') {
+                // Preview-only stub — pretend the server accepted the bytes.
+                const len = (payload.b64 || '').length;
+                return { success: true, data: { mock: true, source: payload.source || '', b64Len: len }, error: null };
             }
             if (action && action.indexOf('Issues') >= 0) return { success: true, data: [], error: null };
             return { success: true, data: null, error: null };

@@ -76,6 +76,7 @@ in `requirement.md`, and the touch-points in code.
 | **Reporting & ops** | PDF export wizard (committee / builder / submitted) | `FEATURE_PDF_REPORT` + `FEATURE_PHOTO_UPLOAD` (for inline photos) | `partials/pdf-report.html`, `getReportPhotoB64` |
 | | Setup runbook (folder, public-share, config) | — | `src/Config.gs` (see runbook below) |
 | | Recovery (renumber / re-import) | — | `src/Recovery.gs` (see runbook below) |
+| | Weekly PDF status report → GitHub (anonymised + full) | `FEATURE_WEEKLY_REPORT_BACKUP` + `WEEKLY_REPORT_PUBLIC_URL` + `FULL_REPORT_PUBLIC_URL` | `src/WeeklyReport.gs` (see runbook below) |
 | | Auth / role resolution | — | `Router.gs` (`doGet`, `api_call`, `isActionAllowed_`), `Config.gs.getUserRole` |
 
 ### Photo data flow (where it gets tricky)
@@ -169,6 +170,8 @@ running is always safe.
 | — | After editing a CONFIG row by hand | `clearConfigCache` | Forces the next API call to re-read the `CONFIG` sheet (otherwise the cached values stay for up to 5 minutes). |
 | — | **Recovery** — when ticket ids have drifted, duplicated, or the counter is desynced | `renumberAllTicketIds` (`src/Recovery.gs`) | Takes a full XLSX backup to GitHub, then rewrites `TICKET_ID` across `PENDING_REVIEW` + `LIVE_ISSUES` + `CLOSED_ISSUES` + `ARCHIVES_ISSUES` as a single monotonic `TKT-NNNNN` series sorted by `DATE_REPORTED`. Resets the `TICKET_COUNTER` ScriptProperty to the new max. Drive folder names are not renamed (existing photos still resolve by id). |
 | — | **Recovery** — when `PENDING_REVIEW` is corrupted / missing rows but `Form Responses 1` is intact | `recoverPendingFromForm` (`src/Recovery.gs`) | Takes a backup, wipes `PENDING_REVIEW` data rows, then re-imports every form row whose `{timestamp,resident,flat}` signature is **not** already in `LIVE_ISSUES` / `CLOSED_ISSUES`. Drops the cached `TICKET_COUNTER` so new pending ids are minted from the surviving live/closed max. |
+| — | **Weekly PDF status reports** — only when `FEATURE_WEEKLY_REPORT_BACKUP=true` | `installWeeklyReportTrigger` (`src/WeeklyReport.gs`) | Schedules `weeklyReportJob` (Mondays ~03:00 in script TZ, one hour after the sheet backup). Each run rebuilds **two** files server-side and commits both to the same `BACKUP_REPO` branch as the sheet backup (overwritten weekly): `backups/TA_IAP_Report.pdf` (anonymised, pending+active only — resident name and flat number redacted to `—`) and `backups/TA_IAP_Full_Report.pdf` (full content including closed+rejected, names, flats; **no photos** in the server fallback). The full file is **also** overwritten on demand whenever a committee/builder clicks **Export Report** on a signed-in dashboard — the wizard streams its rendered PDF (with photos) back via `commitFullReportPdf`. Reuses the same `GITHUB_TOKEN` script property as the sheet backup. See `requirement.md` §19.14. |
+| — | **Weekly report — manual one-shot** (test the build before scheduling, or push an off-cycle update) | `generateWeeklyReportPdf` *or* `generateFullReportPdf` (`src/WeeklyReport.gs`) | Same builds, ad-hoc — each function targets one of the two files. Both return `{success, data:{path, commit, url, totals}}` on success and abort with a clear error if `FEATURE_WEEKLY_REPORT_BACKUP` is off or `GITHUB_TOKEN` is unset. |
 
 ### One-time bootstrap order (fresh deployment)
 

@@ -83,6 +83,11 @@
                     aria-label="Export Report" title="Export Report">
                     <i class="fas fa-file-pdf sm:mr-2"></i><span class="hidden sm:inline">Export Report</span>
                 </button>
+                <a id="fullReportBtn" href="#" target="_blank" rel="noopener noreferrer"
+                    class="hidden inline-flex items-center px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-amber-300 hover:text-amber-200 transition-colors text-xs sm:text-sm border border-amber-500/30 shadow-lg whitespace-nowrap"
+                    aria-label="View Full Report (PDF)" title="View latest committed full report (PDF)">
+                    <i class="fas fa-file-pdf"></i>
+                </a>
                 <button onclick="logout()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white font-semibold transition-colors text-xs sm:text-sm border border-red-500/30 whitespace-nowrap" aria-label="Logout" title="Logout">
                     <i class="fas fa-sign-out-alt sm:mr-2"></i><span class="hidden sm:inline">Logout</span>
                 </button>
@@ -486,6 +491,22 @@
                 const btn = document.getElementById('exportReportBtn');
                 if (btn) btn.classList.remove('hidden');
             }
+            // Reveal View Full Report when the weekly-report-backup flag
+            // is on AND a public URL is configured. Also opt this page
+            // into the wizard's auto-commit hook (signed-in dashboards
+            // only — public pages MUST NOT set this flag).
+            try {
+                const _f = (window.IRP_CLIENT_CONFIG.features) || {};
+                const _t = (window.IRP_CLIENT_CONFIG.tunables) || {};
+                const _u = _t.FULL_REPORT_PUBLIC_URL || '';
+                if (_f.FEATURE_WEEKLY_REPORT_BACKUP === true) {
+                    window.IRP_AUTO_COMMIT_FULL_REPORT = true;
+                    if (_u) {
+                        const a = document.getElementById('fullReportBtn');
+                        if (a) { a.href = _u; a.classList.remove('hidden'); }
+                    }
+                }
+            } catch (e) { /* non-fatal */ }
             // Strip SLA UI when FEATURE_SLA is off.
             if (((window.IRP_CLIENT_CONFIG.features) || {}).FEATURE_SLA !== true) {
                 const slaToggleBtn = document.querySelector('button[onclick="toggleSLASection()"]');
