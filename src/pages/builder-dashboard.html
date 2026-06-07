@@ -503,6 +503,33 @@
                         </div>`
                     : '';
 
+                // Inline thumbnails next to the description so vendors see
+                // photos at-a-glance from the list. Click to enlarge in the
+                // shared lightbox; falls back to Drive on broken fileIds.
+                const photoLinks = (issue.issue && Array.isArray(issue.issue.photoLinks)) ? issue.issue.photoLinks : [];
+                const photosBlock = photoLinks.length ? `
+                    <div>
+                        <p class="text-[10px] text-slate-400 uppercase tracking-wider gold-accent mb-1.5">
+                            <i class="fas fa-paperclip mr-1"></i>Photos (${photoLinks.length})
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            ${photoLinks.map((link, idx) => {
+                                const fileId = extractDriveFileId(link);
+                                const thumb = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w400` : link;
+                                const viewer = fileId ? `https://drive.google.com/file/d/${fileId}/view` : link;
+                                return `
+                                    <a href="${viewer}" target="_blank" rel="noopener noreferrer"
+                                       onclick="event.preventDefault(); event.stopPropagation(); openPhotoLightbox('${fileId || ''}', '${viewer}')"
+                                       class="group relative block rounded-md overflow-hidden border border-slate-600/40 hover:border-amber-400/60 bg-slate-800/40 transition-all w-20 h-20 cursor-zoom-in flex-shrink-0"
+                                       title="Click to enlarge">
+                                        <img src="${thumb}" alt="Photo ${idx + 1}" loading="lazy"
+                                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                             onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-slate-500 text-[10px] p-1 text-center\\'><i class=\\'fas fa-file-image\\'></i></div>'">
+                                    </a>`;
+                            }).join('')}
+                        </div>
+                    </div>` : '';
+
                 return `
                     <div class="premium-card rounded-xl overflow-hidden border ${breached ? 'border-red-700/40 bg-red-950/10' : 'border-slate-700 hover:border-amber-500/50'} transition-all issue-row" id="row-${ticketId}" style="border-left: 3px solid transparent;">
                         <!-- COLLAPSED HEADER: title + status + severity + chevron + meta sub-row -->
@@ -535,6 +562,7 @@
                                     </p>
                                     <p class="text-slate-300 text-sm leading-relaxed bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">${desc}</p>
                                 </div>
+                                ${photosBlock}
                                 ${slaRow ? `<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${slaRow}</div>` : ''}
                                 <div class="pt-3 border-t border-slate-700/50">
                                     <p class="text-[10px] text-slate-400 uppercase tracking-wider gold-accent mb-2">

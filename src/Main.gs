@@ -351,6 +351,12 @@ function calculateSLADate(severity, reportedDate) {
 // map the indices. Severity is intentionally NOT collected by the form;
 // the column is preserved in the sheet for historical rows but stays
 // blank on new intake — committee assigns it at approval time.
+//
+// IMPORTANT: this is an INSTALLABLE trigger. Apps Script does NOT bind
+// it automatically just because the name starts with "on". The operator
+// must run installFormSubmitTrigger() once (or use Triggers UI) for new
+// form submissions to land in PENDING_REVIEW. Without it, rows go to
+// "Form Responses 1" only and no ticket is created.
 function onFormSubmit(e) {
     try {
         const values = e.values || [];
@@ -367,6 +373,71 @@ function onFormSubmit(e) {
         createPendingIssue_(fields, ""); // form path has no verified email
     } catch (error) {
         Logger.log("Form submission error: " + error.toString());
+    }
+}
+
+// Operator-run setup. Idempotent: removes any prior onFormSubmit
+// triggers attached to this script project, then creates a fresh
+// spreadsheet-form-submit trigger bound to the active sheet. Run once
+// per deployment, and any time the bound spreadsheet changes.
+//
+// Returns: { success, message, data:{ removed, triggerId } }.
+function installFormSubmitTrigger() {
+    try {
+        const ss = getSpreadsheet();
+        const existing = ScriptApp.getProjectTriggers();
+        Logger.log("[form-trigger] existing project triggers: " + existing.length);
+        let removed = 0;
+        for (let i = 0; i < existing.length; i++) {
+            if (existing[i].getHandlerFunction() === "onFormSubmit") {
+                ScriptApp.deleteTrigger(existing[i]);
+                removed++;
+            }
+        }
+        Logger.log("[form-trigger] removed prior onFormSubmit triggers: " + removed);
+        const t = ScriptApp.newTrigger("onFormSubmit")
+            .forSpreadsheet(ss)
+            .onFormSubmit()
+            .create();
+        const tid = t.getUniqueId();
+        Logger.log("[form-trigger] created id=" + tid + " handler=onFormSubmit");
+        const msg = "Form-submit trigger installed (handler=onFormSubmit). " +
+                    "Removed " + removed + " prior trigger(s). " +
+                    "New form responses will now create PENDING_REVIEW rows.";
+        Logger.log("[form-trigger] DONE: " + msg);
+        return { success: true, message: msg, data: { removed: removed, triggerId: tid } };
+    } catch (error) {
+        Logger.log("[form-trigger] FAILED: " + error.toString());
+        return { success: false, message: null, data: null, error: "Install failed: " + error.toString() };
+    }
+}
+
+// Read-only diagnostic. Lists every trigger on the script project so
+// operators can confirm whether onFormSubmit is wired up. Useful when
+// "form was submitted but no ticket appeared".
+//
+// Returns: { success, data: [{handler, type, source, uniqueId}, ...], error }.
+function listProjectTriggers() {
+    try {
+        const out = ScriptApp.getProjectTriggers().map(function (t) {
+            let source = "";
+            try {
+                const tsId = t.getTriggerSourceId && t.getTriggerSourceId();
+                source = tsId || "";
+            } catch (e) { source = ""; }
+            return {
+                handler:  t.getHandlerFunction(),
+                type:     String(t.getEventType()),
+                triggerSource: String(t.getTriggerSource()),
+                sourceId: source,
+                uniqueId: t.getUniqueId()
+            };
+        });
+        Logger.log("[trigger-list] " + JSON.stringify(out));
+        return { success: true, data: out, error: null };
+    } catch (error) {
+        Logger.log("[trigger-list] FAILED: " + error.toString());
+        return { success: false, data: null, error: error.toString() };
     }
 }
 

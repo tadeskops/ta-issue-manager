@@ -164,6 +164,8 @@ running is always safe.
 | # | When to run | Function | What it does |
 |---|---|---|---|
 | 1 | First deploy, or after pulling new `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` keys | `setupConfigSheet` | Creates / repopulates the `CONFIG` tab. Preserves existing operator-edited values; only missing keys are appended with defaults. |
+| 2 | **First deploy, or after re-binding to a different spreadsheet / form** — without this, form submissions land in `Form Responses 1` but **never become tickets** | `installFormSubmitTrigger` (`src/Main.gs`) | Idempotent. Removes any prior `onFormSubmit` triggers on this script project and creates a fresh spreadsheet-form-submit trigger so each new Google Form response runs `onFormSubmit(e)` → `createPendingIssue_()` → row appended to `PENDING_REVIEW` with a fresh `TKT-NNNNN` id. Returns `{success, message, data:{removed, triggerId}}`. Run `listProjectTriggers` afterwards to confirm. |
+| — | _Diagnostic_ — confirm form-submit / weekly-backup / weekly-report triggers are wired up | `listProjectTriggers` (`src/Main.gs`) | Read-only. Lists every trigger on the script project (`handler`, `type`, `triggerSource`, `sourceId`, `uniqueId`). If `onFormSubmit` is missing from the output, run `installFormSubmitTrigger` — submissions are not creating tickets. |
 | — | _Optional_ — pre-seed the attachment folder ID so the first upload doesn't have to walk Drive | `setupAttachmentFolder` | Walks `My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating the ` (File responses)` suffix), writes the ID into `ATTACHMENT_FOLDER_ID`, and forces public-view on the folder. **Not required** — `uploadSubmissionPhotos_` calls the same resolver lazily on first upload and persists the result. |
 | — | _Optional_ — bulk-publish legacy / Form-uploaded files already inside the folder | `makeAttachmentFolderPublic` | Sets the folder **and every file currently inside it** to "Anyone with the link – Viewer". New uploads are made public automatically by `trySharePublic_`; this only matters for files Google Forms / Drive added before public-view was wired in. Falls back to `ANYONE` if the strict variant is blocked, and logs a clear warning if both are blocked by a Workspace policy. |
 | — | Anytime, to confirm where uploads will land | `whereDoUploadsGo` | Read-only. Prints the configured attachment folder's full path + URL. Does **not** change anything. |
@@ -180,6 +182,9 @@ running is always safe.
 clasp push
   → in the Apps Script editor:
       1. setupConfigSheet           (seed CONFIG sheet — required)
+      2. installFormSubmitTrigger   (REQUIRED — without it, form
+                                     submissions never become tickets)
+      3. listProjectTriggers        (verify onFormSubmit shows up)
   → photo uploads work immediately. On the first upload the script
     auto-resolves the canonical Drive path, persists the folder ID into
     CONFIG, and forces public-view on the folder.
