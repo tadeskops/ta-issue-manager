@@ -196,8 +196,20 @@ const SHIM = `
             if (action === 'getClosedIssues')    return { success: true, data: mockIssues('closed', 6), error: null };
             if (action === 'getSubmittedIssues') return { success: true, data: mockIssues('pending', 4).concat(mockIssues('active', 3)).concat(mockIssues('closed', 3)), error: null };
             if (action === 'getReportPhotoB64') {
-                // 1x1 transparent PNG; enough for jsPDF.addImage to succeed.
-                return { success: true, data: { mimeType: 'image/png', b64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', sourceId: 'preview' }, error: null };
+                // Preview-only: cycle through small solid-colour 1x1 PNGs
+                // so each inline thumb renders as a visible coloured swatch.
+                // Real production data uses JPEG bytes from Drive thumbnails.
+                const swatches = [
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', // red
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPj/HwADBgGAWjR9awAAAABJRU5ErkJggg==', // blue
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8z/D/PwAGBQIA1tH6lwAAAABJRU5ErkJggg==', // green
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8//8/AwQwAQAH/wL+rrDdNAAAAABJRU5ErkJggg=='  // yellow
+                ];
+                const key = String(payload.fileId || payload.url || 'preview');
+                let h = 0;
+                for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+                const b64 = swatches[Math.abs(h) % swatches.length];
+                return { success: true, data: { mimeType: 'image/png', b64: b64, sourceId: 'preview' }, error: null };
             }
             if (action && action.indexOf('Issues') >= 0) return { success: true, data: [], error: null };
             return { success: true, data: null, error: null };

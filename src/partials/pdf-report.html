@@ -522,7 +522,7 @@
                     var y = cellY + INLINE_THUMB.pad + r * (INLINE_THUMB.h + INLINE_THUMB.gap);
                     var entry = photoCache[link];
                     if (entry && entry.dataUrl) {
-                        try { doc.addImage(entry.dataUrl, "JPEG", x, y, INLINE_THUMB.w, INLINE_THUMB.h, undefined, "FAST"); }
+                        try { doc.addImage(entry.dataUrl, entry.format || "JPEG", x, y, INLINE_THUMB.w, INLINE_THUMB.h, undefined, "FAST"); }
                         catch (e) { _drawMissing(doc, x, y, INLINE_THUMB.w, INLINE_THUMB.h); }
                     } else {
                         _drawMissing(doc, x, y, INLINE_THUMB.w, INLINE_THUMB.h);
@@ -576,7 +576,7 @@
             thumbs.forEach(function (link) {
                 var entry = photoCache[link];
                 if (entry && entry.dataUrl) {
-                    try { doc.addImage(entry.dataUrl, "JPEG", cx, y, thumbW, thumbH, undefined, "FAST"); }
+                    try { doc.addImage(entry.dataUrl, entry.format || "JPEG", cx, y, thumbW, thumbH, undefined, "FAST"); }
                     catch (e) { _drawMissing(doc, cx, y, thumbW, thumbH); }
                 } else {
                     _drawMissing(doc, cx, y, thumbW, thumbH);
@@ -631,7 +631,20 @@
             return window.API.getReportPhotoB64(link, 800)
                 .then(function (resp) {
                     if (resp && resp.success && resp.data && resp.data.b64) {
-                        cache[link] = { dataUrl: "data:" + (resp.data.mimeType || "image/jpeg") + ";base64," + resp.data.b64 };
+                        var mime = String(resp.data.mimeType || "image/jpeg").toLowerCase();
+                        // jsPDF.addImage requires the format flag to match the
+                        // bytes — passing "JPEG" for PNG data throws "Image
+                        // format not supported" and the user sees "photo
+                        // unavailable". Derive it from the mimeType so PNG,
+                        // WEBP, etc. all render.
+                        var fmt = mime.indexOf("png")  >= 0 ? "PNG"
+                                : mime.indexOf("webp") >= 0 ? "WEBP"
+                                : mime.indexOf("gif")  >= 0 ? "GIF"
+                                : "JPEG";
+                        cache[link] = {
+                            dataUrl: "data:" + mime + ";base64," + resp.data.b64,
+                            format:  fmt
+                        };
                     } else {
                         cache[link] = { dataUrl: null, error: (resp && resp.error) || "fetch failed" };
                     }
