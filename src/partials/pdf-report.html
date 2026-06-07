@@ -598,23 +598,27 @@
             _progress("Fetching photos… (" + i + " / " + links.length + ")", pct);
             return window.API.getReportPhotoB64(link, 800)
                 .then(function (resp) {
-                    if (resp && resp.success && resp.data && resp.data.b64) {
-                        var mime = String(resp.data.mimeType || "image/jpeg").toLowerCase();
-                        // jsPDF.addImage requires the format flag to match the
-                        // bytes — passing "JPEG" for PNG data throws "Image
-                        // format not supported" and the user sees "photo
-                        // unavailable". Derive it from the mimeType so PNG,
-                        // WEBP, etc. all render.
+                    // API.call() in src/partials/api.html unwraps the
+                    // server envelope (returns result.data), so resp is
+                    // the inner { mimeType, b64, sourceId } object.
+                    // Reading resp.data.b64 here was always undefined and
+                    // every cell fell through to "photo unavailable".
+                    if (resp && resp.b64) {
+                        var mime = String(resp.mimeType || "image/jpeg").toLowerCase();
+                        // jsPDF.addImage requires the format flag to match
+                        // the bytes — passing "JPEG" for PNG data throws
+                        // "Image format not supported". Derive it from the
+                        // mimeType so PNG, WEBP, etc. all render.
                         var fmt = mime.indexOf("png")  >= 0 ? "PNG"
                                 : mime.indexOf("webp") >= 0 ? "WEBP"
                                 : mime.indexOf("gif")  >= 0 ? "GIF"
                                 : "JPEG";
                         cache[link] = {
-                            dataUrl: "data:" + mime + ";base64," + resp.data.b64,
+                            dataUrl: "data:" + mime + ";base64," + resp.b64,
                             format:  fmt
                         };
                     } else {
-                        cache[link] = { dataUrl: null, error: (resp && resp.error) || "fetch failed" };
+                        cache[link] = { dataUrl: null, error: "fetch failed" };
                     }
                 })
                 .catch(function (err) { cache[link] = { dataUrl: null, error: String(err) }; })

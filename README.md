@@ -2,6 +2,120 @@
 
 Google Apps Script web app for the Address residents' issue tracker. 
 
+## Architecture at a glance
+
+The portal is a single Apps Script web-app with a Google Sheet as its
+database, Google Drive as its blob store, and a Google Form as one of two
+intake channels. Everything else is wallpaper.
+
+```mermaid
+flowchart LR
+    subgraph "Intake"
+        F[Google Form] -->|onFormSubmit trigger| PR[(PENDING_REVIEW)]
+        SI[submit-issue.html<br/>in-portal form] -->|submitIssue| PR
+        SI -. photos .-> DR[(Drive folder)]
+        F  -. photos .-> DR
+    end
+
+    subgraph "Lifecycle (strict-move sheets)"
+        PR -->|approveIssue| LI[(LIVE_ISSUES)]
+        PR -->|rejectIssue|  AR[(ARCHIVES_ISSUES)]
+        LI -->|closeIssue|   CI[(CLOSED_ISSUES)]
+        CI -->|reopenIssue|  LI
+    end
+
+    subgraph "Read paths"
+        LI --> CD[committee-dashboard.html]
+        PR --> CD
+        CI --> CD
+        LI --> BD[builder-dashboard.html]
+        CI --> BD
+        PR --> SUB[submitted-issues.html<br/>read-only]
+        LI --> SUB
+        AR -. opt-in .-> SUB
+    end
+
+    subgraph "Auth + config"
+        S[Session.getActiveUser] --> R[Router.gs<br/>doGet + api_call]
+        CFG[(CONFIG sheet)] --> R
+        R --> CD
+        R --> BD
+        R --> SUB
+        R --> SI
+    end
+
+    DR -. getReportPhotoB64 .-> PDF[PDF Export Wizard<br/>partials/pdf-report.html]
+    CD --> PDF
+    BD --> PDF
+    SUB --> PDF
+```
+
+### Feature umbrellas
+
+Every feature lives under one of four umbrellas. Each row links to the
+gating flag in `DEFAULT_FEATURES` (`src/Config.gs`), the spec sub-section
+in `requirement.md`, and the touch-points in code.
+
+| Umbrella | Feature | Flag(s) | Touch-points |
+|---|---|---|---|
+| **Intake** | Google Form → `PENDING_REVIEW` (always on) | — | `onFormSubmit`, `Form Responses 1` |
+| | In-portal submit page | `FEATURE_IN_PORTAL_SUBMIT` | `pages/submit-issue.html`, `submitIssue` |
+| | Photo upload (Form + portal) | `FEATURE_PHOTO_UPLOAD` | `uploadSubmissionPhotos_`, `splitPhotoLinks_`, `driveImageUrl_` |
+| | Auto-save draft on submit page | `FEATURE_AUTOSAVE_DRAFT` | `pages/submit-issue.html` |
+| **Lifecycle** | Approve / reject pending | — (committee-only) | `approveIssue`, `rejectIssue`, `PENDING_COL`, `LIVE_COL` |
+| | Builder status updates (assigned → in progress → completed) | — (committee + builder) | `updateBuilderStatus`, `LIVE_COL.BUILDER_STATUS` |
+| | Close / reopen issue | — | `closeIssue`, `reopenIssue`, `CLOSED_ISSUES` |
+| | SLA dates + breach surfaces | `FEATURE_SLA` | `calculateSLADate`, `getDashboardMetrics.slaBreaches`, dashboard KPIs |
+| | Committee can attach photos to existing issues | `FEATURE_COMMITTEE_PHOTO_ATTACH` + `FEATURE_PHOTO_UPLOAD` | `addPhotosToIssue`, `pages/committee-dashboard.html` |
+| **Read paths** | Committee dashboard (queue + active + closed) | — | `pages/committee-dashboard.html` |
+| | Builder dashboard | `FEATURE_BUILDER_DASHBOARD` | `pages/builder-dashboard.html` |
+| | Admin dashboard (KPIs, charts) | `FEATURE_ADMIN_DASHBOARD` | `pages/admin-dashboard.html` |
+| | Read-only submitted-issues view | `FEATURE_SUBMITTED_PAGE` | `pages/submitted-issues.html`, `getSubmittedIssues` |
+| | Severity column on submitted view | `FEATURE_SHOW_SEVERITY_ON_SUBMITTED` | `pages/submitted-issues.html` |
+| | Rejected-issues filter | `FEATURE_REJECTED_FILTER` | `pages/committee-dashboard.html` |
+| **Reporting & ops** | PDF export wizard (committee / builder / submitted) | `FEATURE_PDF_REPORT` + `FEATURE_PHOTO_UPLOAD` (for inline photos) | `partials/pdf-report.html`, `getReportPhotoB64` |
+| | Setup runbook (folder, public-share, config) | — | `src/Config.gs` (see runbook below) |
+| | Recovery (renumber / re-import) | — | `src/Recovery.gs` (see runbook below) |
+| | Auth / role resolution | — | `Router.gs` (`doGet`, `api_call`, `isActionAllowed_`), `Config.gs.getUserRole` |
+
+### Photo data flow (where it gets tricky)
+
+Three writers and three readers need to agree on one shape:
+
+```
+                      writers                                              readers
+ Form upload  ────►  Drive  ────► splitPhotoLinks_ ────► sheet PHOTO col
+ Portal upload  ──►  Drive  ────► splitPhotoLinks_ ────► sheet PHOTO col
+ Committee attach► Drive  ────► splitPhotoLinks_ ────► sheet PHOTO col
+                                                              │
+                                                              ▼
+                                       getPendingIssues / getLiveIssues / getClosedIssues / getSubmittedIssues
+                                                              │
+                                  ┌───────────────────────────┴────────────────────────────┐
+                                  ▼                                                        ▼
+                       i.issue.photoLinks (canonical — array of thumbnail URLs)   i.attachments (legacy root field; submitted-issues only)
+                                  │                                                        │
+                                  ▼                                                        ▼
+                       PDF Export Wizard                                        Submitted-issues detail modal
+                       (COLUMN_CATALOG.photos.read)                             (`issue.attachments` HTML)
+                                  │
+                                  ▼
+                       _prefetchPhotos → API.getReportPhotoB64
+                                  │
+                                  ▼
+                       UrlFetchApp(drive.google.com/thumbnail)  +  bearer OAuth token
+                                  │
+                                  ▼
+                       jsPDF.addImage(dataUrl, format, ...)        ← format MUST match bytes (JPEG/PNG/WEBP/GIF)
+```
+
+The two non-obvious failure modes: (1) `i.issue.photoLinks` is the
+canonical shape — all readers must populate it (the legacy
+`i.attachments` is kept at the root for the submitted-issues detail
+modal), and (2) `addImage`'s format flag must match the actual bytes —
+hardcoding `"JPEG"` while the bytes are PNG silently throws inside
+jsPDF and the cell renders the "photo unavailable" placeholder.
+
 ## Layout
 
 ```

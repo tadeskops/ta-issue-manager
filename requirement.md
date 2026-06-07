@@ -223,6 +223,15 @@ infer counts from `getDashboardMetrics` alone.
 | `submitted-issues.html` | `getSubmittedIssues` (unions PENDING + LIVE + optional ARCHIVES) | Single table with Status filter; archives gated by `SUBMITTED_INCLUDE_REJECTED` |
 | `submit-issue.html` | `getClientConfig` + `getCategoryMaster` | Intake form |
 
+> **Photo array shape (canonical).** Every reader emits the photo URLs as
+> `i.issue.photoLinks` (array of normalized Drive thumbnail URLs).
+> `getSubmittedIssues` additionally retains a root-level `attachments`
+> array for the legacy submitted-issues detail-modal renderer; new
+> consumers must read `i.issue.photoLinks`. The PDF Export wizard
+> (`partials/pdf-report.html` `COLUMN_CATALOG.photos.read`) reads only
+> the canonical field — root-only `attachments` will produce empty Photo
+> cells.
+
 ---
 
 ## 9. Ticket IDs

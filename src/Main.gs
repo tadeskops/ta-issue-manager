@@ -1368,7 +1368,13 @@ function getSubmittedIssues() {
                     category:    safeStr_(row[PENDING_COL.CATEGORY]),
                     subcategory: safeStr_(row[PENDING_COL.SUBCATEGORY]),
                     severity:    safeStr_(row[PENDING_COL.SEVERITY]),
-                    description: safeStr_(row[PENDING_COL.DESCRIPTION])
+                    description: safeStr_(row[PENDING_COL.DESCRIPTION]),
+                    // photoLinks is the canonical shape every reader/PDF
+                    // exporter expects (matches getPendingIssues /
+                    // getLiveIssues / getClosedIssues). `attachments` is
+                    // kept at the root for the existing submitted-issues
+                    // detail-modal renderer that reads issue.attachments.
+                    photoLinks:  splitPhotoLinks_(row[PENDING_COL.PHOTO])
                 },
                 status:          state,
                 state:           state,
@@ -1396,7 +1402,8 @@ function getSubmittedIssues() {
                     category:    safeStr_(row[LIVE_COL.CATEGORY]),
                     subcategory: safeStr_(row[LIVE_COL.SUBCATEGORY]),
                     severity:    safeStr_(row[LIVE_COL.SEVERITY]),
-                    description: safeStr_(row[LIVE_COL.DESCRIPTION])
+                    description: safeStr_(row[LIVE_COL.DESCRIPTION]),
+                    photoLinks:  splitPhotoLinks_(row[LIVE_COL.PHOTO])
                 },
                 status:          status,
                 state:           "APPROVED",

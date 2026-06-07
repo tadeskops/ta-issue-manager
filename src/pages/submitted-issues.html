@@ -298,7 +298,12 @@
                     category: data.issue?.category || data.category || '',
                     subcategory: data.issue?.subcategory || data.subCategory || '',
                     severity: data.issue?.severity || data.severity || '',
-                    description: data.issue?.description || data.description || ''
+                    description: data.issue?.description || data.description || '',
+                    // Mirror the photo array into issue.photoLinks so the
+                    // PDF wizard's COLUMN_CATALOG.photos.read() finds them.
+                    // The legacy detail-modal renderer still reads the root
+                    // `attachments` field, so we keep both populated.
+                    photoLinks: data.issue?.photoLinks || data.attachments || []
                 },
                 status: data.status || 'PENDING_APPROVAL',
                 dateReported: data.dateReported || '',
