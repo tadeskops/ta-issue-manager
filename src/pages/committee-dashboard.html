@@ -53,45 +53,40 @@
     <?!= include('src/partials/theme') ?>
 </head>
 <body class="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
-    <!-- Navigation with Premium Branding -->
-    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/80">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap justify-between items-center gap-3">
-            <div class="flex items-center gap-3 sm:gap-4 min-w-0">
-                <!-- Logo -->
-            <div class="flex items-center gap-3 sm:gap-4 min-w-0">
-                    <!-- Logo Only Version (Compact) -->
-                    <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-10 w-10 sm:h-12 sm:w-12 drop-shadow-lg flex-shrink-0">
-                    <!-- Alternative: Logo with Text (Uncomment to use) -->
-                    <!-- <div><img src="../../assets/images/TaLogoName.png" alt="The Address" class="h-10 drop-shadow-lg"></div> -->
-                    <div class="min-w-0">
-                        <h1 class="text-lg sm:text-xl font-bold gold-accent leading-tight truncate">The Address</h1>
-                        <p class="text-[11px] sm:text-xs text-slate-400 truncate">Issue Management</p>
-                    </div>
+    <!-- Top Navigation -->
+    <nav class="border-b gold-border sticky top-0 z-40 backdrop-blur-lg bg-slate-900/70 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
+            <!-- Brand -->
+            <div class="flex items-center gap-3 min-w-0">
+                <img src="<?!= include('src/partials/logo-src') ?>" alt="The Address" class="h-9 w-9 sm:h-10 sm:w-10 drop-shadow-md flex-shrink-0">
+                <div class="min-w-0 leading-tight">
+                    <h1 class="text-base sm:text-lg font-bold gold-accent truncate tracking-tight">The Address</h1>
+                    <p class="text-[10px] sm:text-[11px] text-slate-400 uppercase tracking-widest truncate">Issue Management</p>
                 </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2 sm:gap-4 lg:gap-6 justify-end">
-                <div class="text-right hidden md:block">
-                    <p class="text-xs text-slate-400 uppercase tracking-widest">Logged In</p>
-                    <p class="font-semibold text-slate-100" id="userEmail">Loading...</p>
-                </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <span class="hidden lg:flex flex-col text-right mr-2 leading-tight">
+                    <span class="text-[10px] text-slate-400 uppercase tracking-widest">Logged in</span>
+                    <span class="text-xs font-semibold text-slate-100 truncate max-w-[180px]" id="userEmail">Loading…</span>
+                </span>
                 <a href="https://forms.gle/zFWTnLUdNEGGj7hk9" target="_blank" rel="noopener noreferrer"
-                   class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold transition-colors text-xs sm:text-sm border border-amber-400/30 shadow-lg whitespace-nowrap">
-                    <i class="fas fa-pen-to-square mr-1.5 sm:mr-2"></i>Submit New Issue
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold border border-amber-400/40 shadow-sm transition-colors">
+                    <i class="fas fa-pen-to-square text-[11px]"></i><span class="hidden sm:inline">Submit Issue</span>
                 </a>
                 <button id="exportReportBtn" onclick="openExportReport()"
-                    class="hidden px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold transition-colors text-xs sm:text-sm border border-blue-400/30 shadow-lg whitespace-nowrap"
+                    class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold border border-blue-400/40 shadow-sm transition-colors"
                     aria-label="Export Report" title="Export Report">
-                    <i class="fas fa-file-pdf sm:mr-2"></i><span class="hidden sm:inline">Export Report</span>
+                    <i class="fas fa-file-pdf text-[11px]"></i><span class="hidden sm:inline">Export</span>
                 </button>
                 <a id="fullReportBtn" href="#" target="_blank" rel="noopener noreferrer"
-                   class="hidden inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-rose-700/90 hover:bg-rose-600 text-white font-medium text-xs transition-all border border-rose-400/30 shadow whitespace-nowrap"
+                   class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold border border-rose-400/40 shadow-sm transition-colors"
                    title="View latest committed full report (PDF)" aria-label="View Full Report (PDF)">
-                    <i class="fas fa-file-pdf text-[11px]"></i>
-                    <span class="hidden sm:inline">View Full Report</span>
-                    <i class="fas fa-arrow-up-right-from-square text-[10px] opacity-70"></i>
+                    <i class="fas fa-file-pdf text-[11px]"></i><span class="hidden sm:inline">Full Report</span><i class="fas fa-arrow-up-right-from-square text-[9px] opacity-80"></i>
                 </a>
-                <button onclick="logout()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white font-semibold transition-colors text-xs sm:text-sm border border-red-500/30 whitespace-nowrap" aria-label="Logout" title="Logout">
-                    <i class="fas fa-sign-out-alt sm:mr-2"></i><span class="hidden sm:inline">Logout</span>
+                <button onclick="logout()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-700/80 hover:bg-slate-600 text-slate-100 text-xs font-semibold border border-slate-500/40 shadow-sm transition-colors" aria-label="Logout" title="Logout">
+                    <i class="fas fa-sign-out-alt text-[11px]"></i><span class="hidden sm:inline">Logout</span>
                 </button>
             </div>
         </div>
@@ -99,50 +94,50 @@
 
     <!-- Main Container -->
     <div class="max-w-7xl mx-auto p-6">
-        <!-- KPI Cards Row - Premium Design -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <!-- KPI Cards Row - Compact Premium Design -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
             <!-- Pending Approval Card -->
-            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
-                <div class="flex items-center justify-between mb-4">
-                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Pending Approval</p>
-                    <i class="fas fa-clock gold-accent text-2xl opacity-60"></i>
+            <div class="premium-card premium-hover rounded-lg px-4 py-3 border border-slate-700 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-clock text-amber-400 text-sm"></i>
                 </div>
-                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiPending">0</p>
-                <p class="text-xs text-slate-500">Awaiting committee review</p>
-                <div class="h-1 w-16 bg-gradient-to-r from-amber-500 to-transparent rounded-full mt-4"></div>
+                <div class="min-w-0">
+                    <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider leading-tight">Pending Approval</p>
+                    <p class="text-2xl font-bold text-slate-100 leading-tight" id="kpiPending">0</p>
+                </div>
             </div>
-            
+
             <!-- Active Issues Card -->
-            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
-                <div class="flex items-center justify-between mb-4">
-                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Active Issues</p>
-                    <i class="fas fa-tasks text-blue-400 text-2xl opacity-60"></i>
+            <div class="premium-card premium-hover rounded-lg px-4 py-3 border border-slate-700 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-tasks text-blue-400 text-sm"></i>
                 </div>
-                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiActive">0</p>
-                <p class="text-xs text-slate-500">In progress</p>
-                <div class="h-1 w-16 bg-gradient-to-r from-blue-500 to-transparent rounded-full mt-4"></div>
+                <div class="min-w-0">
+                    <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider leading-tight">Active Issues</p>
+                    <p class="text-2xl font-bold text-slate-100 leading-tight" id="kpiActive">0</p>
+                </div>
             </div>
-            
+
             <!-- Closed Issues Card -->
-            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
-                <div class="flex items-center justify-between mb-4">
-                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Closed</p>
-                    <i class="fas fa-check-circle text-emerald-400 text-2xl opacity-60"></i>
+            <div class="premium-card premium-hover rounded-lg px-4 py-3 border border-slate-700 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-check-circle text-emerald-400 text-sm"></i>
                 </div>
-                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiClosed">0</p>
-                <p class="text-xs text-slate-500">Resolved</p>
-                <div class="h-1 w-16 bg-gradient-to-r from-emerald-500 to-transparent rounded-full mt-4"></div>
+                <div class="min-w-0">
+                    <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider leading-tight">Closed</p>
+                    <p class="text-2xl font-bold text-slate-100 leading-tight" id="kpiClosed">0</p>
+                </div>
             </div>
-            
+
             <!-- Critical Issues Card -->
-            <div class="premium-card premium-hover rounded-xl p-6 border border-slate-700">
-                <div class="flex items-center justify-between mb-4">
-                    <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Critical</p>
-                    <i class="fas fa-exclamation-triangle text-red-400 text-2xl opacity-60"></i>
+            <div class="premium-card premium-hover rounded-lg px-4 py-3 border border-slate-700 flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle text-red-400 text-sm"></i>
                 </div>
-                <p class="text-5xl font-bold text-slate-100 mb-2" id="kpiCritical">0</p>
-                <p class="text-xs text-slate-500">Urgent attention</p>
-                <div class="h-1 w-16 bg-gradient-to-r from-red-500 to-transparent rounded-full mt-4"></div>
+                <div class="min-w-0">
+                    <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider leading-tight">Critical</p>
+                    <p class="text-2xl font-bold text-slate-100 leading-tight" id="kpiCritical">0</p>
+                </div>
             </div>
         </div>
 
@@ -188,130 +183,89 @@
 
             <!-- PENDING APPROVAL Tab -->
             <div id="pendingTab" class="p-6 bg-gradient-to-b from-slate-800/20 to-transparent">
-                <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
-                    <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-hourglass-end mr-3 gold-accent"></i>Issues Awaiting Approval</h3>
-                    <div class="flex gap-2">
-                        <select id="pendingFilter" onchange="setPendingFilter(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                <div class="mb-6">
+                    <div class="flex justify-between items-center gap-3 mb-3">
+                        <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-hourglass-end mr-3 gold-accent"></i>Issues Awaiting Approval</h3>
+                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold text-sm transition-all border border-amber-400/30 whitespace-nowrap">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold"><i class="fas fa-filter mr-1 gold-accent"></i>Status</label>
+                        <select id="pendingFilter" onchange="setPendingFilter(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
                             <option value="PENDING_APPROVAL">Pending Only</option>
                             <option value="REJECTED">Rejected Only</option>
                             <option value="ALL">All (Pending + Rejected)</option>
                         </select>
-                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold text-sm transition-all border border-amber-400/30">
-                            <i class="fas fa-sync-alt mr-2"></i>Refresh
-                        </button>
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold ml-2"><i class="fas fa-calendar-day mr-1 gold-accent"></i>Date Reported</label>
+                        <select id="pendingDateFilter" onchange="setPendingDateFilter(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                            <option value="ALL">All Time</option>
+                            <option value="7">Last 7 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
                     </div>
                 </div>
                 
-                <div class="overflow-x-auto rounded-lg">
-                    <table class="w-full">
-                        <colgroup>
-                            <col style="width: 38%">
-                            <col class="hidden sm:table-column" style="width: 14%">
-                            <col style="width: 16%">
-                            <col class="hidden md:table-column" style="width: 14%">
-                            <col style="width: 10%">
-                            <col style="width: 8%">
-                        </colgroup>
-                        <thead>
-                            <tr class="border-b gold-border bg-slate-800/30">
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Issue</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Location</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Severity</th>
-                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pendingTableBody">
-                            <tr><td colspan="7" class="p-4 text-center text-slate-500">Loading...</td></tr>
-                        </tbody>
-                    </table>
+                <div id="pendingGrid" class="grid grid-cols-1 gap-3">
+                    <div class="col-span-full p-4 text-center text-slate-500">Loading...</div>
                 </div>
             </div>
 
             <!-- ACTIVE ISSUES Tab -->
             <div id="activeTab" class="p-6 bg-gradient-to-b from-slate-800/20 to-transparent hidden">
-                <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
-                    <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-tasks mr-3 text-blue-400"></i>Active Issues in Progress</h3>
-                    <div class="flex gap-2">
-                        <select onchange="filterActive(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                <div class="mb-6">
+                    <div class="flex justify-between items-center gap-3 mb-3">
+                        <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-tasks mr-3 text-blue-400"></i>Active Issues in Progress</h3>
+                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30 whitespace-nowrap">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold"><i class="fas fa-filter mr-1 gold-accent"></i>Severity</label>
+                        <select onchange="filterActive(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
                             <option value="">All Issues</option>
                             <option value="CRITICAL">Critical Only</option>
                             <option value="AGING">Aging (7+ days)</option>
                             <option value="BREACHED">SLA Breached</option>
                         </select>
-                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30">
-                            <i class="fas fa-sync-alt mr-2"></i>Refresh
-                        </button>
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold ml-2"><i class="fas fa-calendar-day mr-1 gold-accent"></i>Date Reported</label>
+                        <select id="activeDateFilter" onchange="setActiveDateFilter(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                            <option value="ALL">All Time</option>
+                            <option value="7">Last 7 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
                     </div>
                 </div>
-                
-                <div class="overflow-x-auto rounded-lg">
-                    <table class="w-full">
-                        <colgroup>
-                            <col style="width: 26%">
-                            <col class="hidden sm:table-column" style="width: 11%">
-                            <col style="width: 8%">
-                            <col class="hidden md:table-column" style="width: 11%">
-                            <col style="width: 9%">
-                            <col class="hidden lg:table-column" style="width: 11%">
-                            <col style="width: 6%">
-                            <col style="width: 6%">
-                            <col style="width: 12%">
-                        </colgroup>
-                        <thead>
-                            <tr class="border-b gold-border bg-slate-800/30">
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Issue</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Tower</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Category</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Severity</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden lg:table-cell">Status</th>
-                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Days</th>
-                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">SLA</th>
-                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="activeTableBody">
-                            <tr><td colspan="9" class="p-4 text-center text-slate-500">Loading...</td></tr>
-                        </tbody>
-                    </table>
+
+                <div id="activeGrid" class="grid grid-cols-1 gap-3">
+                    <div class="col-span-full p-4 text-center text-slate-500">Loading...</div>
                 </div>
             </div>
 
             <!-- CLOSED ISSUES Tab -->
             <div id="closedTab" class="p-6 bg-gradient-to-b from-slate-800/20 to-transparent hidden">
-                <div class="mb-6 flex justify-between items-center">
-                    <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-archive mr-3 text-slate-400"></i>Closed & Archived Issues</h3>
-                    <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white font-semibold text-sm transition-all border border-slate-400/30">
-                        <i class="fas fa-sync-alt mr-2"></i>Refresh
-                    </button>
+                <div class="mb-6">
+                    <div class="flex justify-between items-center gap-3 mb-3">
+                        <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-archive mr-3 text-slate-400"></i>Closed & Archived Issues</h3>
+                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white font-semibold text-sm transition-all border border-slate-400/30 whitespace-nowrap">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold"><i class="fas fa-calendar-day mr-1 gold-accent"></i>Date Reported</label>
+                        <select id="closedDateFilter" onchange="setClosedDateFilter(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                            <option value="ALL">All Time</option>
+                            <option value="7">Last 7 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
+                    </div>
                 </div>
-                
-                <div class="overflow-x-auto rounded-lg">
-                    <table class="w-full">
-                        <colgroup>
-                            <col style="width: 38%">
-                            <col class="hidden sm:table-column" style="width: 14%">
-                            <col style="width: 14%">
-                            <col style="width: 14%">
-                            <col class="hidden md:table-column" style="width: 12%">
-                            <col style="width: 8%">
-                        </colgroup>
-                        <thead>
-                            <tr class="border-b gold-border bg-slate-800/30">
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Issue</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden sm:table-cell">Resident</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Category</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest">Closed Date</th>
-                                <th class="p-4 text-left text-xs font-bold gold-accent uppercase tracking-widest hidden md:table-cell">Days to Resolve</th>
-                                <th class="p-4 text-center text-xs font-bold gold-accent uppercase tracking-widest">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="closedTableBody">
-                            <tr><td colspan="6" class="p-4 text-center text-slate-500">No closed issues</td></tr>
-                        </tbody>
-                    </table>
+
+                <div id="closedGrid" class="grid grid-cols-1 gap-3">
+                    <div class="col-span-full p-4 text-center text-slate-500">No closed issues</div>
                 </div>
             </div>
         </div>
@@ -542,6 +496,20 @@
         let allIssues = [];
         let pendingFilter = 'PENDING_APPROVAL'; // PENDING_APPROVAL | REJECTED | ALL
         let activeFilter = ''; // '' | CRITICAL | AGING | BREACHED
+        let pendingDateFilter = 'ALL'; // ALL | 7 | 30 | 90 (days)
+        let activeDateFilter  = 'ALL';
+        let closedDateFilter  = 'ALL';
+
+        // Returns true when the issue's dateReported falls inside the chosen
+        // window. range is a string: 'ALL' (no filter) or a day-count like '7'.
+        function passesDateFilter(issue, range) {
+            if (!range || range === 'ALL') return true;
+            const days = parseInt(range, 10);
+            if (!days || isNaN(days)) return true;
+            const d = issue && issue.dateReported ? new Date(issue.dateReported) : null;
+            if (!d || isNaN(d.getTime())) return false;
+            return (Date.now() - d.getTime()) <= days * 24 * 60 * 60 * 1000;
+        }
         let currentTicketId = null;
         let currentSheet = 'PENDING_REVIEW';
         let currentDetailTicket = null;
@@ -714,59 +682,145 @@
             }
         }
 
+        // Expand / collapse the body of a card by ticket id. Bound to the
+        // header click region and the chevron button. Action buttons in
+        // the header use stopPropagation so they don't toggle the card.
+        function toggleIssueCard(ticketId, ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            const safe = ticketId.replace(/[^A-Za-z0-9_-]/g, '_');
+            const content = document.querySelector(`.issue-content-${safe}`);
+            const icon    = document.querySelector(`.toggle-icon-${safe}`);
+            if (!content || !icon) return;
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                content.style.maxHeight = '0px';
+                icon.style.transform = 'rotate(0deg)';
+            } else {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                icon.style.transform = 'rotate(180deg)';
+            }
+        }
+
+        // Shared collapsible card used by all three committee lists.
+        // COLLAPSED chrome (always visible): title pill + state pill +
+        // severity pill + chevron. Everything else — meta, description,
+        // and the action buttons — lives in the expandable body so a
+        // closed card stays compact and scannable.
+        // opts.statePill — small uppercase pill (e.g., PENDING / IN_PROGRESS / CLOSED / REJECTED)
+        // opts.extraMeta — array of {label, value} rendered as a small grid
+        // opts.actions   — raw HTML for the action button cluster shown at
+        //                  the bottom of the expanded body
+        function _renderIssueCard(issue, opts) {
+            opts = opts || {};
+            const ticketId = (issue.ticketId || '').toString();
+            const safeId = ticketId.replace(/[^A-Za-z0-9_-]/g, '_');
+            const severity = issue.issue.severity || '—';
+            const sevColor = getSeverityColor(severity);
+            const desc = issue.issue.description || 'No description provided';
+            const date = issue.dateReported ? new Date(issue.dateReported).toLocaleDateString() : '—';
+
+            const sevBadge = `<span class="px-2.5 py-1 rounded-full text-white text-[10px] sm:text-xs font-bold uppercase tracking-wider whitespace-nowrap shadow" style="background-color: ${sevColor}">${severity}</span>`;
+            const statePill = opts.statePill || '';
+            const chevron = `
+                <button onclick="toggleIssueCard('${ticketId}', event)" class="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-slate-600/60 text-amber-300 transition-colors flex-shrink-0" title="Expand">
+                    <i class="fas fa-chevron-down toggle-icon-${safeId} transition-transform" style="transform: rotate(0deg)"></i>
+                </button>`;
+
+            const extraRows = (opts.extraMeta || []).map(m =>
+                `<div>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-wider gold-accent">${m.label}</p>
+                    <p class="text-slate-200 font-semibold text-sm">${m.value}</p>
+                </div>`).join('');
+
+            const hasExtras = (opts.extraMeta || []).length > 0;
+            return `
+                <div class="premium-card rounded-xl overflow-hidden border ${opts.borderClass || 'border-slate-700 hover:border-amber-500/50'} transition-all ${opts.cardClass || ''} issue-row" id="row-${ticketId}">
+                    <!-- COLLAPSED HEADER: title + state + severity + chevron, plus meta sub-row -->
+                    <div class="bg-gradient-to-r from-slate-800/30 to-slate-700/20 px-4 py-3 cursor-pointer hover:bg-slate-800/40 transition-colors" onclick="toggleIssueCard('${ticketId}', event)">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                            <h3 class="text-sm sm:text-base font-bold text-slate-100 leading-snug sm:flex-1 min-w-0 break-words">${window.titleWithTicketId(issue)}</h3>
+                            <div class="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-auto">
+                                ${statePill}
+                                ${sevBadge}
+                                ${chevron}
+                            </div>
+                        </div>
+                        <p class="mt-1.5 text-[11px] text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                            <span title="Location"><i class="fas fa-building mr-1 text-slate-500"></i>${issue.location.tower || '—'}${issue.location.flat ? ' / ' + issue.location.flat : ''}</span>
+                            <span class="text-slate-600">·</span>
+                            <span title="Category"><i class="fas fa-folder mr-1 text-slate-500"></i>${issue.issue.category || '—'}</span>
+                            <span class="text-slate-600">·</span>
+                            <span title="Resident"><i class="fas fa-user mr-1 text-slate-500"></i>${issue.resident.name || '—'}</span>
+                            <span class="text-slate-600">·</span>
+                            <span title="Date reported"><i class="fas fa-calendar-day mr-1 text-slate-500"></i>${date}</span>
+                        </p>
+                    </div>
+
+                    <!-- EXPANDED BODY: description + optional extras + actions -->
+                    <div class="issue-content-${safeId} max-h-0 overflow-hidden transition-all duration-300 ease-in-out border-t-0">
+                        <div class="p-4 space-y-3 bg-slate-900/30 border-t gold-border">
+                            <div>
+                                <p class="text-[10px] text-slate-400 uppercase tracking-wider gold-accent mb-1.5">
+                                    <i class="fas fa-align-left mr-1"></i>Description
+                                </p>
+                                <p class="text-slate-300 text-sm leading-relaxed bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">${desc}</p>
+                            </div>
+                            ${hasExtras ? `
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                ${extraRows}
+                            </div>` : ''}
+                            ${opts.actions ? `
+                            <div class="pt-3 border-t border-slate-700/50">
+                                <p class="text-[10px] text-slate-400 uppercase tracking-wider gold-accent mb-2">
+                                    <i class="fas fa-bolt mr-1"></i>Actions
+                                </p>
+                                <div class="flex flex-wrap items-center gap-2">${opts.actions}</div>
+                            </div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderPending() {
-            const tbody = document.getElementById('pendingTableBody');
+            const grid = document.getElementById('pendingGrid');
             const filtered = pendingIssues.filter(i => {
                 const st = (i.state || 'PENDING_APPROVAL').toUpperCase();
-                if (pendingFilter === 'ALL') return true;
-                return st === pendingFilter;
+                if (pendingFilter !== 'ALL' && st !== pendingFilter) return false;
+                return passesDateFilter(i, pendingDateFilter);
             });
             if (!filtered || filtered.length === 0) {
                 const msg = pendingFilter === 'REJECTED' ? 'No rejected issues' :
                             pendingFilter === 'ALL'      ? 'No issues' :
                                                            'No pending issues';
-                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-500">${msg}</td></tr>`;
+                grid.innerHTML = `<div class="col-span-full p-4 text-center text-slate-500">${msg}</div>`;
                 return;
             }
 
-            tbody.innerHTML = filtered.map(issue => {
+            grid.innerHTML = filtered.map(issue => {
                 const isRejected = (issue.state || '').toUpperCase() === 'REJECTED';
-                const rowClass   = isRejected ? 'opacity-70 bg-red-950/20' : '';
-                const actions = isRejected ? `
-                        <button onclick="openQuickViewModal('${issue.ticketId}', 'pending')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
-                        <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
-                ` : `
-                        <button onclick="openApproveModal('${issue.ticketId}')" class="px-2 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-lg" title="Approve"><i class="fas fa-check"></i></button>
-                        <button onclick="openRejectModal('${issue.ticketId}')" class="px-2 py-1 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow-lg" title="Reject"><i class="fas fa-times"></i></button>
-                        <button onclick="openQuickViewModal('${issue.ticketId}', 'pending')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
-                        <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
-                `;
-                const idCell = isRejected
-                    ? `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.titleWithTicketId(issue)}</button> <span class="ml-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/60 text-red-200 border border-red-700/50">REJECTED</span>`
-                    : `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.titleWithTicketId(issue)}</button>`;
-                // Mobile-only meta strip — surfaces resident + category that
-                // are hidden on small screens, mirroring the View-mode card.
-                // sm:hidden span hides resident once the column appears at sm,
-                // md:hidden on the wrapper hides everything once category's
-                // column appears at md.
-                const mobileMeta = `<div class="md:hidden mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
-                        <span class="sm:hidden"><i class="fas fa-user mr-1 text-slate-500"></i>${issue.resident.name || '—'}</span>
-                        <span><i class="fas fa-folder mr-1 text-slate-500"></i>${issue.issue.category || '—'}</span>
-                    </div>`;
-                return `
-                <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors issue-row ${rowClass}" id="row-${issue.ticketId}">
-                    <td class="p-4 font-bold cursor-pointer">${idCell}${mobileMeta}</td>
-                    <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
-                    <td class="p-4 text-slate-300 text-sm">${issue.location.tower}/${issue.location.flat}</td>
-                    <td class="p-4 hidden md:table-cell text-slate-300 text-sm">${issue.issue.category}</td>
-                    <td class="p-4">
-                        <span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">
-                            ${issue.issue.severity}
-                        </span>
-                    </td>
-                    <td class="p-4 text-center space-x-1">${actions}</td>
-                </tr>
-            `;
+                const statePill = isRejected
+                    ? '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-red-900/60 text-red-200 border border-red-700/50 whitespace-nowrap uppercase tracking-wider">Rejected</span>'
+                    : '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-amber-900/60 text-amber-200 border border-amber-700/50 whitespace-nowrap uppercase tracking-wider">Pending</span>';
+                const btn = (cls, icon, label, handler) =>
+                    `<button onclick="${handler}" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold ${cls} text-white transition-colors shadow"><i class="fas ${icon}"></i><span>${label}</span></button>`;
+                const actions = isRejected
+                    ? `
+                        ${btn('bg-cyan-600 hover:bg-cyan-500', 'fa-eye',   'View',   `openDetailedView('${issue.ticketId}', 'pending')`)}
+                        ${btn('bg-red-600 hover:bg-red-500',   'fa-trash', 'Delete', `openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')`)}
+                    `
+                    : `
+                        ${btn('bg-emerald-600 hover:bg-emerald-500', 'fa-check', 'Approve', `openApproveModal('${issue.ticketId}')`)}
+                        ${btn('bg-orange-600 hover:bg-orange-500',   'fa-times', 'Reject',  `openRejectModal('${issue.ticketId}')`)}
+                        ${btn('bg-cyan-600 hover:bg-cyan-500',       'fa-eye',   'View',    `openDetailedView('${issue.ticketId}', 'pending')`)}
+                        ${btn('bg-red-600 hover:bg-red-500',         'fa-trash', 'Delete',  `openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')`)}
+                    `;
+                return _renderIssueCard(issue, {
+                    section:     'pending',
+                    cardClass:   isRejected ? 'opacity-80' : '',
+                    borderClass: isRejected ? 'border-red-900/50' : 'border-slate-700 hover:border-amber-500/50',
+                    statePill:   statePill,
+                    actions:     actions
+                });
             }).join('');
         }
 
@@ -775,11 +829,27 @@
             renderPending();
         }
 
+        function setPendingDateFilter(value) {
+            pendingDateFilter = value || 'ALL';
+            renderPending();
+        }
+
+        function setActiveDateFilter(value) {
+            activeDateFilter = value || 'ALL';
+            renderActive();
+        }
+
+        function setClosedDateFilter(value) {
+            closedDateFilter = value || 'ALL';
+            renderClosed();
+        }
+
         function renderActive() {
-            const tbody = document.getElementById('activeTableBody');
+            const grid = document.getElementById('activeGrid');
             const nowMs = Date.now();
             const sevOf = i => String(i.issue.severity || '').toUpperCase();
             const filtered = activeIssues.filter(i => {
+                if (!passesDateFilter(i, activeDateFilter)) return false;
                 if (!activeFilter) return true;
                 if (activeFilter === 'CRITICAL') return sevOf(i) === 'CRITICAL';
                 if (activeFilter === 'BREACHED') return !!i.sla?.breached;
@@ -790,70 +860,71 @@
                 return true;
             });
             if (!filtered || filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-500">No active issues</td></tr>';
+                grid.innerHTML = '<div class="col-span-full p-4 text-center text-slate-500">No active issues</div>';
                 return;
             }
 
             const slaOn = __slaOn();
-            tbody.innerHTML = filtered.map(issue => {
-                const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
-                const rowClass = (slaOn && issue.sla && issue.sla.breached) ? 'bg-red-950/30 border-red-600/30' : '';
-                const slaCell = slaOn
-                    ? `<td class="p-4 text-center text-sm font-bold ${issue.sla.breached ? 'text-red-400' : 'text-emerald-400'}">${issue.sla.daysRemaining}d ${issue.sla.breached ? '⚠️' : '✓'}</td>`
-                    : '';
-                return `
-                    <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors ${rowClass} issue-row" id="row-${issue.ticketId}">
-                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'active')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.titleWithTicketId(issue)}</button>
-                            <div class="md:hidden mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
-                                <span class="sm:hidden"><i class="fas fa-user mr-1 text-slate-500"></i>${issue.resident.name || '—'}</span>
-                                <span><i class="fas fa-folder mr-1 text-slate-500"></i>${issue.issue.category || '—'}</span>
-                            </div>
-                        </td>
-                        <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
-                        <td class="p-4 text-slate-300 text-sm">${issue.location.tower}</td>
-                        <td class="p-4 hidden md:table-cell text-slate-300 text-sm">${issue.issue.category}</td>
-                        <td class="p-4"><span class="px-2 py-1 rounded-lg text-white text-xs font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span></td>
-                        <td class="p-4 hidden lg:table-cell text-xs"><span class="bg-blue-900/50 text-blue-200 px-2 py-1 rounded font-semibold">${issue.builder.status || 'ASSIGNED'}</span></td>
-                        <td class="p-4 text-center text-sm font-bold text-amber-300">${daysOpen} days</td>
-                        ${slaCell}
-                        <td class="p-4 text-center space-x-1">
-                            <button onclick="openQuickViewModal('${issue.ticketId}', 'active')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
-                            <button onclick="openCloseModal('${issue.ticketId}')" class="px-2 py-1 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg" title="Close Issue"><i class="fas fa-check-double"></i></button>
-                            <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'LIVE_ISSUES')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>
+            grid.innerHTML = filtered.map(issue => {
+                const breached = slaOn && issue.sla && issue.sla.breached;
+                const builderStatus = issue.builder.status || 'ASSIGNED';
+                const statePill = `<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-blue-900/60 text-blue-200 border border-blue-700/50 whitespace-nowrap uppercase tracking-wider">${builderStatus}</span>`;
+                const extras = [];
+                if (slaOn && issue.sla) {
+                    extras.push({
+                        label: 'SLA Remaining',
+                        value: breached
+                            ? `<span class="text-red-300"><i class="fas fa-triangle-exclamation mr-1"></i>${issue.sla.daysRemaining}d (breached)</span>`
+                            : `<span class="text-emerald-300"><i class="fas fa-shield-halved mr-1"></i>${issue.sla.daysRemaining}d</span>`
+                    });
+                }
+                const btn = (cls, icon, label, handler) =>
+                    `<button onclick="${handler}" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold ${cls} text-white transition-colors shadow"><i class="fas ${icon}"></i><span>${label}</span></button>`;
+                const actions = `
+                    ${btn('bg-cyan-600 hover:bg-cyan-500', 'fa-eye',          'View',  `openDetailedView('${issue.ticketId}', 'active')`)}
+                    ${btn('bg-blue-600 hover:bg-blue-500', 'fa-check-double', 'Close', `openCloseModal('${issue.ticketId}')`)}
+                    ${btn('bg-red-600 hover:bg-red-500',   'fa-trash',        'Delete',`openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'LIVE_ISSUES')`)}
                 `;
+                return _renderIssueCard(issue, {
+                    section:     'active',
+                    cardClass:   breached ? 'bg-red-950/10' : '',
+                    borderClass: breached ? 'border-red-700/40' : 'border-slate-700 hover:border-amber-500/50',
+                    statePill:   statePill,
+                    extraMeta:   extras,
+                    actions:     actions
+                });
             }).join('');
         }
 
         function renderClosed() {
-            const tbody = document.getElementById('closedTableBody');
-            if (!closedIssues || closedIssues.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-500">No closed issues</td></tr>';
+            const grid = document.getElementById('closedGrid');
+            const filtered = (closedIssues || []).filter(i => passesDateFilter(i, closedDateFilter));
+            if (!filtered || filtered.length === 0) {
+                grid.innerHTML = '<div class="col-span-full p-4 text-center text-slate-500">No closed issues</div>';
                 return;
             }
-            tbody.innerHTML = closedIssues.map(issue => {
+            grid.innerHTML = filtered.map(issue => {
                 const closure = issue.closure || {};
                 const closedDate = closure.closedDate ? new Date(closure.closedDate).toLocaleDateString() : '—';
                 const resDays = (closure.resolutionDays != null) ? closure.resolutionDays : '—';
-                return `
-                    <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors issue-row" id="row-${issue.ticketId}">
-                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'closed')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.titleWithTicketId(issue)}</button>
-                            <div class="md:hidden mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
-                                <span class="sm:hidden"><i class="fas fa-user mr-1 text-slate-500"></i>${issue.resident.name || '—'}</span>
-                                <span><i class="fas fa-clock mr-1 text-slate-500"></i>${resDays}d to resolve</span>
-                            </div>
-                        </td>
-                        <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
-                        <td class="p-4 text-slate-300 text-sm">${issue.issue.category}</td>
-                        <td class="p-4 text-slate-300 text-sm">${closedDate}</td>
-                        <td class="p-4 hidden md:table-cell text-slate-300 text-sm text-center">${resDays}d</td>
-                        <td class="p-4 text-center space-x-1">
-                            <button onclick="openQuickViewModal('${issue.ticketId}', 'closed')" class="px-2 py-1 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow-lg" title="Details"><i class="fas fa-eye"></i></button>
-                            <button onclick="openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'CLOSED_ISSUES')" class="px-2 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg" title="Delete"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>
+                const statePill = '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-emerald-900/60 text-emerald-200 border border-emerald-700/50 whitespace-nowrap uppercase tracking-wider">Closed</span>';
+                const extras = [
+                    { label: 'Closed Date',     value: closedDate },
+                    { label: 'Days to Resolve', value: `${resDays}d` }
+                ];
+                const btn = (cls, icon, label, handler) =>
+                    `<button onclick="${handler}" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold ${cls} text-white transition-colors shadow"><i class="fas ${icon}"></i><span>${label}</span></button>`;
+                const actions = `
+                    ${btn('bg-cyan-600 hover:bg-cyan-500', 'fa-eye',   'View',   `openDetailedView('${issue.ticketId}', 'closed')`)}
+                    ${btn('bg-red-600 hover:bg-red-500',   'fa-trash', 'Delete', `openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'CLOSED_ISSUES')`)}
                 `;
+                return _renderIssueCard(issue, {
+                    section:     'closed',
+                    borderClass: 'border-slate-700 hover:border-slate-500',
+                    statePill:   statePill,
+                    extraMeta:   extras,
+                    actions:     actions
+                });
             }).join('');
         }
 

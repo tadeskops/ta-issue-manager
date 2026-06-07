@@ -50,6 +50,15 @@ function readDefaultTheme() {
 }
 const DEFAULT_THEME = readDefaultTheme();
 
+function readDefaultFontScale() {
+    try {
+        const cfg = fs.readFileSync(path.join(SRC, 'Config.gs'), 'utf8');
+        const m = cfg.match(/DEFAULT_FONT_SCALE\s*:\s*"([^"]+)"/);
+        return m ? m[1] : 'md';
+    } catch { return 'md'; }
+}
+const DEFAULT_FONT_SCALE = readDefaultFontScale();
+
 // ---- include / scriptlet expansion ----------------------------------------
 function readPartial(rel, depth) {
     // include('src/partials/theme')  →  src/partials/theme.html
@@ -77,6 +86,7 @@ function expand(html, depth) {
 
     // 2) `<?= __defTheme ?>` → DEFAULT_THEME
     html = html.replace(/<\?=\s*__defTheme\s*\?>/g, DEFAULT_THEME);
+    html = html.replace(/<\?=\s*__defFontScale\s*\?>/g, DEFAULT_FONT_SCALE);
 
     // 3) any other `<?= expr ?>` → leave empty (best-effort)
     html = html.replace(/<\?=\s*[^?]+\?>/g, '');
