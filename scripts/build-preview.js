@@ -141,6 +141,22 @@ const SHIM = `
             if (action === 'getClientConfig') {
                 return fakes.getClientConfig();
             }
+            // Preview-only monotonic counter so each submitIssue (and
+            // generateTicketId) mints a unique TKT-PREVIEW-NNNNN — mirrors
+            // the live ScriptProperties counter in generateTicketID().
+            if (typeof window.__previewTicketCounter !== 'number') {
+                window.__previewTicketCounter = 0;
+            }
+            if (action === 'submitIssue') {
+                window.__previewTicketCounter += 1;
+                const id = 'TKT-PREVIEW-' + String(window.__previewTicketCounter).padStart(5, '0');
+                return { success: true, data: { ticketId: id, reportedDate: new Date().toISOString(), photoCount: (payload.photos || []).length }, error: null };
+            }
+            if (action === 'generateTicketId') {
+                window.__previewTicketCounter += 1;
+                const id = 'TKT-PREVIEW-' + String(window.__previewTicketCounter).padStart(5, '0');
+                return { success: true, data: { ticketId: id }, error: null };
+            }
             // Preview mock data for the Export Report wizard.
             const mockIssues = function (state, n) {
                 const out = [];
@@ -195,8 +211,7 @@ const SHIM = `
         getBuilderIssues:  () => ({ success: true, data: [], error: null }),
         getSubmittedIssues:() => ({ success: true, data: [], error: null }),
         getCategories:     () => ({ success: true, data: ['Plumbing','Electrical','Civil','Cleaning','Security','Lift','Garden','Other'], error: null }),
-        getDashboardStats: () => ({ success: true, data: { pending: 0, live: 0, closed: 0, archived: 0 }, error: null }),
-        submitIssue:       () => ({ success: true, data: { ticketId: 'TKT-PREVIEW-001' }, error: null })
+        getDashboardStats: () => ({ success: true, data: { pending: 0, live: 0, closed: 0, archived: 0 }, error: null })
     };
 
     function chain() {

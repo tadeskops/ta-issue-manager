@@ -284,11 +284,21 @@ function testConnection() {
   }
 }
 
-// Generate Ticket ID (TKT-XXXXX). Scans PENDING_REVIEW + LIVE_ISSUES +
-// CLOSED_ISSUES so a single monotonic counter is shared across the
-// lifecycle. Recognises the legacy `TA-` prefix when computing max so
-// historical numbering is not reset.
+// Generate Ticket ID (TKT-XXXXX). Uses a ScriptProperties counter as
+// the authoritative source so two concurrent intakes can never mint the
+// same id (LockService alone is not enough — see #45). On every call we
+// also scan PENDING_REVIEW + LIVE_ISSUES + CLOSED_ISSUES and lift the
+// counter to max(counter, scannedMax) so a manual sheet edit (paste,
+// delete-row, re-import) can never produce a collision either. The
+// PENDING_REVIEW sheet is the primary source per the spec — that's
+// where every new intake lands first — but we cross-check the other
+// two so historic numbering is honoured. Recognises the legacy `TA-`
+// prefix when computing max.
+const TICKET_COUNTER_PROP = "TICKET_COUNTER";
+
 function generateTicketID() {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
     try {
         const ss = getSpreadsheet();
         const sheets = [
@@ -296,7 +306,7 @@ function generateTicketID() {
             ss.getSheetByName(SHEETS.LIVE_ISSUES),
             ss.getSheetByName(SHEETS.CLOSED_ISSUES)
         ];
-        let maxNum = 0;
+        let scannedMax = 0;
         for (let s = 0; s < sheets.length; s++) {
             const sheet = sheets[s];
             if (!sheet) continue;
@@ -308,13 +318,23 @@ function generateTicketID() {
                 let num = 0;
                 if (id.indexOf("TKT-") === 0)      num = parseInt(id.substring(4), 10);
                 else if (id.indexOf("TA-") === 0)  num = parseInt(id.substring(3), 10);
-                if (!isNaN(num) && num > maxNum) maxNum = num;
+                if (!isNaN(num) && num > scannedMax) scannedMax = num;
             }
         }
-        return "TKT-" + String(maxNum + 1).padStart(5, "0");
+
+        const props = PropertiesService.getScriptProperties();
+        const storedRaw = props.getProperty(TICKET_COUNTER_PROP);
+        const storedNum = storedRaw ? parseInt(storedRaw, 10) : 0;
+        const baseNum = Math.max(scannedMax, isNaN(storedNum) ? 0 : storedNum);
+        const nextNum = baseNum + 1;
+        props.setProperty(TICKET_COUNTER_PROP, String(nextNum));
+
+        return "TKT-" + String(nextNum).padStart(5, "0");
     } catch (error) {
         Logger.log("Error generating ticket ID: " + error.toString());
         throw error;
+    } finally {
+        try { lock.releaseLock(); } catch (e) { /* noop */ }
     }
 }
 
