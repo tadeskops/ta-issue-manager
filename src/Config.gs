@@ -56,6 +56,7 @@ const DEFAULT_FEATURES = {
     FEATURE_BUILDER_DASHBOARD:  true,  // builder-dashboard page accessible
     FEATURE_ADMIN_DASHBOARD:    true,  // admin-dashboard page (analytics) accessible
     FEATURE_SUBMITTED_PAGE:     true,  // submitted-issues.html accessible
+    FEATURE_OPEN_SHEET_LINK:    false, // "Open in Sheets" pill on the public submitted-issues page. OFF by default — opt-in (the link points at the underlying spreadsheet, anyone with the link can view it).
     FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,  // show severity badge/filter/sort on submitted-issues page
     FEATURE_COMMITTEE_PHOTO_ATTACH: false,  // committee "Upload Photo" button in detail view + addPhotosToIssue API. OFF by default — opt-in.
     FEATURE_PDF_REPORT:         false,  // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. OFF by default — opt-in.
