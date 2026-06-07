@@ -260,7 +260,7 @@
             + '      <div class="grid grid-cols-2 gap-1">' + colHtml + '</div>'
             + '    </div>'
             + '    <div>'
-            + '      <label class="flex items-center gap-2"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (inline in each row + gallery at the end of each section)</span></label>'
+            + '      <label class="flex items-center gap-2"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (inline thumbnails in each row)</span></label>'
             + '      <p class="text-[10px] text-slate-500 mt-1 ml-6">Photos are fetched server-side and may add a few seconds + a few MB to the file.</p>'
             + '    </div>'
             + '  </div>'
@@ -336,8 +336,8 @@
 
             var titleText = (document.getElementById("reportTitleInput") || {}).value || "Issues Report";
 
-            _drawCover(doc, titleText, enabled);
-            _progress("Cover page ready", 15);
+            var headerBottomY = _drawTitleHeader(doc, titleText, enabled);
+            _progress("Header ready", 15);
 
             // Pre-fetch all photos we'll need (deduped by file id) before
             // we lay out tables, so addImage calls are synchronous.
@@ -351,7 +351,16 @@
             for (var s = 0; s < enabled.length; s++) {
                 var sectPct = 60 + Math.round(((s + 1) / enabled.length) * 30);
                 _progress("Rendering: " + enabled[s].label + " (" + (s + 1) + "/" + enabled.length + ")", sectPct);
-                _drawSection(doc, enabled[s], activeCols, photoCache);
+                // First section continues directly under the title header;
+                // subsequent sections start on a fresh page.
+                var sectionStartY;
+                if (s === 0) {
+                    sectionStartY = headerBottomY;
+                } else {
+                    doc.addPage();
+                    sectionStartY = 10;
+                }
+                _drawSection(doc, enabled[s], activeCols, photoCache, sectionStartY);
             }
 
             _progress("Finalising…", 95);
@@ -386,55 +395,46 @@
         }
     }
 
-    function _drawCover(doc, titleText, enabled) {
+    // Compact header drawn at the top of page 1. Returns the y coordinate
+    // where the first section may start (so the list begins on page 1
+    // instead of wasting a full cover page).
+    function _drawTitleHeader(doc, titleText, enabled) {
         var pageW = doc.internal.pageSize.getWidth();
-        var pageH = doc.internal.pageSize.getHeight();
 
-        doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageW, 32, "F");
-        doc.setTextColor(252, 211, 77); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-        doc.text("TA ISSUE REPORTING PORTAL", 14, 14);
-        doc.setTextColor(255, 255, 255); doc.setFontSize(18);
-        doc.text(titleText, 14, 24);
+        // Top band — portal + title only (kept slim).
+        doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageW, 16, "F");
+        doc.setTextColor(252, 211, 77); doc.setFontSize(8); doc.setFont("helvetica", "bold");
+        doc.text("TA ISSUE REPORTING PORTAL", 14, 6.5);
+        doc.setTextColor(255, 255, 255); doc.setFontSize(13);
+        doc.text(titleText, 14, 13);
 
-        doc.setTextColor(30, 41, 59); doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        // Meta line directly under the band — generated / by / source counts
+        // / filters all collapsed into one line to save vertical space.
         var nowStr = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-        doc.text("Generated: " + nowStr, 14, 44);
-        var who = (window.IRP_USER && window.IRP_USER.email) ? ("By: " + window.IRP_USER.email) : "";
-        if (who) doc.text(who, 14, 50);
-
-        // Summary block.
-        doc.setFontSize(11); doc.setFont("helvetica", "bold");
-        doc.text("Summary", 14, 64);
-        doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-        var y = 71;
-        enabled.forEach(function (s) {
-            doc.setFillColor(s.color[0], s.color[1], s.color[2]);
-            doc.rect(14, y - 3, 3, 3, "F");
-            doc.text(s.label, 20, y);
-            doc.text(String(s.data.length), 80, y, { align: "right" });
-            y += 6;
-        });
-
+        var who = (window.IRP_USER && window.IRP_USER.email) ? window.IRP_USER.email : "";
+        var counts = enabled.map(function (s) { return s.label + ": " + s.data.length; }).join("  \u2022  ");
         var note = (_state.opts && _state.opts.filtersAppliedSummary) || "";
-        if (note) {
-            doc.setFontSize(9); doc.setTextColor(100, 116, 139);
-            doc.text("Filters applied on this view: " + note, 14, y + 4, { maxWidth: pageW - 28 });
-        }
+        var metaParts = ["Generated: " + nowStr];
+        if (who) metaParts.push("By: " + who);
+        if (counts) metaParts.push(counts);
+        if (note) metaParts.push("Filters: " + note);
+        doc.setTextColor(71, 85, 105); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+        doc.text(metaParts.join("  \u2014  "), 14, 21, { maxWidth: pageW - 28 });
 
-        doc.setFontSize(8); doc.setTextColor(100, 116, 139);
-        doc.text("Confidential — for community use only.", 14, pageH - 10);
-
-        doc.addPage();
+        // Section content starts just below the meta line.
+        return 26;
     }
 
-    function _drawSection(doc, src, activeCols, photoCache) {
+    function _drawSection(doc, src, activeCols, photoCache, startY) {
         var pageW = doc.internal.pageSize.getWidth();
+        var bandY = (typeof startY === "number") ? startY : 10;
+        var tableY = bandY + 12;
 
         // Section band.
         doc.setFillColor(src.color[0], src.color[1], src.color[2]);
-        doc.rect(10, 10, pageW - 20, 8, "F");
+        doc.rect(10, bandY, pageW - 20, 8, "F");
         doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-        doc.text(src.label.toUpperCase() + "  (" + src.data.length + ")", 14, 16);
+        doc.text(src.label.toUpperCase() + "  (" + src.data.length + ")", 14, bandY + 6);
 
         var head = [activeCols.map(function (c) { return c.label; })];
         var body = src.data.map(function (issue) {
@@ -463,7 +463,7 @@
 
         doc.autoTable({
             head: head, body: body,
-            startY: 22,
+            startY: tableY,
             theme: "grid",
             margin: { left: 10, right: 10 },
             styles: { fontSize: 8, cellPadding: 1.5, overflow: "linebreak", valign: "top" },
@@ -530,60 +530,6 @@
                 });
             },
             didDrawPage: function () { /* footer drawn later */ }
-        });
-
-        // Inline photo strips: walk the rows after the table is drawn.
-        if (_state.photos.enabled) {
-            _drawInlinePhotos(doc, src, photoCache);
-        }
-
-        doc.addPage();
-    }
-
-    function _drawInlinePhotos(doc, src, photoCache) {
-        // Get last autoTable row positions for this section. jsPDF-autotable
-        // exposes `previous.body` rows with their drawn y. We re-render a
-        // compact "Ticket id — [thumbs]" strip beneath the table on a new
-        // page if needed. Simpler & more predictable than mid-row injection.
-        var rows = src.data.filter(function (i) { return i.issue && i.issue.photoLinks && i.issue.photoLinks.length; });
-        if (rows.length === 0) return;
-
-        doc.addPage();
-        doc.setFillColor(src.color[0], src.color[1], src.color[2]);
-        var pageW = doc.internal.pageSize.getWidth();
-        doc.rect(10, 10, pageW - 20, 8, "F");
-        doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-        doc.text(src.label.toUpperCase() + " — PHOTOS", 14, 16);
-
-        var pageH = doc.internal.pageSize.getHeight();
-        var x = 14, y = 26;
-        var thumbW = 36, thumbH = 28, gap = 3;
-        var labelH = 5;
-
-        rows.forEach(function (issue) {
-            var label = (issue.ticketId || "(no id)") + "  —  " + ((issue.location && (issue.location.tower + "/" + issue.location.flat)) || "");
-            // Reserve room for one row of thumbs + label.
-            var thumbs = issue.issue.photoLinks.slice(0, 6);
-            var stripW = thumbs.length * (thumbW + gap);
-            if (y + labelH + thumbH + 4 > pageH - 12) {
-                doc.addPage();
-                y = 16;
-            }
-            doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
-            doc.text(label, 14, y); y += labelH;
-
-            var cx = 14;
-            thumbs.forEach(function (link) {
-                var entry = photoCache[link];
-                if (entry && entry.dataUrl) {
-                    try { doc.addImage(entry.dataUrl, entry.format || "JPEG", cx, y, thumbW, thumbH, undefined, "FAST"); }
-                    catch (e) { _drawMissing(doc, cx, y, thumbW, thumbH); }
-                } else {
-                    _drawMissing(doc, cx, y, thumbW, thumbH);
-                }
-                cx += thumbW + gap;
-            });
-            y += thumbH + 6;
         });
     }
 
