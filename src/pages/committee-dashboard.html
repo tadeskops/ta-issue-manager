@@ -694,9 +694,18 @@
                 const idCell = isRejected
                     ? `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button> <span class="ml-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-900/60 text-red-200 border border-red-700/50">REJECTED</span>`
                     : `<button onclick="openDetailedView('${issue.ticketId}', 'pending')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button>`;
+                // Mobile-only meta strip — surfaces resident + category that
+                // are hidden on small screens, mirroring the View-mode card.
+                // sm:hidden span hides resident once the column appears at sm,
+                // md:hidden on the wrapper hides everything once category's
+                // column appears at md.
+                const mobileMeta = `<div class="md:hidden mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                        <span class="sm:hidden"><i class="fas fa-user mr-1 text-slate-500"></i>${issue.resident.name || '—'}</span>
+                        <span><i class="fas fa-folder mr-1 text-slate-500"></i>${issue.issue.category || '—'}</span>
+                    </div>`;
                 return `
                 <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors issue-row ${rowClass}" id="row-${issue.ticketId}">
-                    <td class="p-4 font-bold cursor-pointer">${idCell}</td>
+                    <td class="p-4 font-bold cursor-pointer">${idCell}${mobileMeta}</td>
                     <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
                     <td class="p-4 text-slate-300 text-sm">${issue.location.tower}/${issue.location.flat}</td>
                     <td class="p-4 hidden md:table-cell text-slate-300 text-sm">${issue.issue.category}</td>
@@ -744,7 +753,12 @@
                     : '';
                 return `
                     <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors ${rowClass} issue-row" id="row-${issue.ticketId}">
-                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'active')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button></td>
+                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'active')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button>
+                            <div class="md:hidden mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                                <span class="sm:hidden"><i class="fas fa-user mr-1 text-slate-500"></i>${issue.resident.name || '—'}</span>
+                                <span><i class="fas fa-folder mr-1 text-slate-500"></i>${issue.issue.category || '—'}</span>
+                            </div>
+                        </td>
                         <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
                         <td class="p-4 text-slate-300 text-sm">${issue.location.tower}</td>
                         <td class="p-4 hidden md:table-cell text-slate-300 text-sm">${issue.issue.category}</td>
@@ -774,7 +788,12 @@
                 const resDays = (closure.resolutionDays != null) ? closure.resolutionDays : '—';
                 return `
                     <tr class="border-b border-slate-700 hover:bg-slate-700/30 transition-colors issue-row" id="row-${issue.ticketId}">
-                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'closed')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button></td>
+                        <td class="p-4 font-bold cursor-pointer"><button onclick="openDetailedView('${issue.ticketId}', 'closed')" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors text-left" title="${issue.ticketId}">${window.briefTitle(issue)}</button>
+                            <div class="md:hidden mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                                <span class="sm:hidden"><i class="fas fa-user mr-1 text-slate-500"></i>${issue.resident.name || '—'}</span>
+                                <span><i class="fas fa-clock mr-1 text-slate-500"></i>${resDays}d to resolve</span>
+                            </div>
+                        </td>
                         <td class="p-4 hidden sm:table-cell text-slate-300 text-sm">${issue.resident.name}</td>
                         <td class="p-4 text-slate-300 text-sm">${issue.issue.category}</td>
                         <td class="p-4 text-slate-300 text-sm">${closedDate}</td>

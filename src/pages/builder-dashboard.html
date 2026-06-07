@@ -439,6 +439,10 @@
                     <tr class="border-b issue-row ${rowClass}" id="row-${issue.ticketId}" style="border-left: 3px solid transparent; transition: border-color 0.2s;">
                         <td class="border p-3 font-bold text-blue-600 cursor-pointer hover:underline" onclick="selectBuilderRow('${issue.ticketId}'); openDetailsModal('${issue.ticketId}')" title="${issue.ticketId}">
                             ${window.briefTitle(issue)}
+                            <div class="md:hidden mt-1 text-[11px] text-slate-500 font-normal flex flex-wrap gap-x-3 gap-y-0.5">
+                                <span class="sm:hidden"><i class="fas fa-user mr-1 text-slate-400"></i>${issue.resident.name || '—'}</span>
+                                <span><i class="fas fa-folder mr-1 text-slate-400"></i>${issue.issue.category || '—'}</span>
+                            </div>
                         </td>
                         <td class="border p-3 hidden sm:table-cell text-sm">${issue.resident.name}</td>
                         <td class="border p-3 text-sm">${issue.location.tower}/${issue.location.flat}</td>
