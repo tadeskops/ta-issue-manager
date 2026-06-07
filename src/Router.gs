@@ -205,9 +205,27 @@ function api_call(action, payload) {
         return { success: false, error: "Identity lookup failed: " + String(idErr) + ". The signed-in account may not have access to the CONFIG spreadsheet." };
     }
     // Public read-only actions are allowed for anonymous visitors (role UNKNOWN).
-    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster", "diag"];
+    // getReportPhotoB64 is included so the Export Report wizard on the
+    // public submitted-issues page can embed photo thumbnails — the
+    // underlying Drive folder is already shared "Anyone with the link –
+    // Viewer" via makeAttachmentFolderPublic, so this exposes nothing
+    // that wasn't already publicly viewable via the issue card thumbnails.
+    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster", "diag", "getReportPhotoB64"];
+    // Conditionally-public actions: allowed for anonymous only when the
+    // gating feature flag is on. commitFullReportPdf is gated by
+    // FEATURE_PUBLIC_FULL_REPORT so the public Export Report can push
+    // the same TA_IAP_Full_Report.pdf as committee/builder do. The
+    // commit handler itself enforces FEATURE_WEEKLY_REPORT_BACKUP +
+    // size cap + %PDF magic check, so even with this open the abuse
+    // surface is bounded.
+    const PUBLIC_IF_FLAG = {
+        "commitFullReportPdf": "FEATURE_PUBLIC_FULL_REPORT"
+    };
     if (role === "UNKNOWN" && PUBLIC_ACTIONS.indexOf(action) === -1) {
-        return { success: false, error: "Unauthorized: " + (email || "no email") };
+        const gateFlag = PUBLIC_IF_FLAG[action];
+        if (!gateFlag || !getFeatureFlag(gateFlag)) {
+            return { success: false, error: "Unauthorized: " + (email || "no email") };
+        }
     }
     if (role !== "UNKNOWN" && !isActionAllowed_(action, role)) {
         return { success: false, error: "Forbidden for role " + role + ": " + action };

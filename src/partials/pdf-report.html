@@ -303,16 +303,18 @@
     // Optional auto-commit hook. When FEATURE_WEEKLY_REPORT_BACKUP is on
     // (and the API surface is available), ship the rendered PDF bytes to
     // the server which overwrites the committed TA_IAP_Full_Report.pdf
-    // in the git backup. Public/anonymous visitors hit role=UNKNOWN so
-    // the call is rejected by the router; harmless. Fire-and-forget.
+    // in the git backup. Fire-and-forget.
     function _maybeCommitFullReport(doc) {
         var cc = window.IRP_CLIENT_CONFIG || {};
         var on = !!(cc.features && cc.features.FEATURE_WEEKLY_REPORT_BACKUP);
         if (!on) return;
-        // Pages must explicitly opt in. Public read-only pages
-        // (submitted-issues.html, login) MUST NOT set this flag — the
-        // PDF they render only contains pending+active rows and would
-        // overwrite the full report with incomplete data.
+        // Pages must explicitly opt in by setting
+        // window.IRP_AUTO_COMMIT_FULL_REPORT = true. Committee + builder
+        // dashboards always opt in. The public submitted-issues page
+        // opts in only when FEATURE_PUBLIC_FULL_REPORT is on (in which
+        // case the server's getSubmittedIssues includes CLOSED rows, so
+        // the PDF covers the full ticket set and is safe to overwrite
+        // the canonical file with).
         if (!window.IRP_AUTO_COMMIT_FULL_REPORT) return;
         if (!(window.API && typeof API.call === "function")) return;
         var dataUrl = doc.output("datauristring");

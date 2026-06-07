@@ -61,6 +61,7 @@ const DEFAULT_FEATURES = {
     FEATURE_COMMITTEE_PHOTO_ATTACH: false,  // committee "Upload Photo" button in detail view + addPhotosToIssue API. OFF by default — opt-in.
     FEATURE_PDF_REPORT:         true,   // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. ON by default.
     FEATURE_WEEKLY_REPORT_BACKUP: true,  // Weekly PDF committed to GitHub (TA_IAP_Full_Report.pdf with embedded photos) + cross-page "View Full Report" pill. ON by default; operator still needs GITHUB_TOKEN + an installed trigger for the cron itself to run.
+    FEATURE_PUBLIC_FULL_REPORT: true,  // Make the public submitted-issues Export Report behave like committee/builder: include closed tickets in getSubmittedIssues AND let anonymous Export commits overwrite TA_IAP_Full_Report.pdf. Requires FEATURE_PDF_REPORT + FEATURE_WEEKLY_REPORT_BACKUP. Turn OFF if anonymous abuse is observed (commitFullReportPdf still has size cap + PDF magic check).
     FEATURE_SLA:                false   // SLA KPIs, SLA Days column, BREACHED filter, and sla:{} sub-object on issue APIs. OFF by default — opt-in.
 };
 

@@ -1413,11 +1413,15 @@ function getIssuesWithStatus() {
 function getSubmittedIssues() {
     try {
         const includeRejected = String(getTunable("SUBMITTED_INCLUDE_REJECTED") || "false").toLowerCase() === "true";
+        const includeClosed   = getFeatureFlag("FEATURE_PUBLIC_FULL_REPORT");
 
         const pendingData = getSheet(SHEETS.PENDING_REVIEW).getDataRange().getValues();
         const liveData    = getSheet(SHEETS.LIVE_ISSUES).getDataRange().getValues();
         const archiveData = includeRejected
             ? getSheet(SHEETS.ARCHIVES_ISSUES).getDataRange().getValues()
+            : [];
+        const closedData  = includeClosed
+            ? getSheet(SHEETS.CLOSED_ISSUES).getDataRange().getValues()
             : [];
 
         // PENDING_REVIEW and ARCHIVES_ISSUES share the PENDING_COL layout.
@@ -1483,6 +1487,36 @@ function getSubmittedIssues() {
             };
         };
 
+        // CLOSED_ISSUES shares the LIVE_COL prefix and appends 4 closure
+        // columns at LIVE_WIDTH..LIVE_WIDTH+3. Marked state="CLOSED" so
+        // the wizard buckets them into the Closed section.
+        const mapClosedRow = function (row) {
+            return {
+                ticketId:     safeStr_(row[LIVE_COL.TICKET_ID]),
+                dateReported: safeDateIso_(row[LIVE_COL.DATE_REPORTED]),
+                resident: {
+                    name:  safeStr_(row[LIVE_COL.RESIDENT]),
+                    email: "",
+                    phone: ""
+                },
+                location: {
+                    tower: safeStr_(row[LIVE_COL.TOWER]),
+                    flat:  safeStr_(row[LIVE_COL.FLAT])
+                },
+                issue: {
+                    category:    safeStr_(row[LIVE_COL.CATEGORY]),
+                    subcategory: safeStr_(row[LIVE_COL.SUBCATEGORY]),
+                    severity:    safeStr_(row[LIVE_COL.SEVERITY]),
+                    description: safeStr_(row[LIVE_COL.DESCRIPTION]),
+                    photoLinks:  splitPhotoLinks_(row[LIVE_COL.PHOTO])
+                },
+                status:          "CLOSED",
+                state:           "CLOSED",
+                rejectionReason: "",
+                attachments:     splitPhotoLinks_(row[LIVE_COL.PHOTO])
+            };
+        };
+
         const responses = [];
         for (let i = firstDataRow_(pendingData); i < pendingData.length; i++) {
             const m = mapPendingRow(pendingData[i], "PENDING_APPROVAL");
@@ -1499,6 +1533,10 @@ function getSubmittedIssues() {
         }
         for (let i = firstDataRow_(archiveData); i < archiveData.length; i++) {
             const m = mapPendingRow(archiveData[i], "REJECTED");
+            if (m.ticketId) responses.push(m);
+        }
+        for (let i = 1; i < closedData.length; i++) {
+            const m = mapClosedRow(closedData[i]);
             if (m.ticketId) responses.push(m);
         }
 

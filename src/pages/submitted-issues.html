@@ -261,6 +261,18 @@
                     const btn = document.getElementById('exportReportBtn');
                     if (btn) btn.classList.remove('hidden');
                 }
+                // Auto-commit the rendered PDF as TA_IAP_Full_Report.pdf
+                // (same canonical file the committee + builder Export
+                // commits to) when FEATURE_PUBLIC_FULL_REPORT is on. The
+                // server-side feed (getSubmittedIssues) now includes
+                // CLOSED tickets under the same flag, so this PDF is
+                // complete enough to overwrite the canonical file.
+                // commitFullReportPdf itself also requires
+                // FEATURE_WEEKLY_REPORT_BACKUP + has a size cap.
+                if (features.FEATURE_PUBLIC_FULL_REPORT === true &&
+                    features.FEATURE_WEEKLY_REPORT_BACKUP === true) {
+                    window.IRP_AUTO_COMMIT_FULL_REPORT = true;
+                }
                 // View Full Report pill — shown whenever a public URL
                 // resolves (auto-derived server-side when empty). No
                 // feature-flag gate: this is a passive read-only link.
