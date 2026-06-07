@@ -134,4 +134,17 @@ window.briefTitle = function (issue) {
     if (cat || sub) return (cat || "Issue") + (sub ? " \u2013 " + sub : "");
     return issue.ticketId || "Issue";
 };
+
+// Sleek inline ticket-id pill + brief title. Used everywhere a row/card
+// header renders an issue title across all pages (committee / builder /
+// admin / submitted). Keeps the id visible at a glance without taking
+// row real estate.
+window.titleWithTicketId = function (issue) {
+    if (!issue) return "";
+    var tid = (issue.ticketId || "").toString();
+    var title = window.briefTitle(issue);
+    if (!tid) return title;
+    var pill = '<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 font-mono text-[10px] tracking-tight align-middle mr-1.5 select-all" title="Ticket ID: ' + tid + '">' + tid + '</span>';
+    return pill + title;
+};
 </script>

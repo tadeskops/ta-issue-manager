@@ -395,7 +395,7 @@
                     <div class="bg-gradient-to-r from-slate-800/30 to-slate-700/20 p-4 border-b gold-border cursor-pointer hover:bg-slate-800/40 transition-all" onclick="toggleIssue(${index})">
                         <div class="flex items-start justify-between gap-3">
                             <div class="flex-1 min-w-0">
-                                <h3 class="text-base sm:text-lg font-bold text-slate-100 break-words">${window.briefTitle(issue)}</h3>
+                                <h3 class="text-base sm:text-lg font-bold text-slate-100 break-words">${window.titleWithTicketId(issue)}</h3>
                                 <p class="text-xs sm:text-sm text-slate-400 mt-2">
                                     <i class="fas fa-user mr-1.5"></i>${issue.resident.name || 'Unknown'}
                                     <span class="mx-1 text-slate-600">|</span>
