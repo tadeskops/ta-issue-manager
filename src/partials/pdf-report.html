@@ -228,19 +228,43 @@
             + '  <div class="space-y-1 border border-slate-700 rounded-lg p-2 bg-slate-900/40">' + srcHtml + '</div>'
             + '  <p class="text-[10px] text-slate-500 mt-1">Counts reflect the rows currently loaded on this page (filters already applied).</p>'
             + '</div>'
-            + '<div>'
-            + '  <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">Columns</h4>'
-            + '  <div class="grid grid-cols-2 gap-1 border border-slate-700 rounded-lg p-2 bg-slate-900/40">' + colHtml + '</div>'
-            + '</div>'
-            + '<div>'
-            + '  <h4 class="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2">Photos</h4>'
-            + '  <label class="flex items-center gap-2 mb-1"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (inline in each row + gallery at the end of each section)</span></label>'
-            + '  <p class="text-[10px] text-slate-500 mt-1 ml-6">Photos are fetched server-side and may add a few seconds + a few MB to the file.</p>'
-            + '</div>'
+            // Advanced options — collapsed by default so the prompt only
+            // surfaces the two decisions most operators care about (Title +
+            // Sources). Power users can expand to override columns or turn
+            // photos off.
+            + '<details class="border border-slate-700 rounded-lg bg-slate-900/40">'
+            + '  <summary class="cursor-pointer select-none px-3 py-2 text-xs font-bold text-amber-300 uppercase tracking-wider hover:bg-slate-800/60 rounded-lg">'
+            + '    <i class="fas fa-sliders-h mr-1"></i>Advanced options'
+            + '    <span class="text-[10px] font-normal text-slate-400 normal-case ml-2">columns &amp; photos</span>'
+            + '  </summary>'
+            + '  <div class="px-3 pb-3 pt-1 space-y-4">'
+            + '    <div>'
+            + '      <p class="text-[11px] text-slate-400 mb-2">Columns</p>'
+            + '      <div class="grid grid-cols-2 gap-1">' + colHtml + '</div>'
+            + '    </div>'
+            + '    <div>'
+            + '      <label class="flex items-center gap-2"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (inline in each row + gallery at the end of each section)</span></label>'
+            + '      <p class="text-[10px] text-slate-500 mt-1 ml-6">Photos are fetched server-side and may add a few seconds + a few MB to the file.</p>'
+            + '    </div>'
+            + '  </div>'
+            + '</details>'
+            // Progress overlay — large rotating disk + status text + bar.
+            // Replaces the small inline spinner so the wizard makes it
+            // obvious that work is happening and the Download/Preview
+            // buttons stay disabled until the PDF is ready.
             + '<div id="reportProgress" class="hidden">'
-            + '  <div class="flex items-center gap-2 text-amber-300 text-xs">'
-            + '    <i class="fas fa-spinner fa-spin"></i>'
-            + '    <span id="reportProgressText">Working…</span>'
+            + '  <div class="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3">'
+            + '    <div class="relative flex-shrink-0">'
+            + '      <div class="w-10 h-10 rounded-full border-4 border-amber-500/20 border-t-amber-300 animate-spin"></div>'
+            + '      <i class="fas fa-file-pdf absolute inset-0 m-auto text-amber-300 text-sm"></i>'
+            + '    </div>'
+            + '    <div class="flex-1 min-w-0">'
+            + '      <div id="reportProgressText" class="text-amber-200 text-sm font-semibold">Working…</div>'
+            + '      <div class="mt-1.5 h-1.5 rounded bg-slate-800 overflow-hidden">'
+            + '        <div id="reportProgressBar" class="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-200" style="width:0%"></div>'
+            + '      </div>'
+            + '      <div class="text-[10px] text-slate-400 mt-1">Please wait — Download will enable when the PDF is ready.</div>'
+            + '    </div>'
             + '  </div>'
             + '</div>';
 
@@ -265,12 +289,15 @@
         var pBtn = document.getElementById("reportPreviewBtn");
         var dBtn = document.getElementById("reportDownloadBtn");
         if (prog) prog.classList.toggle("hidden", !busy);
-        if (pBtn) pBtn.disabled = busy;
-        if (dBtn) dBtn.disabled = busy;
+        if (pBtn) { pBtn.disabled = busy; pBtn.classList.toggle("opacity-50", busy); pBtn.classList.toggle("cursor-not-allowed", busy); }
+        if (dBtn) { dBtn.disabled = busy; dBtn.classList.toggle("opacity-50", busy); dBtn.classList.toggle("cursor-not-allowed", busy); }
+        if (!busy) _progress("", 0);
     }
-    function _progress(text) {
+    function _progress(text, pct) {
         var t = document.getElementById("reportProgressText");
-        if (t) t.textContent = text;
+        var b = document.getElementById("reportProgressBar");
+        if (t && text) t.textContent = text;
+        if (b && typeof pct === "number") b.style.width = Math.max(0, Math.min(100, pct)) + "%";
     }
 
     // ----- PDF generation --------------------------------------------------
@@ -301,7 +328,7 @@
 
         _state.running = true;
         _setBusy(true);
-        _progress("Building tables…");
+        _progress("Building tables…", 5);
 
         try {
             // Landscape if many columns or any wide ones; A4 either way.
@@ -312,20 +339,24 @@
             var titleText = (document.getElementById("reportTitleInput") || {}).value || "Issues Report";
 
             _drawCover(doc, titleText, enabled);
+            _progress("Cover page ready", 15);
 
             // Pre-fetch all photos we'll need (deduped by file id) before
             // we lay out tables, so addImage calls are synchronous.
             var photoCache = {};
             if (_state.photos.enabled) {
-                _progress("Fetching photos…");
+                _progress("Fetching photos…", 20);
                 photoCache = await _prefetchPhotos(enabled);
             }
+            _progress("Rendering sections…", 60);
 
             for (var s = 0; s < enabled.length; s++) {
-                _progress("Rendering: " + enabled[s].label);
+                var sectPct = 60 + Math.round(((s + 1) / enabled.length) * 30);
+                _progress("Rendering: " + enabled[s].label + " (" + (s + 1) + "/" + enabled.length + ")", sectPct);
                 _drawSection(doc, enabled[s], activeCols, photoCache);
             }
 
+            _progress("Finalising…", 95);
             _drawFooters(doc);
 
             var fileBase = (titleText || "issues-report")
@@ -333,6 +364,7 @@
             var stamp = new Date().toISOString().slice(0, 10);
             var fileName = (fileBase || "issues-report") + "-" + stamp + ".pdf";
 
+            _progress("Done — opening file", 100);
             if (action === "download") {
                 doc.save(fileName);
             } else {
@@ -595,7 +627,9 @@
         function next() {
             if (i >= links.length) return Promise.resolve(cache);
             var link = links[i++];
-            _progress("Fetching photos… (" + i + " / " + links.length + ")");
+            // Photo fetch occupies the 20-60% band of the overall progress.
+            var pct = 20 + Math.round((i / links.length) * 40);
+            _progress("Fetching photos… (" + i + " / " + links.length + ")", pct);
             return window.API.getReportPhotoB64(link, 800)
                 .then(function (resp) {
                     if (resp && resp.success && resp.data && resp.data.b64) {
