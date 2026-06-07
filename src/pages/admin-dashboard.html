@@ -24,6 +24,13 @@
                    class="bg-amber-500 hover:bg-amber-600 text-white px-2.5 sm:px-4 py-1.5 sm:py-2 rounded font-semibold text-xs sm:text-sm whitespace-nowrap">
                     <i class="fas fa-pen-to-square mr-1.5 sm:mr-2"></i>Submit New Issue
                 </a>
+                <a id="fullReportBtn" href="#" target="_blank" rel="noopener noreferrer"
+                   class="hidden inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-rose-700 hover:bg-rose-600 text-white font-medium text-xs transition-all border border-rose-400/30 shadow whitespace-nowrap"
+                   title="View latest committed full report (PDF)" aria-label="View Full Report (PDF)">
+                    <i class="fas fa-file-pdf text-[11px]"></i>
+                    <span class="hidden sm:inline">View Full Report</span>
+                    <i class="fas fa-arrow-up-right-from-square text-[10px] opacity-70"></i>
+                </a>
                 <button onclick="logout()" class="bg-red-500 text-white px-2.5 sm:px-4 py-1.5 sm:py-2 rounded hover:bg-red-600 text-xs sm:text-sm whitespace-nowrap" aria-label="Logout">
                     <i class="fas fa-sign-out-alt sm:mr-1"></i><span class="hidden sm:inline">Logout</span>
                 </button>
@@ -162,6 +169,18 @@
                 console.warn('getClientConfig failed, using defaults:', e && e.message);
                 window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
             }
+            // Reveal View Full Report when the weekly-report-backup flag
+            // is on AND a public URL is configured (auto-derived
+            // server-side from BACKUP_REPO when the tunable is empty).
+            try {
+                const _f = (window.IRP_CLIENT_CONFIG.features) || {};
+                const _t = (window.IRP_CLIENT_CONFIG.tunables) || {};
+                const _u = _t.FULL_REPORT_PUBLIC_URL || '';
+                if (_f.FEATURE_WEEKLY_REPORT_BACKUP === true && _u) {
+                    const a = document.getElementById('fullReportBtn');
+                    if (a) { a.href = _u; a.classList.remove('hidden'); }
+                }
+            } catch (e) { /* non-fatal */ }
             // Strip SLA UI when FEATURE_SLA is off.
             if (((window.IRP_CLIENT_CONFIG.features) || {}).FEATURE_SLA !== true) {
                 const slaKpi = document.getElementById('kpiSLA');

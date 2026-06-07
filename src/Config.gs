@@ -151,11 +151,28 @@ function getTunable(name) {
 function getClientConfig() {
     try {
         const cfg = getConfig();
+        const features = Object.assign({}, DEFAULT_FEATURES, cfg.features || {});
+        const tunables = Object.assign({}, DEFAULT_TUNABLES, cfg.tunables || {});
+        // Auto-derive the two report URLs from the GitHub backup config
+        // when the operator hasn't set them explicitly. The PDFs land at
+        // a known path inside the backup repo, so a default raw URL is
+        // safe — operators can still override per-tunable to point at a
+        // different mirror or a CDN. Only filled in when the feature
+        // flag is on (otherwise the buttons stay hidden anyway).
+        if (features.FEATURE_WEEKLY_REPORT_BACKUP === true) {
+            try {
+                const bp = backup_props_();
+                const dir = (bp.dir || "backups").replace(/^\/+|\/+$/g, "");
+                const base = "https://raw.githubusercontent.com/" + bp.repo + "/" + bp.branch + "/" + dir + "/";
+                if (!tunables.WEEKLY_REPORT_PUBLIC_URL) tunables.WEEKLY_REPORT_PUBLIC_URL = base + "TA_IAP_Report.pdf";
+                if (!tunables.FULL_REPORT_PUBLIC_URL)   tunables.FULL_REPORT_PUBLIC_URL   = base + "TA_IAP_Full_Report.pdf";
+            } catch (e) { /* non-fatal — tunables stay empty, buttons stay hidden */ }
+        }
         return {
             success: true,
             data: {
-                features: Object.assign({}, DEFAULT_FEATURES, cfg.features || {}),
-                tunables: Object.assign({}, DEFAULT_TUNABLES, cfg.tunables || {}),
+                features: features,
+                tunables: tunables,
                 logoUrl:  cfg.logoUrl || ""
             },
             error: null
