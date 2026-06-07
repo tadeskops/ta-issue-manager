@@ -169,14 +169,13 @@
                 console.warn('getClientConfig failed, using defaults:', e && e.message);
                 window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
             }
-            // Reveal View Full Report when the weekly-report-backup flag
-            // is on AND a public URL is configured (auto-derived
-            // server-side from BACKUP_REPO when the tunable is empty).
+            // Reveal View Full Report whenever a public URL resolves
+            // (auto-derived server-side from BACKUP_REPO when the
+            // FULL_REPORT_PUBLIC_URL tunable is empty).
             try {
-                const _f = (window.IRP_CLIENT_CONFIG.features) || {};
                 const _t = (window.IRP_CLIENT_CONFIG.tunables) || {};
                 const _u = _t.FULL_REPORT_PUBLIC_URL || '';
-                if (_f.FEATURE_WEEKLY_REPORT_BACKUP === true && _u) {
+                if (_u) {
                     const a = document.getElementById('fullReportBtn');
                     if (a) { a.href = _u; a.classList.remove('hidden'); }
                 }

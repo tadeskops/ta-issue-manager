@@ -447,20 +447,22 @@
                 const btn = document.getElementById('exportReportBtn');
                 if (btn) btn.classList.remove('hidden');
             }
-            // Reveal View Full Report when the weekly-report-backup flag
-            // is on AND a public URL is configured. Also opt this page
-            // into the wizard's auto-commit hook (signed-in dashboards
-            // only — public pages MUST NOT set this flag).
+            // Reveal View Full Report whenever a public URL resolves
+            // (auto-derived server-side from BACKUP_REPO when the
+            // FULL_REPORT_PUBLIC_URL tunable is empty). The wizard's
+            // auto-commit hook stays gated by FEATURE_WEEKLY_REPORT_BACKUP
+            // — signed-in dashboards only push back to GitHub when the
+            // feature flag is explicitly on.
             try {
                 const _f = (window.IRP_CLIENT_CONFIG.features) || {};
                 const _t = (window.IRP_CLIENT_CONFIG.tunables) || {};
                 const _u = _t.FULL_REPORT_PUBLIC_URL || '';
                 if (_f.FEATURE_WEEKLY_REPORT_BACKUP === true) {
                     window.IRP_AUTO_COMMIT_FULL_REPORT = true;
-                    if (_u) {
-                        const a = document.getElementById('fullReportBtn');
-                        if (a) { a.href = _u; a.classList.remove('hidden'); }
-                    }
+                }
+                if (_u) {
+                    const a = document.getElementById('fullReportBtn');
+                    if (a) { a.href = _u; a.classList.remove('hidden'); }
                 }
             } catch (e) { /* non-fatal */ }
             // Strip SLA UI when FEATURE_SLA is off.

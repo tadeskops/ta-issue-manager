@@ -59,8 +59,8 @@ const DEFAULT_FEATURES = {
     FEATURE_OPEN_SHEET_LINK:    false, // "Open in Sheets" pill on the public submitted-issues page. OFF by default — opt-in (the link points at the underlying spreadsheet, anyone with the link can view it).
     FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,  // show severity badge/filter/sort on submitted-issues page
     FEATURE_COMMITTEE_PHOTO_ATTACH: false,  // committee "Upload Photo" button in detail view + addPhotosToIssue API. OFF by default — opt-in.
-    FEATURE_PDF_REPORT:         false,  // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. OFF by default — opt-in.
-    FEATURE_WEEKLY_REPORT_BACKUP: false, // Weekly anonymised PDF committed to GitHub (TA_IAP_Report.pdf) + login-page "View Report" button. OFF by default — opt-in (operator must also set GITHUB_TOKEN, install trigger, and set WEEKLY_REPORT_PUBLIC_URL for the button to render).
+    FEATURE_PDF_REPORT:         true,   // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. ON by default.
+    FEATURE_WEEKLY_REPORT_BACKUP: true,  // Weekly PDF committed to GitHub (TA_IAP_Full_Report.pdf with embedded photos) + cross-page "View Full Report" pill. ON by default; operator still needs GITHUB_TOKEN + an installed trigger for the cron itself to run.
     FEATURE_SLA:                false   // SLA KPIs, SLA Days column, BREACHED filter, and sla:{} sub-object on issue APIs. OFF by default — opt-in.
 };
 
@@ -159,17 +159,17 @@ function getClientConfig() {
         // when the operator hasn't set them explicitly. The PDFs land at
         // a known path inside the backup repo, so a default raw URL is
         // safe — operators can still override per-tunable to point at a
-        // different mirror or a CDN. Only filled in when the feature
-        // flag is on (otherwise the buttons stay hidden anyway).
-        if (features.FEATURE_WEEKLY_REPORT_BACKUP === true) {
-            try {
-                const bp = backup_props_();
-                const dir = (bp.dir || "backups").replace(/^\/+|\/+$/g, "");
-                const base = "https://raw.githubusercontent.com/" + bp.repo + "/" + bp.branch + "/" + dir + "/";
-                if (!tunables.WEEKLY_REPORT_PUBLIC_URL) tunables.WEEKLY_REPORT_PUBLIC_URL = base + "TA_IAP_Report.pdf";
-                if (!tunables.FULL_REPORT_PUBLIC_URL)   tunables.FULL_REPORT_PUBLIC_URL   = base + "TA_IAP_Full_Report.pdf";
-            } catch (e) { /* non-fatal — tunables stay empty, buttons stay hidden */ }
-        }
+        // different mirror or a CDN. Always filled in (independent of
+        // FEATURE_WEEKLY_REPORT_BACKUP) so the View Full Report pill
+        // works even on pages that don't gate by the flag — the link
+        // resolves to whatever the cron last committed.
+        try {
+            const bp = backup_props_();
+            const dir = (bp.dir || "backups").replace(/^\/+|\/+$/g, "");
+            const base = "https://raw.githubusercontent.com/" + bp.repo + "/" + bp.branch + "/" + dir + "/";
+            if (!tunables.WEEKLY_REPORT_PUBLIC_URL) tunables.WEEKLY_REPORT_PUBLIC_URL = base + "TA_IAP_Report.pdf";
+            if (!tunables.FULL_REPORT_PUBLIC_URL)   tunables.FULL_REPORT_PUBLIC_URL   = base + "TA_IAP_Full_Report.pdf";
+        } catch (e) { /* non-fatal — tunables stay empty, buttons stay hidden */ }
         return {
             success: true,
             data: {

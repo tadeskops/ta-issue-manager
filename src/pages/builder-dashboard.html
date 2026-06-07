@@ -291,10 +291,10 @@
                 const _u = _t.FULL_REPORT_PUBLIC_URL || '';
                 if (_f.FEATURE_WEEKLY_REPORT_BACKUP === true) {
                     window.IRP_AUTO_COMMIT_FULL_REPORT = true;
-                    if (_u) {
-                        const a = document.getElementById('fullReportBtn');
-                        if (a) { a.href = _u; a.classList.remove('hidden'); }
-                    }
+                }
+                if (_u) {
+                    const a = document.getElementById('fullReportBtn');
+                    if (a) { a.href = _u; a.classList.remove('hidden'); }
                 }
             } catch (e) { /* non-fatal */ }
             // Strip SLA UI when FEATURE_SLA is off.

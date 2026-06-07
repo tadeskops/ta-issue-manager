@@ -18,11 +18,17 @@
 //   2. TA_IAP_Full_Report.pdf  (a.k.a. "full report")
 //      - Scope: PENDING + ACTIVE + CLOSED + REJECTED
 //      - Names, flats, descriptions kept as-is
-//      - Photos included only when the file was pushed from a dashboard's
-//        Export Report wizard (`commitFullReportPdf`); the weekly server
-//        fallback is text-only (DocumentApp can't reliably embed Drive
-//        photos at scale).
-//      - Linked from dashboard pages only (committee/builder/admin)
+//      - Photos embedded inline: server-side fallback now fetches Drive
+//        thumbnails authenticated (UrlFetchApp + script OAuth) and
+//        embeds them via DocumentApp.Body.appendImage. Capped at
+//        4 per issue / 60 per report to keep PDF size + execution
+//        time bounded. The dashboard wizard's `commitFullReportPdf`
+//        path still wins when the wizard is used, but the cron file
+//        is no longer text-only.
+//      - Linked from EVERY page (login, submitted, committee, builder,
+//        admin) via a small "View Full Report" pill that resolves to
+//        FULL_REPORT_PUBLIC_URL (auto-derived from BACKUP_REPO when
+//        the operator hasn't set the tunable).
 //
 // FIRST-TIME SETUP (run once in the Apps Script editor):
 //   1. Confirm Backup.gs script properties (GITHUB_TOKEN, etc.) are set.
@@ -44,7 +50,7 @@
 //
 // PUBLIC FUNCTIONS:
 //   generateWeeklyReportPdf()    -> manual: build + commit anonymised
-//   generateFullReportPdf()      -> manual: build + commit full (server-side, no photos)
+//   generateFullReportPdf()      -> manual: build + commit full (server-side, embeds photos)
 //   commitFullReportPdf(b64, src)-> API: accept wizard-rendered PDF bytes
 //                                  from a dashboard and commit them as
 //                                  TA_IAP_Full_Report.pdf (overwrites).
@@ -103,6 +109,7 @@ function weeklyReport_readPending_() {
             subcategory: String(r[PENDING_COL.SUBCATEGORY] || ""),
             severity:    String(r[PENDING_COL.SEVERITY] || ""),
             description: String(r[PENDING_COL.DESCRIPTION] || ""),
+            photoLinks:  splitPhotoLinks_(r[PENDING_COL.PHOTO]),
             status:      state,
             section:     "Pending"
         });
@@ -127,6 +134,7 @@ function weeklyReport_readActive_() {
             subcategory: String(r[LIVE_COL.SUBCATEGORY] || ""),
             severity:    String(r[LIVE_COL.SEVERITY] || ""),
             description: String(r[LIVE_COL.DESCRIPTION] || ""),
+            photoLinks:  splitPhotoLinks_(r[LIVE_COL.PHOTO]),
             status:      String(r[LIVE_COL.STATUS] || "ASSIGNED"),
             section:     "Active"
         });
@@ -152,6 +160,7 @@ function weeklyReport_readClosed_() {
             subcategory: String(r[LIVE_COL.SUBCATEGORY] || ""),
             severity:    String(r[LIVE_COL.SEVERITY] || ""),
             description: String(r[LIVE_COL.DESCRIPTION] || ""),
+            photoLinks:  splitPhotoLinks_(r[LIVE_COL.PHOTO]),
             status:      "CLOSED",
             closedAt:    r[CLOSED_AT_IDX],
             section:     "Closed"
@@ -177,6 +186,7 @@ function weeklyReport_readRejected_() {
             subcategory: String(r[PENDING_COL.SUBCATEGORY] || ""),
             severity:    String(r[PENDING_COL.SEVERITY] || ""),
             description: String(r[PENDING_COL.DESCRIPTION] || ""),
+            photoLinks:  splitPhotoLinks_(r[PENDING_COL.PHOTO]),
             rejectionReason: String(r[PENDING_COL.REJECTION_REASON] || ""),
             status:      "REJECTED",
             section:     "Rejected"
@@ -326,6 +336,10 @@ function weeklyReport_renderPdfBlob_(rows, stats, variant) {
     const sections = (variant === "ANONYMISED")
         ? ["Pending", "Active"]
         : ["Pending", "Active", "Closed", "Rejected"];
+    // Total images budget across the whole document. Capped to keep
+    // PDF size and execution time bounded — Drive thumbnail fetches at
+    // w800 average ~60-100KB, so 60 images ≈ 5 MB of images.
+    const photoBudget = { remaining: (variant === "FULL") ? 60 : 0 };
     sections.forEach(function (sec) {
         const slice = rows.filter(function (r) { return r.section === sec; });
         if (!slice.length) return;
@@ -333,6 +347,9 @@ function weeklyReport_renderPdfBlob_(rows, stats, variant) {
         body.appendParagraph(sec + " issues (" + slice.length + ")")
             .setHeading(DocumentApp.ParagraphHeading.HEADING2);
         weeklyReport_appendIssueTable_(body, slice, variant);
+        if (variant === "FULL" && photoBudget.remaining > 0) {
+            weeklyReport_appendPhotosBlock_(body, slice, photoBudget);
+        }
     });
 
     // Footer
@@ -421,6 +438,92 @@ function weeklyReport_appendIssueTable_(body, slice, variant) {
     }
 }
 
+// Append an inline photos block beneath an issue section's table.
+// Used only by the FULL variant. Each issue with photos gets a small
+// label ("Ticket — Photos (N)") and up to 4 thumbnails laid out in a
+// 2-column inline table. Drive thumbnails are fetched authenticated via
+// UrlFetchApp (the report runs server-side under the script owner, so
+// any photo the script owner can read is reachable). Capped per-issue
+// and globally via the shared budget object so the doc stays under
+// the GitHub PDF size limit (~50 MB) and the Apps Script execution
+// budget (~6 min).
+function weeklyReport_appendPhotosBlock_(body, slice, budget) {
+    const PER_ISSUE_CAP = 4;
+    const THUMB_WIDTH_PX = 240;     // ~63 mm in the rendered PDF
+    const THUMB_FETCH_W  = 800;     // request bigger source for crisper print
+    for (let i = 0; i < slice.length; i++) {
+        if (budget.remaining <= 0) break;
+        const r = slice[i];
+        const links = (r.photoLinks || []).filter(Boolean);
+        if (!links.length) continue;
+        const take = Math.min(links.length, PER_ISSUE_CAP, budget.remaining);
+        const blobs = [];
+        for (let j = 0; j < take; j++) {
+            const id = driveFileIdFromUrl_(links[j]);
+            if (!id) continue;
+            const blob = weeklyReport_fetchDriveThumb_(id, THUMB_FETCH_W);
+            if (blob) blobs.push(blob);
+        }
+        if (!blobs.length) continue;
+        body.appendParagraph(r.ticketId + " — Photos (" + blobs.length + ")")
+            .setHeading(DocumentApp.ParagraphHeading.HEADING3);
+        // Lay out in a 2-column grid for readability.
+        const cols = 2;
+        const grid = [];
+        for (let k = 0; k < blobs.length; k += cols) {
+            const rowCells = [];
+            for (let kk = 0; kk < cols; kk++) {
+                rowCells.push(blobs[k + kk] ? "" : "");
+            }
+            grid.push(rowCells);
+        }
+        const t = body.appendTable(grid);
+        let idx = 0;
+        for (let rr = 0; rr < t.getNumRows(); rr++) {
+            const row = t.getRow(rr);
+            for (let cc = 0; cc < row.getNumCells(); cc++) {
+                const blob = blobs[idx++];
+                const cell = row.getCell(cc);
+                cell.clear();
+                if (!blob) continue;
+                try {
+                    const img = cell.appendImage(blob);
+                    img.setWidth(THUMB_WIDTH_PX);
+                    // Preserve aspect: appendImage gives natural
+                    // dimensions, scaling width re-flows height.
+                } catch (e) {
+                    cell.appendParagraph("(photo unavailable)")
+                        .editAsText().setItalic(true).setForegroundColor("#888888").setFontSize(8);
+                }
+            }
+        }
+        budget.remaining -= blobs.length;
+    }
+}
+
+// Authenticated Drive thumbnail fetch. Returns a Blob (image/jpeg) or
+// null when the fetch fails — never throws so a single broken photo
+// can't sink the whole report.
+function weeklyReport_fetchDriveThumb_(fileId, widthPx) {
+    try {
+        const url = "https://drive.google.com/thumbnail?id=" + fileId + "&sz=w" + widthPx;
+        const resp = UrlFetchApp.fetch(url, {
+            muteHttpExceptions: true,
+            followRedirects:    true,
+            headers: { "Authorization": "Bearer " + ScriptApp.getOAuthToken() }
+        });
+        const code = resp.getResponseCode();
+        if (code < 200 || code >= 300) return null;
+        const blob = resp.getBlob();
+        const mime = (blob.getContentType() || "").toLowerCase();
+        if (mime.indexOf("image/") !== 0) return null;
+        return blob;
+    } catch (e) {
+        Logger.log("[wr-full] thumb fetch failed for " + fileId + ": " + e);
+        return null;
+    }
+}
+
 // ----------------------------------------------------------------------------
 // PUBLIC: BUILD + COMMIT
 // ----------------------------------------------------------------------------
@@ -470,7 +573,7 @@ function generateWeeklyReportPdf(reason) {
     }
 }
 
-// Full report — server-side fallback (text only, no photos).
+// Full report — server-side build (embeds photos via authenticated Drive thumbnail fetch).
 function generateFullReportPdf(reason) {
     Logger.log("========== generateFullReportPdf START (reason=" + (reason || "manual") + ") ==========");
     if (!getFeatureFlag("FEATURE_WEEKLY_REPORT_BACKUP")) {

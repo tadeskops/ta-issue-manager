@@ -54,14 +54,17 @@
             <i class="fas fa-eye mr-2"></i>View Submitted Issues (Read Only)
         </button>
 
-        <!-- Anonymised weekly report (small sleek pill, hidden until backend
-             confirms the feature is enabled). -->
+        <!-- View existing committed full report on GitHub (small sleek
+             pill, hidden until backend confirms a public URL is
+             available — auto-derived from BACKUP_REPO when the
+             FULL_REPORT_PUBLIC_URL tunable is empty). -->
         <div class="flex justify-center mb-6">
-            <a id="weeklyReportBtn" href="#" target="_blank" rel="noopener noreferrer"
+            <a id="fullReportBtn" href="#" target="_blank" rel="noopener noreferrer"
                class="hidden inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-rose-700/90 hover:bg-rose-600 text-white font-medium text-xs transition-all border border-rose-400/30 shadow whitespace-nowrap"
-               title="View latest committed weekly status report (PDF, anonymised)" aria-label="View weekly status report (PDF)">
+               title="View latest committed full report (PDF). Use your browser's Save / Download to keep a copy."
+               aria-label="View Full Report (PDF)">
                 <i class="fas fa-file-pdf text-[11px]"></i>
-                <span>View Report (PDF)</span>
+                <span>View Full Report (PDF)</span>
                 <i class="fas fa-arrow-up-right-from-square text-[10px] opacity-70"></i>
             </a>
         </div>
@@ -199,14 +202,15 @@
                 window.IRP_CLIENT_CONFIG = cc || {};
             } catch (e) { /* non-fatal */ }
 
-            // Weekly anonymised report link (gated by FEATURE_WEEKLY_REPORT_BACKUP
-            // AND a non-empty WEEKLY_REPORT_PUBLIC_URL — both must be set).
+            // View Full Report — same affordance as committee/builder/admin
+            // dashboards, ungated (any visitor can download the latest
+            // committed PDF from the public backup repo). Hidden only
+            // when no URL can be resolved.
             try {
                 const cc = window.IRP_CLIENT_CONFIG || {};
-                const flagOn = !!(cc.features && cc.features.FEATURE_WEEKLY_REPORT_BACKUP);
-                const url = (cc.tunables && cc.tunables.WEEKLY_REPORT_PUBLIC_URL) || '';
-                if (flagOn && url) {
-                    const a = document.getElementById('weeklyReportBtn');
+                const url = (cc.tunables && cc.tunables.FULL_REPORT_PUBLIC_URL) || '';
+                if (url) {
+                    const a = document.getElementById('fullReportBtn');
                     if (a) { a.href = url; a.classList.remove('hidden'); }
                 }
             } catch (e) { /* non-fatal */ }

@@ -62,6 +62,13 @@
                     aria-label="Export Report" title="Export Report">
                     <i class="fas fa-file-pdf sm:mr-2"></i><span class="hidden sm:inline">Export Report</span>
                 </button>
+                <a id="fullReportBtn" href="#" target="_blank" rel="noopener noreferrer"
+                   class="hidden inline-flex items-center gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-semibold transition-colors text-xs sm:text-sm border border-rose-400/30 shadow-lg whitespace-nowrap"
+                   title="View latest committed full report (PDF). Use your browser's Save / Download to keep a copy."
+                   aria-label="View Full Report (PDF)">
+                    <i class="fas fa-file-pdf sm:mr-2"></i><span class="hidden sm:inline">View Full Report</span>
+                    <i class="fas fa-arrow-up-right-from-square text-[10px] opacity-80"></i>
+                </a>
                 <button onclick="goLogin()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 font-semibold transition-colors text-xs sm:text-sm border border-slate-600/30 whitespace-nowrap" aria-label="Back to Login" title="Back to Login">
                     <i class="fas fa-arrow-left sm:mr-2"></i><span class="hidden sm:inline">Back to Login</span>
                 </button>
@@ -254,6 +261,17 @@
                     const btn = document.getElementById('exportReportBtn');
                     if (btn) btn.classList.remove('hidden');
                 }
+                // View Full Report pill — shown whenever a public URL
+                // resolves (auto-derived server-side when empty). No
+                // feature-flag gate: this is a passive read-only link.
+                try {
+                    const tunables = (cfg && cfg.data && cfg.data.tunables) || (cfg && cfg.tunables) || {};
+                    const url = tunables.FULL_REPORT_PUBLIC_URL || '';
+                    if (url) {
+                        const a = document.getElementById('fullReportBtn');
+                        if (a) { a.href = url; a.classList.remove('hidden'); }
+                    }
+                } catch (e) { /* non-fatal */ }
             } catch (e) {
                 SHOW_SEVERITY = false;
                 window.IRP_CLIENT_CONFIG = { features: {}, tunables: {} };
