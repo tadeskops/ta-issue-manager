@@ -12,8 +12,10 @@
 //   2. Run `installWeeklyBackupTrigger` once - approves OAuth scopes and
 //      schedules the backup job. Cadence follows the
 //      REPORT_BACKUP_FREQUENCY tunable (CONFIG sheet):
-//        "daily"  (default) → every day at ~02:00 in the script time zone
-//        "weekly"          → Mondays at ~02:00 (legacy behaviour)
+//        "3x-daily" (default) → every 8 hours via .everyHours(8)
+//                              (≈ 3 fires per 24 h)
+//        "daily"              → every day at ~02:00 in the script time zone
+//        "weekly"             → Mondays at ~02:00 (legacy behaviour)
 //      Re-run this function whenever the tunable changes so the
 //      installed trigger is recreated with the new cadence.
 //
@@ -22,9 +24,9 @@
 //   backupAndResetFromForm()     -> backup, then wipe PENDING_REVIEW +
 //                                   LIVE_ISSUES and repopulate LIVE_ISSUES
 //                                   from "Form Responses 1"
-//   installWeeklyBackupTrigger() -> schedule weeklyBackupJob (daily ~02:00
-//                                   IST by default, or Mondays ~02:00 when
-//                                   REPORT_BACKUP_FREQUENCY="weekly")
+//   installWeeklyBackupTrigger() -> schedule weeklyBackupJob (every 8 h
+//                                   by default; daily or weekly when
+//                                   REPORT_BACKUP_FREQUENCY says so)
 //   weeklyBackupJob()            -> trigger handler; do not call directly
 // ============================================================================
 
@@ -295,21 +297,29 @@ function backupAndResetFromForm() {
     }
 }
 
-// Resolve the configured backup cadence. Returns "daily" or "weekly".
-// Any other value (typo, blank) falls back to "daily" — the safer default
-// per the v2026.06 policy change.
+// Resolve the configured backup cadence. Returns one of:
+//   "3x-daily" — every 8 hours (default as of v2026.06)
+//   "daily"    — once per day at the legacy hour
+//   "weekly"   — Mondays only at the legacy hour
+// Tolerates a few common spellings ("3x", "thrice-daily", "three-daily").
+// Any other value (typo, blank) falls back to "3x-daily".
 function backup_resolveFrequency_() {
     let raw;
     try { raw = getTunable("REPORT_BACKUP_FREQUENCY"); }
-    catch (e) { raw = "daily"; }
+    catch (e) { raw = "3x-daily"; }
     const s = String(raw || "").trim().toLowerCase();
-    return (s === "weekly") ? "weekly" : "daily";
+    if (s === "weekly") return "weekly";
+    if (s === "daily")  return "daily";
+    if (s === "3x-daily" || s === "3x" || s === "thrice-daily" ||
+        s === "three-daily" || s === "3xdaily" || s === "3-daily") return "3x-daily";
+    return "3x-daily";
 }
 
 // One-shot trigger installer. Removes any prior weeklyBackupJob trigger
 // and creates a new one whose cadence follows the REPORT_BACKUP_FREQUENCY
-// tunable (default "daily" at ~02:00 in the script time zone; set
-// "weekly" in CONFIG to revert to the legacy Mondays-only schedule).
+// tunable. Default "3x-daily" installs .everyHours(8) (≈ 3 fires / 24 h);
+// "daily" installs .everyDays(1).atHour(2); "weekly" reverts to the legacy
+// Mondays-only schedule.
 function installWeeklyBackupTrigger() {
     Logger.log("[trigger] installWeeklyBackupTrigger START");
     const existing = ScriptApp.getProjectTriggers();
@@ -333,13 +343,19 @@ function installWeeklyBackupTrigger() {
             .atHour(2)
             .create();
         scheduleLabel = "Mondays ~02:00 " + tz;
-    } else {
+    } else if (frequency === "daily") {
         t = ScriptApp.newTrigger("weeklyBackupJob")
             .timeBased()
             .everyDays(1)
             .atHour(2)
             .create();
         scheduleLabel = "daily ~02:00 " + tz;
+    } else {
+        t = ScriptApp.newTrigger("weeklyBackupJob")
+            .timeBased()
+            .everyHours(8)
+            .create();
+        scheduleLabel = "every 8 hours (≈ 3x/day) " + tz;
     }
     Logger.log("[trigger] created trigger id=" + t.getUniqueId() +
                " handler=weeklyBackupJob (" + scheduleLabel + ", " +

@@ -48,8 +48,10 @@
 //   5. Run `installWeeklyReportTrigger` once - schedules the report job
 //      that builds BOTH PDFs. Cadence follows the
 //      REPORT_BACKUP_FREQUENCY tunable (CONFIG sheet):
-//        "daily"  (default) → every day at ~03:00 in the script time zone
-//        "weekly"          → Mondays at ~03:00 (legacy behaviour)
+//        "3x-daily" (default) → every 8 hours via .everyHours(8)
+//                              (≈ 3 fires per 24 h)
+//        "daily"              → every day at ~03:00 in the script time zone
+//        "weekly"             → Mondays at ~03:00 (legacy behaviour)
 //      Re-run this function whenever the tunable changes so the
 //      installed trigger is recreated with the new cadence.
 //
@@ -702,9 +704,10 @@ function weeklyReportJob() {
 
 // One-shot trigger installer. Removes any prior weeklyReportJob trigger
 // and creates a new one whose cadence follows the REPORT_BACKUP_FREQUENCY
-// tunable (default "daily" at ~03:00 in the script time zone — one hour
-// after the sheet backup so it picks up that day's snapshot; set
-// "weekly" in CONFIG to revert to the legacy Mondays-only schedule).
+// tunable. Default "3x-daily" installs .everyHours(8) (≈ 3 fires / 24 h);
+// "daily" installs .everyDays(1).atHour(3) (one hour after the daily
+// sheet backup so it picks up that day's snapshot); "weekly" reverts to
+// the legacy Mondays-only schedule.
 function installWeeklyReportTrigger() {
     Logger.log("[trigger] installWeeklyReportTrigger START");
     const existing = ScriptApp.getProjectTriggers();
@@ -727,13 +730,19 @@ function installWeeklyReportTrigger() {
             .atHour(3)
             .create();
         scheduleLabel = "Mondays ~03:00 " + tz;
-    } else {
+    } else if (frequency === "daily") {
         t = ScriptApp.newTrigger("weeklyReportJob")
             .timeBased()
             .everyDays(1)
             .atHour(3)
             .create();
         scheduleLabel = "daily ~03:00 " + tz;
+    } else {
+        t = ScriptApp.newTrigger("weeklyReportJob")
+            .timeBased()
+            .everyHours(8)
+            .create();
+        scheduleLabel = "every 8 hours (≈ 3x/day) " + tz;
     }
     Logger.log("[trigger] created trigger id=" + t.getUniqueId() +
                " handler=weeklyReportJob (" + scheduleLabel + ", " +
