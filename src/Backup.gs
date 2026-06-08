@@ -10,14 +10,21 @@
 //        BACKUP_DIR    = backups                        (optional override)
 //        BACKUP_FILE   = ta-issue-manager.xlsx          (optional override)
 //   2. Run `installWeeklyBackupTrigger` once - approves OAuth scopes and
-//      schedules the weekly backup job.
+//      schedules the backup job. Cadence follows the
+//      REPORT_BACKUP_FREQUENCY tunable (CONFIG sheet):
+//        "daily"  (default) → every day at ~02:00 in the script time zone
+//        "weekly"          → Mondays at ~02:00 (legacy behaviour)
+//      Re-run this function whenever the tunable changes so the
+//      installed trigger is recreated with the new cadence.
 //
 // PUBLIC FUNCTIONS:
 //   backupSheetToGit()           -> manual one-shot backup
 //   backupAndResetFromForm()     -> backup, then wipe PENDING_REVIEW +
 //                                   LIVE_ISSUES and repopulate LIVE_ISSUES
 //                                   from "Form Responses 1"
-//   installWeeklyBackupTrigger() -> schedule weeklyBackupJob (Mon 02:00 IST)
+//   installWeeklyBackupTrigger() -> schedule weeklyBackupJob (daily ~02:00
+//                                   IST by default, or Mondays ~02:00 when
+//                                   REPORT_BACKUP_FREQUENCY="weekly")
 //   weeklyBackupJob()            -> trigger handler; do not call directly
 // ============================================================================
 
@@ -288,8 +295,21 @@ function backupAndResetFromForm() {
     }
 }
 
-// One-shot trigger installer. Removes any prior weeklyBackupJob trigger then
-// creates a new one (Mondays around 02:00 in the script time zone).
+// Resolve the configured backup cadence. Returns "daily" or "weekly".
+// Any other value (typo, blank) falls back to "daily" — the safer default
+// per the v2026.06 policy change.
+function backup_resolveFrequency_() {
+    let raw;
+    try { raw = getTunable("REPORT_BACKUP_FREQUENCY"); }
+    catch (e) { raw = "daily"; }
+    const s = String(raw || "").trim().toLowerCase();
+    return (s === "weekly") ? "weekly" : "daily";
+}
+
+// One-shot trigger installer. Removes any prior weeklyBackupJob trigger
+// and creates a new one whose cadence follows the REPORT_BACKUP_FREQUENCY
+// tunable (default "daily" at ~02:00 in the script time zone; set
+// "weekly" in CONFIG to revert to the legacy Mondays-only schedule).
 function installWeeklyBackupTrigger() {
     Logger.log("[trigger] installWeeklyBackupTrigger START");
     const existing = ScriptApp.getProjectTriggers();
@@ -302,24 +322,42 @@ function installWeeklyBackupTrigger() {
         }
     }
     Logger.log("[trigger] removed prior weeklyBackupJob triggers: " + removed);
-    const t = ScriptApp.newTrigger("weeklyBackupJob")
-        .timeBased()
-        .onWeekDay(ScriptApp.WeekDay.MONDAY)
-        .atHour(2)
-        .create();
+    const frequency = backup_resolveFrequency_();
+    const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
+    let t;
+    let scheduleLabel;
+    if (frequency === "weekly") {
+        t = ScriptApp.newTrigger("weeklyBackupJob")
+            .timeBased()
+            .onWeekDay(ScriptApp.WeekDay.MONDAY)
+            .atHour(2)
+            .create();
+        scheduleLabel = "Mondays ~02:00 " + tz;
+    } else {
+        t = ScriptApp.newTrigger("weeklyBackupJob")
+            .timeBased()
+            .everyDays(1)
+            .atHour(2)
+            .create();
+        scheduleLabel = "daily ~02:00 " + tz;
+    }
     Logger.log("[trigger] created trigger id=" + t.getUniqueId() +
-               " handler=weeklyBackupJob (Mondays ~02:00 " +
-               (Session.getScriptTimeZone() || "Asia/Kolkata") + ")");
-    const msg = "Weekly backup trigger installed (Mondays ~02:00). " +
+               " handler=weeklyBackupJob (" + scheduleLabel + ", " +
+               "REPORT_BACKUP_FREQUENCY=" + frequency + ")");
+    const msg = "Sheet backup trigger installed (" + scheduleLabel +
+                ", REPORT_BACKUP_FREQUENCY=" + frequency + "). " +
                 "Removed " + removed + " prior trigger(s).";
     Logger.log("[trigger] DONE: " + msg);
-    return { success: true, message: msg };
+    return { success: true, message: msg, frequency: frequency };
 }
 
-// Trigger handler. Do not call directly.
+// Trigger handler. Do not call directly. The reason label reflects the
+// installed cadence so commit history makes it clear whether a given
+// commit came from the daily or weekly schedule.
 function weeklyBackupJob() {
     Logger.log("[trigger] weeklyBackupJob fired at " + new Date().toISOString());
-    const r = backupSheetToGit("weekly");
+    const reason = backup_resolveFrequency_();
+    const r = backupSheetToGit(reason);
     Logger.log("[trigger] weeklyBackupJob result: " + JSON.stringify(r));
     return r;
 }

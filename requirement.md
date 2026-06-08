@@ -328,8 +328,8 @@ Resident Name · Flat Number · Category · Sub-Category · Tower · Exact Locat
 |---|---|---|
 | `onFormSubmit` | On form submit | Create ticket in `PENDING_REVIEW` |
 | `clearConfigCache` *(optional)* | Hourly | Pick up CONFIG edits without manual run |
-| `weeklyBackupJob` *(optional)* | Mondays ~02:00 IST | XLSX snapshot of the spreadsheet committed to `backups/ta-issue-manager.xlsx`. Installed by `installWeeklyBackupTrigger` once `GITHUB_TOKEN` is set. |
-| `weeklyReportJob` *(optional, gated by `FEATURE_WEEKLY_REPORT_BACKUP`)* | Mondays ~03:00 IST | Builds two PDF status reports server-side and commits both to GitHub: `backups/TA_IAP_Report.pdf` (anonymised — pending+active only, resident name and flat number redacted to `—`) and `backups/TA_IAP_Full_Report.pdf` (full content — pending+active+closed+rejected, no photos in the server fallback). Installed by `installWeeklyReportTrigger`. The full-report file is also overwritten on demand whenever a committee/builder clicks **Export Report** on a dashboard (the wizard streams the rendered PDF — including photos — back to the server via `commitFullReportPdf`); the weekly trigger is the fallback when nobody exported that week. See §19.14. |
+| `weeklyBackupJob` *(optional)* | `REPORT_BACKUP_FREQUENCY` (default `"daily"`) at ~02:00 IST — daily by default, or Mondays only when set to `"weekly"` | XLSX snapshot of the spreadsheet committed to `backups/ta-issue-manager.xlsx`. Installed by `installWeeklyBackupTrigger` once `GITHUB_TOKEN` is set. Re-run the installer after editing the tunable so the trigger is recreated with the new cadence. |
+| `weeklyReportJob` *(optional, gated by `FEATURE_WEEKLY_REPORT_BACKUP`)* | `REPORT_BACKUP_FREQUENCY` (default `"daily"`) at ~03:00 IST — one hour after the sheet backup so it picks up that day's snapshot; flip the tunable to `"weekly"` to revert to Mondays only | Builds two PDF status reports server-side and commits both to GitHub: `backups/TA_IAP_Report.pdf` (anonymised — pending+active only, resident name and flat number redacted to `—`) and `backups/TA_IAP_Full_Report.pdf` (full content — pending+active+closed+rejected, photos embedded inline). Installed by `installWeeklyReportTrigger`. The full-report file is also overwritten on demand whenever a committee/builder clicks **Export Report** on a dashboard (the wizard streams the rendered PDF — including photos — back to the server via `commitFullReportPdf`); the scheduled trigger is the fallback when nobody exported that day/week. Re-run `installWeeklyReportTrigger` after editing `REPORT_BACKUP_FREQUENCY`. See §19.14. |
 
 ---
 
@@ -517,6 +517,7 @@ of any client-supplied value. The submit form has no severity field.
 | `FEATURE_PUBLIC_FULL_REPORT` | `"true"` | When `"true"` (the default), the public `submitted-issues.html` Export Report behaves the same as the committee/builder Export: **(a)** `getSubmittedIssues` unions `CLOSED_ISSUES` (alongside pending + live + the existing `SUBMITTED_INCLUDE_REJECTED` gate on rejected), so the wizard's PDF covers the full ticket lifecycle; and **(b)** anonymous visitors are allowed to call `commitFullReportPdf`, overwriting `backups/TA_IAP_Full_Report.pdf` — same canonical file the dashboards push to, so the **View Full Report** pill on every page always points at the freshest content regardless of which view ran the export. Requires `FEATURE_PDF_REPORT` + `FEATURE_WEEKLY_REPORT_BACKUP`. The commit handler retains its own defences (`%PDF` magic check, 30 MB size cap, `GITHUB_TOKEN` + `BACKUP_REPO` required). Flip OFF in CONFIG if anonymous abuse appears — that instantly reverts to the prior behaviour (public view excludes closed tickets and cannot write to GitHub) without a redeploy. |
 | `WEEKLY_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Report.pdf` (the anonymised public copy) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf`. **When empty, the server auto-derives this URL from `BACKUP_REPO` + `BACKUP_BRANCH`** unconditionally (no longer gated by `FEATURE_WEEKLY_REPORT_BACKUP`), so the URL is always served via `getClientConfig`. The login page no longer renders an anonymised pill (replaced by **View Full Report**); operators can still mirror the anonymised file externally if needed. |
 | `FULL_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Full_Report.pdf` (the full report including names, flats, closed/rejected rows, **and embedded photos**) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf`. **When empty, the server auto-derives this URL from `BACKUP_REPO` + `BACKUP_BRANCH`** unconditionally so the **View Full Report** pill on every page works out-of-the-box. **Privacy note:** the full file contains residents' names and flat numbers — keep the backup repo private, or override this tunable to point at an authenticated mirror, before sharing widely. |
+| `REPORT_BACKUP_FREQUENCY` | `"daily"` | Cadence for **both** scheduled trigger jobs that commit to the GitHub mirror — the XLSX sheet backup (`weeklyBackupJob`, ~02:00) and the PDF report job (`weeklyReportJob`, ~03:00). `"daily"` (default) installs an every-day trigger at the same hours as the legacy weekly slot, so the canonical `backups/TA_IAP_Full_Report.pdf` and `backups/ta-issue-manager.xlsx` are refreshed once per day even when nobody exports from the dashboard. `"weekly"` reverts to the historic Monday-only schedule. Any other value (typo, blank) is treated as `"daily"`. Apps Script time-based triggers are independent objects — **editing this tunable does not move an already-installed trigger.** Re-run `installWeeklyBackupTrigger` and `installWeeklyReportTrigger` from the Apps Script editor after changing the value so each installer wipes its prior trigger and recreates it with the new cadence. The function names retain the `weekly` prefix for backward compatibility; only the schedule changes. |
 | `FEATURE_SLA` | `"false"` | When `"true"`, every list view (Committee / Builder / Admin) shows SLA breach KPI cards, the **SLA Days** column, the **SLA Breached** filter option, the **SLA Status / Due Date / Days Remaining** detail-modal block, and the PDF wizard exposes `slaDue` + `breached` columns. The `getLiveIssues` API still returns a `sla:{}` sub-object (with placeholder `dueDate:""`, `breached:false`, `daysRemaining:null` when off), and `getDashboardMetrics.slaBreaches` is forced to `0` when off so existing clients don't NPE. SLA due-date is still **computed and written** to `LIVE_ISSUES.SLA_DATE` at `approveIssue` time regardless of the flag, so flipping it on later "just works". The approve-modal severity labels also drop the `(SLA X day)` suffix and the helper note `SLA due date is computed…` when off. Default OFF — opt-in via the CONFIG sheet. |
 
 Defaults live in `DEFAULT_TUNABLES` (`src/Config.gs`); CONFIG sheet values
@@ -704,15 +705,27 @@ Report** pill. The cron itself is gated by `FEATURE_WEEKLY_REPORT_BACKUP`
    `FEATURE_PUBLIC_FULL_REPORT` is on** — flipping the flag off in
    CONFIG instantly revokes anonymous write access without redeploy.
 
-2. **Weekly server fallback (both files).** A time-based trigger
-   `weeklyReportJob` runs Mondays ~03:00 IST (installed via
+2. **Scheduled server fallback (both files).** A time-based trigger
+   `weeklyReportJob` runs at ~03:00 IST (installed via
    `installWeeklyReportTrigger`) and rebuilds **both** files using
-   `DocumentApp` server-side. The anonymised file always overwrites; the
-   full file overwrites too, so a quiet week (no manual export) still
+   `DocumentApp` server-side. **Cadence is configurable via the
+   `REPORT_BACKUP_FREQUENCY` tunable** — `"daily"` (default as of
+   v2026.06) refreshes the canonical files once per day so the
+   **View Full Report** pill is never more than 24 h stale even when
+   nobody exports from the dashboard; `"weekly"` reverts to the legacy
+   Mondays-only schedule. The companion `weeklyBackupJob` (XLSX
+   snapshot, ~02:00) reads the same tunable so the sheet backup and
+   PDF report stay aligned. The anonymised file always overwrites; the
+   full file overwrites too, so a quiet day (no manual export) still
    refreshes the snapshot. `DocumentApp` cannot reliably embed Drive
    photos at scale, so the server-built copy of `TA_IAP_Full_Report.pdf`
    is text-only — the wizard-pushed copy (when available) is the
-   richer one.
+   richer one. **Editing `REPORT_BACKUP_FREQUENCY` does not move an
+   already-installed trigger** — re-run both `installWeeklyBackupTrigger`
+   and `installWeeklyReportTrigger` after changing the value so each
+   installer wipes its prior trigger and recreates it with the new
+   cadence. The function names retain the `weekly` prefix for backward
+   compatibility; only the schedule changes.
 
 **Implementation pointers.** All logic lives in
 [`src/WeeklyReport.gs`](../src/WeeklyReport.gs):

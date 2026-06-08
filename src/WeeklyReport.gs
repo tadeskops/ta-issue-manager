@@ -45,8 +45,13 @@
 //        https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf
 //        https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf
 //      Leaving either blank hides the corresponding UI button.
-//   5. Run `installWeeklyReportTrigger` once - schedules the weekly job
-//      (Mon 03:00 IST) which builds BOTH PDFs.
+//   5. Run `installWeeklyReportTrigger` once - schedules the report job
+//      that builds BOTH PDFs. Cadence follows the
+//      REPORT_BACKUP_FREQUENCY tunable (CONFIG sheet):
+//        "daily"  (default) → every day at ~03:00 in the script time zone
+//        "weekly"          → Mondays at ~03:00 (legacy behaviour)
+//      Re-run this function whenever the tunable changes so the
+//      installed trigger is recreated with the new cadence.
 //
 // PUBLIC FUNCTIONS:
 //   generateWeeklyReportPdf()    -> manual: build + commit anonymised
@@ -682,19 +687,24 @@ function commitFullReportPdf(b64, source) {
 }
 
 // Trigger handler. Builds BOTH PDFs sequentially. Logs each independently
-// so a failure on one does not block the other.
+// so a failure on one does not block the other. The reason label reflects
+// the installed cadence so commit history makes it clear whether a given
+// commit came from the daily or weekly schedule.
 function weeklyReportJob() {
     Logger.log("[trigger] weeklyReportJob fired at " + new Date().toISOString());
-    const a = generateWeeklyReportPdf("weekly");
+    const reason = backup_resolveFrequency_();
+    const a = generateWeeklyReportPdf(reason);
     Logger.log("[trigger] anonymised result: " + JSON.stringify(a));
-    const b = generateFullReportPdf("weekly");
+    const b = generateFullReportPdf(reason);
     Logger.log("[trigger] full server-fallback result: " + JSON.stringify(b));
     return { anonymised: a, full: b };
 }
 
 // One-shot trigger installer. Removes any prior weeklyReportJob trigger
-// then creates a new one (Mondays around 03:00 in the script time zone -
-// one hour after the sheet backup so it picks up that week's snapshot).
+// and creates a new one whose cadence follows the REPORT_BACKUP_FREQUENCY
+// tunable (default "daily" at ~03:00 in the script time zone — one hour
+// after the sheet backup so it picks up that day's snapshot; set
+// "weekly" in CONFIG to revert to the legacy Mondays-only schedule).
 function installWeeklyReportTrigger() {
     Logger.log("[trigger] installWeeklyReportTrigger START");
     const existing = ScriptApp.getProjectTriggers();
@@ -706,17 +716,33 @@ function installWeeklyReportTrigger() {
         }
     }
     Logger.log("[trigger] removed prior weeklyReportJob triggers: " + removed);
-    const t = ScriptApp.newTrigger("weeklyReportJob")
-        .timeBased()
-        .onWeekDay(ScriptApp.WeekDay.MONDAY)
-        .atHour(3)
-        .create();
+    const frequency = backup_resolveFrequency_();
+    const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
+    let t;
+    let scheduleLabel;
+    if (frequency === "weekly") {
+        t = ScriptApp.newTrigger("weeklyReportJob")
+            .timeBased()
+            .onWeekDay(ScriptApp.WeekDay.MONDAY)
+            .atHour(3)
+            .create();
+        scheduleLabel = "Mondays ~03:00 " + tz;
+    } else {
+        t = ScriptApp.newTrigger("weeklyReportJob")
+            .timeBased()
+            .everyDays(1)
+            .atHour(3)
+            .create();
+        scheduleLabel = "daily ~03:00 " + tz;
+    }
     Logger.log("[trigger] created trigger id=" + t.getUniqueId() +
-               " handler=weeklyReportJob (Mondays ~03:00 " +
-               (Session.getScriptTimeZone() || "Asia/Kolkata") + ")");
+               " handler=weeklyReportJob (" + scheduleLabel + ", " +
+               "REPORT_BACKUP_FREQUENCY=" + frequency + ")");
     return {
         success: true,
-        message: "Weekly report trigger installed (Mondays ~03:00). Removed " +
-                 removed + " prior trigger(s)."
+        message: "Report trigger installed (" + scheduleLabel +
+                 ", REPORT_BACKUP_FREQUENCY=" + frequency + "). Removed " +
+                 removed + " prior trigger(s).",
+        frequency: frequency
     };
 }
