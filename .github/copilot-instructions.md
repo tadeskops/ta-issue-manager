@@ -331,3 +331,71 @@ is no PR review buffer. Follow §3.2 for confirmation, and additionally:
   that must be re-run (`setupConfigSheet`, `setupAttachmentFolder`,
   `makeAttachmentFolderPublic`, etc. — see README runbook).
 
+## 4. Intermediate scratch space (`temp/`) and per-turn context loading
+
+Long implementations often need scratch context that should survive
+between turns but never ship to the live Apps Script project or to
+GitHub — design notes, in-progress sheet-schema sketches, half-resolved
+open questions, intermediate config drafts, captured tool outputs that
+will inform a later step.
+
+### 4.1 Always use `temp/` for intermediate context
+
+- Write all such intermediate scratch under the repo-root `temp/`
+  folder. Create it on first use; it is gitignored and **must never**
+  be committed or pushed (see `.gitignore`).
+- One file per topic; use short kebab-case names
+  (`temp/sheet-schema-draft.md`, `temp/role-matrix.md`,
+  `temp/upload-flow.md`). Append to existing files when the topic
+  continues; do not spawn duplicates.
+- Keep entries terse — bullet points, tables, JSON snippets — not
+  prose. The point is to recall context cheaply, not to write a book.
+- When an intermediate decision graduates into a real change, fold it
+  into `requirement.md` (or the relevant code) and **delete the
+  matching `temp/` file** in the same turn. Stale scratch files are
+  worse than no scratch files.
+- Do not put secrets, OAuth client secrets, GitHub PATs, or real
+  resident PII in `temp/`. The folder is local-only but still on the
+  developer's workstation; treat it as untrusted.
+
+### 4.2 Per-turn context loading (token-efficient)
+
+At the start of every turn, before producing any plan or making any
+change, the agent must consider — in this order:
+
+1. **`requirement.md`** — the spec is the source of truth. If the
+   relevant section is already in attached context, do not re-read it;
+   if it is not, read only the section(s) the current request touches
+   (use the file's heading numbering, not a full read).
+2. **`temp/`** — list the directory; read only files whose name is
+   relevant to the current request. Do not bulk-read every file.
+3. **The user's current request.**
+
+This ordering keeps token use bounded:
+
+- Spec sections are referenced by §-number, never reproduced verbatim
+  unless an edit requires it.
+- `temp/` files are loaded on-demand by topic, not eagerly.
+- The agent should prefer to update an existing `temp/` file over
+  pasting the same context into the chat reply.
+
+### 4.3 What belongs in `temp/` vs `requirement.md`
+
+| Goes in `temp/` | Goes in `requirement.md` |
+|---|---|
+| Open questions still being negotiated with the user | Final, agreed behavior |
+| `google.script.run` payload sketches mid-iteration | The final API surface once accepted |
+| Notes on _why_ a default was chosen during exploration | The final default in the feature-flag table |
+| Cross-turn TODOs the user hasn't approved yet | Acceptance criteria once approved |
+| Intermediate diffs / proposed wording for review | The committed wording |
+
+### 4.4 Verification before finishing the task
+
+- [ ] Did this turn produce intermediate notes that the next turn
+      will need? → Saved under `temp/` with a clear name?
+- [ ] Did any `temp/` content graduate into the spec or code this
+      turn? → Corresponding `temp/` file deleted?
+- [ ] Was anything from `temp/` accidentally staged for commit?
+      `git status` must show no `temp/` paths in the staged set.
+
+

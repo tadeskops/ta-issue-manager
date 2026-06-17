@@ -52,3 +52,7 @@ ref/
 *.bak
 *~diag.json
 COMMIT_MSG.tmp
+
+### temp/ -- intermediate scratch (per .github/copilot-instructions.md §4)
+# Working notes the agent saves between turns; never pushed.
+temp/
