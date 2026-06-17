@@ -5,6 +5,61 @@ feature work, refactors, bug fixes, doc edits, anything). They are
 binding — do not skip them because the user did not restate them in the
 current request.
 
+## 0. Repository scope & two-repo workspace boundary
+
+This workspace contains **two sibling repos** under `C:\CR7\TAMC\IRP_Repo\`:
+
+| Folder | Repo | Spec file | Stack |
+|---|---|---|---|
+| `ta-issue-manager/` (this repo) | `github.com/tadeskops/ta-issue-manager` | `requirement.md` | Handover track — Google Apps Script + Sheet + Form + Drive |
+| `ta-society-helpdesk/` (sibling) | `github.com/tadeskops/ta-society-helpdesk` | `tsh_requirement.md` | Daily track — GitHub Pages + Issues + Cloudflare Worker |
+
+**Hard boundary rules — do not cross them:**
+
+1. **Edits scope to one repo per turn.** When the user's request touches
+   files inside this repo (`ta-issue-manager/...`), all edits, commits,
+   and pushes happen here. When the request touches files inside
+   `ta-society-helpdesk/`, switch to that repo's working directory and
+   follow **its** `.github/copilot-instructions.md`. **Never make the
+   same change in both repos in one push** unless the user explicitly
+   asks for a coordinated change.
+
+2. **Spec file = `requirement.md` for this repo only.** Updates to
+   handover-track behavior (roles, sheets, API, config, Apps Script
+   triggers) go into `requirement.md` here. The daily-track spec
+   (`tsh_requirement.md`) lives in the sibling repo and is **out of
+   scope** for changes made here. Do not edit `tsh_requirement.md` from
+   this repo's working tree even if a stale copy is present.
+
+3. **Push target for this repo.** Every `git push` from this repo goes
+   to `origin` = `github.com/tadeskops/ta-issue-manager` only. Verify
+   with `git remote get-url origin` before any push (per §3.3).
+
+4. **Cross-repo references are link-only.** When the handover landing
+   page needs to point at the daily track (or vice-versa), use a
+   plain `<a href="https://tadeskops.github.io/ta-society-helpdesk/...">`
+   link configured via a CONFIG row (`DAILY_TRACK_URL` — see
+   `requirement.md` §5.1). Do not import code, copy assets verbatim,
+   or share build steps across the two repos.
+
+5. **If the user asks an ambiguous question** that could apply to
+   either repo, infer scope from the working directory of the file the
+   user attached (or last edited). When uncertain, ask once before
+   making changes.
+
+6. **Commit AND push identity is non-negotiable for BOTH repos.** Every
+   commit AND every push from either `ta-issue-manager` or
+   `ta-society-helpdesk` must originate from the `tadeskops` GitHub
+   account (`ta.deskops@gmail.com`). Before **any** `git commit` or
+   `git push`, run the identity check in §3.3 — if `user.name` /
+   `user.email` do not match, abort and tell the user. Never bypass,
+   never silently reconfigure global git identity to satisfy it, and
+   never commit or push with a different account "just this once".
+   The fix is **always** local-scope:
+   `git -C <repo-path> config user.name tadeskops` and
+   `git -C <repo-path> config user.email ta.deskops@gmail.com`,
+   never `git config --global`.
+
 ## 1. `requirement.md` is the spec — keep it in sync
 
 `requirement.md` at the repo root is the **single source of truth** for
@@ -244,7 +299,7 @@ account (`ta.deskops@gmail.com`). Before any `git push`:
    ```powershell
    git config user.name      # must be exactly: tadeskops
    git config user.email     # must be exactly: ta.deskops@gmail.com
-   git remote get-url origin # must point at github.com/tadeskops/...
+   git remote get-url origin # must point at github.com/tadeskops/ta-issue-manager
    ```
 
 2. If any of those three values does not match, **abort the push** and
@@ -252,10 +307,14 @@ account (`ta.deskops@gmail.com`). Before any `git push`:
    user.name tadeskops`, etc.). Do not "fix it silently" — the user
    may have other repos that should keep a different identity.
 
-3. Never reconfigure `user.name`, `user.email`, the remote URL, or
+3. **Wrong-repo guard.** If `git remote get-url origin` returns a
+   `ta-society-helpdesk` URL, abort immediately — you are in the
+   sibling daily-track repo by mistake. See §0.
+
+4. Never reconfigure `user.name`, `user.email`, the remote URL, or
    credentials without explicit user instruction in the same turn.
 
-4. If a future commit's `Author:` would not be `tadeskops`, surface
+5. If a future commit's `Author:` would not be `tadeskops`, surface
    that fact in the confirmation block in §3.2 (`Git account:` line
    highlights the mismatch) and ask the user how to proceed.
 
