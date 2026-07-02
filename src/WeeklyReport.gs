@@ -636,14 +636,15 @@ function generateFullReportPdf(reason) {
 // dashboard's Export Report flow and commit it as TA_IAP_Full_Report.pdf
 // (overwriting the previous full-report file).
 //
-// Called only from the Router when role is COMMITTEE or BUILDER (gated
-// in isActionAllowed_). source is a free-text label ("committee", etc.)
+// Every view / every role pushes here — committee, builder, and the
+// public anonymous submitted-issues page. Access-policy gating is
+// intentionally omitted (per operator requirement) so a single
+// canonical file always reflects the freshest export from anywhere.
+// Integrity checks remain: GITHUB_TOKEN required, 30 MB size cap, %PDF
+// magic-byte check. source is a free-text label ("committee", etc.)
 // stored in the commit message for traceability.
 function commitFullReportPdf(b64, source) {
     Logger.log("========== commitFullReportPdf START (source=" + (source || "?") + ") ==========");
-    if (!getFeatureFlag("FEATURE_WEEKLY_REPORT_BACKUP")) {
-        return { success: false, error: "FEATURE_WEEKLY_REPORT_BACKUP is OFF; set it to 'true' in CONFIG to enable report commits." };
-    }
     if (!b64 || typeof b64 !== "string") {
         return { success: false, error: "Missing PDF bytes (b64 string required)." };
     }

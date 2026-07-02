@@ -210,22 +210,18 @@ function api_call(action, payload) {
     // underlying Drive folder is already shared "Anyone with the link –
     // Viewer" via makeAttachmentFolderPublic, so this exposes nothing
     // that wasn't already publicly viewable via the issue card thumbnails.
-    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster", "diag", "getReportPhotoB64"];
-    // Conditionally-public actions: allowed for anonymous only when the
-    // gating feature flag is on. commitFullReportPdf is gated by
-    // FEATURE_PUBLIC_FULL_REPORT so the public Export Report can push
-    // the same TA_IAP_Full_Report.pdf as committee/builder do. The
-    // commit handler itself enforces FEATURE_WEEKLY_REPORT_BACKUP +
-    // size cap + %PDF magic check, so even with this open the abuse
-    // surface is bounded.
-    const PUBLIC_IF_FLAG = {
-        "commitFullReportPdf": "FEATURE_PUBLIC_FULL_REPORT"
-    };
+    //
+    // commitFullReportPdf is also public: every view (committee,
+    // builder, public submitted) must push the rendered PDF back to
+    // GitHub as the canonical TA_IAP_Full_Report.pdf. The commit handler
+    // itself keeps integrity checks (GITHUB_TOKEN required, 30 MB cap,
+    // %PDF magic-byte check) but no longer gates by role or feature
+    // flag — access policy is intentionally lifted per operator
+    // requirement so the View Full Report pill on every page always
+    // reflects the freshest export.
+    const PUBLIC_ACTIONS = ["getSubmittedIssues", "getClientConfig", "getCategoryMaster", "diag", "getReportPhotoB64", "commitFullReportPdf"];
     if (role === "UNKNOWN" && PUBLIC_ACTIONS.indexOf(action) === -1) {
-        const gateFlag = PUBLIC_IF_FLAG[action];
-        if (!gateFlag || !getFeatureFlag(gateFlag)) {
-            return { success: false, error: "Unauthorized: " + (email || "no email") };
-        }
+        return { success: false, error: "Unauthorized: " + (email || "no email") };
     }
     if (role !== "UNKNOWN" && !isActionAllowed_(action, role)) {
         return { success: false, error: "Forbidden for role " + role + ": " + action };
