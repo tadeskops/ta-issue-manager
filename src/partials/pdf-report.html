@@ -28,8 +28,8 @@
       // render experience without limiting what the operator can enable.
       columnDefaultsOn: ["ticketId", "description", "status"],
       // Optional initial image-quality preset for the Advanced Options
-      // radio group. One of "low" | "medium" | "high". Default "medium".
-      photoQuality:     "medium"
+      // radio group. One of "low" | "medium" | "high". Default "low".
+      photoQuality:     "low"
     })
 
   Gated client-side by FEATURE_PDF_REPORT (see render gate at bottom).
@@ -130,14 +130,14 @@
     var INLINE_THUMB = { w: 18, h: 14, gap: 1.5, pad: 1, perRowCap: 4 };
 
     // Image-quality presets — map wizard choice to the Drive thumbnail
-    // width (px) requested from getReportPhotoB64. Medium is the default
-    // (balances legibility with report size).
+    // width (px) requested from getReportPhotoB64. Low is the default
+    // (smallest report size; operator can bump to Medium/High per export).
     var PHOTO_QUALITY = {
         low:    { label: "Low",    maxW: 400,  hint: "~30 KB / photo"  },
         medium: { label: "Medium", maxW: 900,  hint: "~90 KB / photo"  },
         high:   { label: "High",   maxW: 1600, hint: "~250 KB / photo" }
     };
-    var DEFAULT_PHOTO_QUALITY = "medium";
+    var DEFAULT_PHOTO_QUALITY = "low";
 
     var SEV_COLOR = {
         "CRITICAL": [220, 38, 38],
