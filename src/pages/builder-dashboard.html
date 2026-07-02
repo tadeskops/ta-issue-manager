@@ -864,16 +864,15 @@
                     { key: 'active', label: 'Active Tasks', color: [234, 179, 8],  data: active },
                     { key: 'closed', label: 'Completed',    color: [16, 185, 129], data: closed }
                 ],
-                // Builder cares about execution detail; drop committee-only
-                // fields (subcategory / committee action / rejection).
-                columnKeys: [
-                    'ticketId', 'dateReported', 'tower', 'resident',
-                    'category', 'severity', 'status', 'description',
-                    ...slaCols, 'vendor', 'remarks', 'photos'
-                ],
+                // Full privileges — the wizard exposes the full column
+                // catalog on every view. Pre-check the columns most
+                // useful for a builder run so the first render stays
+                // uncluttered; the operator can enable anything else
+                // (subcategory, action-by, rejection, etc.) via the
+                // wizard's Advanced Options.
                 columnDefaultsOn: [
                     'ticketId', 'tower', 'category', 'severity', 'status',
-                    'description', ...slaCols, 'photos'
+                    'description', ...slaCols, 'vendor', 'remarks', 'photos'
                 ]
             });
         }

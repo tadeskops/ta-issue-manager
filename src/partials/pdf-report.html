@@ -16,13 +16,20 @@
         },
         ...
       ],
-      // Optional per-view column scoping. If omitted, all 16 catalog
-      // columns appear in the wizard. Provide a subset of catalog keys
-      // (see COLUMN_CATALOG below) to restrict what the user can pick.
+      // Optional per-view column scoping. Prefer OMITTING this so every
+      // view surfaces the full catalog ("full privileges" \u2014 the operator
+      // opens the wizard and picks what they need). Pass a subset of
+      // catalog keys only when a view MUST hide certain fields for
+      // privacy reasons.
       columnKeys:       ["ticketId", "description", "status"],
       // Optional override of which of the visible columns are pre-
-      // checked. Defaults to the catalog's `on` flag for each.
-      columnDefaultsOn: ["ticketId", "description", "status"]
+      // checked when the wizard opens. Defaults to the catalog's `on`
+      // flag for each. Safe to pass on every view to tune the first-
+      // render experience without limiting what the operator can enable.
+      columnDefaultsOn: ["ticketId", "description", "status"],
+      // Optional initial image-quality preset for the Advanced Options
+      // radio group. One of "low" | "medium" | "high". Default "medium".
+      photoQuality:     "medium"
     })
 
   Gated client-side by FEATURE_PDF_REPORT (see render gate at bottom).
@@ -122,6 +129,16 @@
     // gallery so the two surfaces stay visually consistent.
     var INLINE_THUMB = { w: 18, h: 14, gap: 1.5, pad: 1, perRowCap: 4 };
 
+    // Image-quality presets — map wizard choice to the Drive thumbnail
+    // width (px) requested from getReportPhotoB64. Medium is the default
+    // (balances legibility with report size).
+    var PHOTO_QUALITY = {
+        low:    { label: "Low",    maxW: 400,  hint: "~30 KB / photo"  },
+        medium: { label: "Medium", maxW: 900,  hint: "~90 KB / photo"  },
+        high:   { label: "High",   maxW: 1600, hint: "~250 KB / photo" }
+    };
+    var DEFAULT_PHOTO_QUALITY = "medium";
+
     var SEV_COLOR = {
         "CRITICAL": [220, 38, 38],
         "HIGH":     [234, 88, 12],
@@ -133,9 +150,26 @@
         opts:    null,    // last open() args
         sources: [],      // working copy of source toggles
         cols:    [],      // working copy of column toggles (subset of catalog)
-        photos:  { enabled: true },
+        photos:  { enabled: true, quality: DEFAULT_PHOTO_QUALITY },
         running: false
     };
+
+    // Extract a Drive file id from any of the URL shapes the sheet stores
+    // (thumbnail, /file/d/<id>/view, ?id=..., raw id) so we can build the
+    // full-resolution viewer URL for the clickable-image link in the PDF.
+    function _driveFileId(link) {
+        if (!link) return "";
+        var s = String(link);
+        var m = s.match(/[?&]id=([A-Za-z0-9_-]{10,})/)
+             || s.match(/\/file\/d\/([A-Za-z0-9_-]{10,})/)
+             || s.match(/\/d\/([A-Za-z0-9_-]{10,})/)
+             || s.match(/^([A-Za-z0-9_-]{20,})$/);
+        return m ? m[1] : "";
+    }
+    function _driveViewUrl(link) {
+        var id = _driveFileId(link);
+        return id ? ("https://drive.google.com/file/d/" + id + "/view") : String(link || "");
+    }
 
     function _shortDate(iso) {
         if (!iso) return "";
@@ -198,7 +232,9 @@
                 var on = defaultsOn ? defaultsOn.indexOf(c.key) >= 0 : !!c.on;
                 return { key: c.key, label: c.label, on: on, always: !!c.always };
             });
-        _state.photos = { enabled: true };
+        var initialQuality = (opts.photoQuality && PHOTO_QUALITY[opts.photoQuality])
+            ? opts.photoQuality : DEFAULT_PHOTO_QUALITY;
+        _state.photos = { enabled: true, quality: initialQuality };
         _renderWizard();
         var modal = document.getElementById("reportWizardModal");
         modal.classList.remove("hidden");
@@ -262,8 +298,23 @@
             + '      <div class="grid grid-cols-2 gap-1">' + colHtml + '</div>'
             + '    </div>'
             + '    <div>'
-            + '      <label class="flex items-center gap-2"><input id="reportPhotosOn" type="checkbox" checked class="w-4 h-4"><span class="text-sm">Include photos (inline thumbnails in each row)</span></label>'
-            + '      <p class="text-[10px] text-slate-500 mt-1 ml-6">Photos are fetched server-side and may add a few seconds + a few MB to the file.</p>'
+            + '      <label class="flex items-center gap-2"><input id="reportPhotosOn" type="checkbox" ' + (_state.photos.enabled ? "checked" : "") + ' class="w-4 h-4"><span class="text-sm">Include photos (inline thumbnails in each row)</span></label>'
+            + '      <p class="text-[10px] text-slate-500 mt-1 ml-6">Photos are fetched server-side and may add a few seconds + a few MB to the file. Tap any thumbnail in the PDF to open the full-resolution image.</p>'
+            + '    </div>'
+            + '    <div id="reportQualityBlock">'
+            + '      <p class="text-[11px] text-slate-400 mb-1">Image quality</p>'
+            + '      <div class="flex flex-wrap gap-3">'
+            +          Object.keys(PHOTO_QUALITY).map(function (k) {
+                          var p = PHOTO_QUALITY[k];
+                          var checked = _state.photos.quality === k ? " checked" : "";
+                          return '<label class="flex items-center gap-2 px-2 py-1 rounded border border-slate-700 bg-slate-900/60 hover:bg-slate-800/60 cursor-pointer">'
+                               +   '<input type="radio" name="reportPhotoQuality" value="' + k + '"' + checked + ' class="w-3 h-3">'
+                               +   '<span class="text-xs">' + _esc(p.label) + '</span>'
+                               +   '<span class="text-[10px] text-slate-500">' + _esc(p.maxW) + ' px &middot; ' + _esc(p.hint) + '</span>'
+                               + '</label>';
+                       }).join("")
+            + '      </div>'
+            + '      <p class="text-[10px] text-slate-500 mt-1">Default is Medium. Pick Low for the smallest file or High when the report will be printed.</p>'
             + '    </div>'
             + '  </div>'
             + '</details>';
@@ -281,6 +332,13 @@
         });
         document.getElementById("reportPhotosOn").addEventListener("change", function (e) {
             _state.photos.enabled = e.target.checked;
+            var block = document.getElementById("reportQualityBlock");
+            if (block) block.style.opacity = e.target.checked ? "1" : "0.4";
+        });
+        body.querySelectorAll('input[name="reportPhotoQuality"]').forEach(function (el) {
+            el.addEventListener("change", function () {
+                if (el.checked && PHOTO_QUALITY[el.value]) _state.photos.quality = el.value;
+            });
         });
     }
 
@@ -384,7 +442,8 @@
             // we lay out tables, so addImage calls are synchronous.
             var photoCache = {};
             if (_state.photos.enabled) {
-                _progress("Fetching photos…", 20);
+                var qLabel = (PHOTO_QUALITY[_state.photos.quality] || PHOTO_QUALITY[DEFAULT_PHOTO_QUALITY]).label;
+                _progress("Fetching photos (" + qLabel + ")…", 20);
                 photoCache = await _prefetchPhotos(enabled);
             }
             _progress("Rendering sections…", 60);
@@ -590,6 +649,14 @@
                     } else {
                         _drawMissing(doc, x, y, INLINE_THUMB.w, INLINE_THUMB.h);
                     }
+                    // Make the thumbnail (or its placeholder) a hyperlink
+                    // to the full-resolution Drive viewer, so a click in
+                    // any PDF reader opens the big image with pan/zoom.
+                    var viewUrl = _driveViewUrl(link);
+                    if (viewUrl) {
+                        try { doc.link(x, y, INLINE_THUMB.w, INLINE_THUMB.h, { url: viewUrl }); }
+                        catch (e) { /* older jsPDF versions may throw — ignore */ }
+                    }
                 });
             },
             didDrawPage: function () { /* footer drawn later */ }
@@ -629,6 +696,10 @@
         var links = Object.keys(unique);
         if (links.length === 0) return Promise.resolve({});
 
+        var qKey  = PHOTO_QUALITY[_state.photos.quality] ? _state.photos.quality : DEFAULT_PHOTO_QUALITY;
+        var maxW  = PHOTO_QUALITY[qKey].maxW;
+        var qName = PHOTO_QUALITY[qKey].label;
+
         var cache = {};
         var i = 0;
         function next() {
@@ -636,8 +707,8 @@
             var link = links[i++];
             // Photo fetch occupies the 20-60% band of the overall progress.
             var pct = 20 + Math.round((i / links.length) * 40);
-            _progress("Fetching photos… (" + i + " / " + links.length + ")", pct);
-            return window.API.getReportPhotoB64(link, 800)
+            _progress("Fetching photos [" + qName + "]… (" + i + " / " + links.length + ")", pct);
+            return window.API.getReportPhotoB64(link, maxW)
                 .then(function (resp) {
                     // API.call() in src/partials/api.html unwraps the
                     // server envelope (returns result.data), so resp is
