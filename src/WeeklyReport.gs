@@ -1,53 +1,55 @@
 // ============================================================================
-// WeeklyReport.gs - Two PDF reports committed to GitHub.
+// WeeklyReport.gs - Full PDF report committed to GitHub (one canonical
+// file + one monthly archive). The anonymised variant has been retired;
+// every view, every role, and the scheduled cron all converge on the
+// same full report so there is only one artifact to reason about.
 //
-// Gated by FEATURE_WEEKLY_REPORT_BACKUP (DEFAULT_FEATURES, default OFF).
 // Reuses Backup.gs script properties (GITHUB_TOKEN / GITHUB_REPO /
 // GITHUB_BRANCH).
 //
 // FILES PRODUCED (both committed to the same repo+branch as the sheet
 // backup, in the same `backups/` folder by default):
 //
-//   1. TA_IAP_Report.pdf       (a.k.a. "anonymised default report")
-//      - Scope: PENDING + ACTIVE only (no closed, no rejected)
-//      - PII redacted: resident name and flat number replaced with "—"
-//      - No photos
-//      - Built by `generateWeeklyReportPdf()` on the weekly trigger
-//      - Linked from the login page (public-safe)
-//
-//   2. TA_IAP_Full_Report.pdf  (a.k.a. "full report")
+//   1. TA_IAP_Full_Report.pdf                (canonical live snapshot)
 //      - Scope: PENDING + ACTIVE + CLOSED + REJECTED
 //      - Names, flats, descriptions kept as-is
-//      - Photos embedded inline: server-side fallback now fetches Drive
+//      - Photos embedded inline: server-side fallback fetches Drive
 //        thumbnails authenticated (UrlFetchApp + script OAuth) and
-//        embeds them via DocumentApp.Body.appendImage. Capped at
+//        embeds them via DocumentApp.Body.appendImage, capped at
 //        4 per issue / 60 per report to keep PDF size + execution
-//        time bounded. The dashboard wizard's `commitFullReportPdf`
-//        path still wins when the wizard is used, but the cron file
-//        is no longer text-only.
+//        time bounded. Wizard-pushed copies (jsPDF, richer photos)
+//        overwrite the same path.
+//      - Overwritten by every wizard export and every scheduled run.
 //      - Linked from EVERY page (login, submitted, committee, builder,
 //        admin) via a small "View Full Report" pill that resolves to
 //        FULL_REPORT_PUBLIC_URL (auto-derived from BACKUP_REPO when
 //        the operator hasn't set the tunable).
 //
+//   2. TA_IAP_Full_Report_<Mon>_<YYYY>.pdf   (per-month archive)
+//      - Identical bytes to file #1 at commit time.
+//      - Filename derived from the commit's wall-clock month in the
+//        script time zone: e.g. TA_IAP_Full_Report_Jul_2026.pdf.
+//      - Every commit within the same calendar month overwrites the
+//        same file; the first commit of a new month creates a fresh
+//        archive so the previous month's file freezes automatically.
+//      - Kept forever (small PDFs, ~12 files per year); no UI surface,
+//        consumed by operators via the GitHub file browser.
+//
 // FIRST-TIME SETUP (run once in the Apps Script editor):
 //   1. Confirm Backup.gs script properties (GITHUB_TOKEN, etc.) are set.
 //   2. (Optional) override path / names via script properties:
 //        WEEKLY_REPORT_DIR       = backups                    (default)
-//        WEEKLY_REPORT_FILE      = TA_IAP_Report.pdf          (default)
 //        FULL_REPORT_FILE        = TA_IAP_Full_Report.pdf     (default)
 //   3. Set FEATURE_WEEKLY_REPORT_BACKUP = "true" in the CONFIG sheet,
-//      then `clearConfigCache`.
-//   4. Set tunables in the CONFIG sheet:
-//        WEEKLY_REPORT_PUBLIC_URL  = raw URL to TA_IAP_Report.pdf
-//        FULL_REPORT_PUBLIC_URL    = raw URL to TA_IAP_Full_Report.pdf
-//      Recommended values (raw.githubusercontent.com):
-//        https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf
+//      then `clearConfigCache`. This flag now gates the scheduled cron
+//      only — on-demand wizard commits always fire.
+//   4. (Optional) set FULL_REPORT_PUBLIC_URL in the CONFIG sheet:
+//        FULL_REPORT_PUBLIC_URL = raw URL to TA_IAP_Full_Report.pdf
+//      Leave blank to let the server auto-derive it from BACKUP_REPO.
+//      Recommended value (raw.githubusercontent.com):
 //        https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf
-//      Leaving either blank hides the corresponding UI button.
-//   5. Run `installWeeklyReportTrigger` once - schedules the report job
-//      that builds BOTH PDFs. Cadence follows the
-//      REPORT_BACKUP_FREQUENCY tunable (CONFIG sheet):
+//   5. Run `installWeeklyReportTrigger` once - schedules the report job.
+//      Cadence follows the REPORT_BACKUP_FREQUENCY tunable (CONFIG sheet):
 //        "3x-daily" (default) → every 8 hours via .everyHours(8)
 //                              (≈ 3 fires per 24 h)
 //        "daily"              → every day at ~03:00 in the script time zone
@@ -56,20 +58,24 @@
 //      installed trigger is recreated with the new cadence.
 //
 // PUBLIC FUNCTIONS:
-//   generateWeeklyReportPdf()    -> manual: build + commit anonymised
-//   generateFullReportPdf()      -> manual: build + commit full (server-side, embeds photos)
+//   generateFullReportPdf()      -> manual: build + commit full (server-side, embeds photos) + monthly archive
 //   commitFullReportPdf(b64, src)-> API: accept wizard-rendered PDF bytes
 //                                  from a dashboard and commit them as
-//                                  TA_IAP_Full_Report.pdf (overwrites).
+//                                  TA_IAP_Full_Report.pdf + monthly archive.
 //   weeklyReportJob()            -> trigger handler; do not call directly
 //   installWeeklyReportTrigger() -> schedule weeklyReportJob
 // ============================================================================
 
 const WEEKLY_REPORT_DEFAULTS = {
     DIR:         "backups",
-    FILE:        "TA_IAP_Report.pdf",
     FULL_FILE:   "TA_IAP_Full_Report.pdf"
 };
+
+// Short month names used in the per-month archive filename.
+const WEEKLY_REPORT_MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
 
 // Hard cap on accepted wizard payload size (decoded). 30 MB is well under
 // Apps Script's request limit and well over a typical export with a few
@@ -84,9 +90,21 @@ function weeklyReport_props_() {
         repo:     base.repo,
         branch:   base.branch,
         dir:      (p.getProperty("WEEKLY_REPORT_DIR")  || WEEKLY_REPORT_DEFAULTS.DIR).replace(/^\/+|\/+$/g, ""),
-        filename: p.getProperty("WEEKLY_REPORT_FILE")  || WEEKLY_REPORT_DEFAULTS.FILE,
         fullName: p.getProperty("FULL_REPORT_FILE")    || WEEKLY_REPORT_DEFAULTS.FULL_FILE
     };
+}
+
+// Derives the per-month archive filename from the given date. Example:
+// weeklyReport_monthlyFile_(new Date("2026-07-02"), "TA_IAP_Full_Report.pdf")
+// → "TA_IAP_Full_Report_Jul_2026.pdf".
+function weeklyReport_monthlyFile_(when, baseName) {
+    const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
+    const mon = WEEKLY_REPORT_MONTHS[Number(Utilities.formatDate(when, tz, "M")) - 1];
+    const yyyy = Utilities.formatDate(when, tz, "yyyy");
+    const suffix = "_" + mon + "_" + yyyy;
+    const dot = baseName.lastIndexOf(".");
+    if (dot < 0) return baseName + suffix;
+    return baseName.slice(0, dot) + suffix + baseName.slice(dot);
 }
 
 // ----------------------------------------------------------------------------
@@ -268,13 +286,13 @@ function weeklyReport_sortDesc_(obj) {
 
 // ----------------------------------------------------------------------------
 // PDF RENDERER (DocumentApp -> PDF)
-//   variant: "ANONYMISED" | "FULL"
+//   Builds the full report only. Anonymised variant retired.
 // ----------------------------------------------------------------------------
 
-function weeklyReport_renderPdfBlob_(rows, stats, variant) {
+function weeklyReport_renderPdfBlob_(rows, stats) {
     const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
     const stamp = Utilities.formatDate(stats.generatedAt, tz, "yyyy-MM-dd HH:mm z");
-    const docName = "TA-IAP " + variant + " (temp) " +
+    const docName = "TA-IAP FULL (temp) " +
                     Utilities.formatDate(stats.generatedAt, tz, "yyyyMMdd-HHmmss");
     const doc = DocumentApp.create(docName);
     const body = doc.getBody();
@@ -283,34 +301,21 @@ function weeklyReport_renderPdfBlob_(rows, stats, variant) {
     // Header
     body.appendParagraph("The Address - Issue Addressal Portal")
         .setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    const subtitle = (variant === "ANONYMISED")
-        ? "Weekly Status Report (public, anonymised)"
-        : "Weekly Full Report (committee/builder)";
-    body.appendParagraph(subtitle)
+    body.appendParagraph("Full Report (committee/builder)")
         .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-    const metaText = (variant === "ANONYMISED")
-        ? ("Generated " + stamp + " - Resident names and flat numbers redacted. Closed and rejected issues not included.")
-        : ("Generated " + stamp + " - Full content (pending + active + closed + rejected). Restricted distribution.");
-    body.appendParagraph(metaText)
+    body.appendParagraph("Generated " + stamp + " - Full content (pending + active + closed + rejected). Restricted distribution.")
         .editAsText().setItalic(true).setForegroundColor("#666666");
 
     // Totals
     body.appendParagraph("").setHeading(DocumentApp.ParagraphHeading.NORMAL);
     body.appendParagraph("Totals").setHeading(DocumentApp.ParagraphHeading.HEADING2);
-    const totalsRows = (variant === "ANONYMISED")
-        ? [
-            ["Pending approval", String(stats.totals.pending)],
-            ["Active",           String(stats.totals.active)],
-            ["Total in scope",   String(stats.totals.all)]
-        ]
-        : [
-            ["Pending approval", String(stats.totals.pending)],
-            ["Active",           String(stats.totals.active)],
-            ["Closed",           String(stats.totals.closed)],
-            ["Rejected",         String(stats.totals.rejected)],
-            ["Total in scope",   String(stats.totals.all)]
-        ];
-    weeklyReport_appendKvTable_(body, totalsRows);
+    weeklyReport_appendKvTable_(body, [
+        ["Pending approval", String(stats.totals.pending)],
+        ["Active",           String(stats.totals.active)],
+        ["Closed",           String(stats.totals.closed)],
+        ["Rejected",         String(stats.totals.rejected)],
+        ["Total in scope",   String(stats.totals.all)]
+    ]);
 
     // Status breakdown
     body.appendParagraph("Status breakdown").setHeading(DocumentApp.ParagraphHeading.HEADING2);
@@ -332,41 +337,35 @@ function weeklyReport_renderPdfBlob_(rows, stats, variant) {
         .map(k => [k, String(stats.byAgeBucket[k])]);
     weeklyReport_appendKvTable_(body, ageRows.length ? ageRows : [["(no open issues)", "0"]]);
 
-    // Resolution time (full only)
-    if (variant === "FULL" && stats.avgResolutionDays != null) {
+    // Resolution time
+    if (stats.avgResolutionDays != null) {
         body.appendParagraph("Average resolution time").setHeading(DocumentApp.ParagraphHeading.HEADING2);
         weeklyReport_appendKvTable_(body, [["Closed issues, mean days from reported -> closed",
                                             stats.avgResolutionDays + " days"]]);
     }
 
     // Per-issue lists, grouped by section
-    const sections = (variant === "ANONYMISED")
-        ? ["Pending", "Active"]
-        : ["Pending", "Active", "Closed", "Rejected"];
+    const sections = ["Pending", "Active", "Closed", "Rejected"];
     // Total images budget across the whole document. Capped to keep
     // PDF size and execution time bounded — Drive thumbnail fetches at
     // w800 average ~60-100KB, so 60 images ≈ 5 MB of images.
-    const photoBudget = { remaining: (variant === "FULL") ? 60 : 0 };
+    const photoBudget = { remaining: 60 };
     sections.forEach(function (sec) {
         const slice = rows.filter(function (r) { return r.section === sec; });
         if (!slice.length) return;
         body.appendParagraph("").setHeading(DocumentApp.ParagraphHeading.NORMAL);
         body.appendParagraph(sec + " issues (" + slice.length + ")")
             .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-        weeklyReport_appendIssueTable_(body, slice, variant);
-        if (variant === "FULL" && photoBudget.remaining > 0) {
+        weeklyReport_appendIssueTable_(body, slice);
+        if (photoBudget.remaining > 0) {
             weeklyReport_appendPhotosBlock_(body, slice, photoBudget);
         }
     });
 
     // Footer
     body.appendParagraph("").setHeading(DocumentApp.ParagraphHeading.NORMAL);
-    const discText = (variant === "ANONYMISED")
-        ? ("This is the anonymised public report. Resident names and flat numbers are redacted. " +
-           "Closed and rejected issues are not included. For per-issue detail, sign in to the portal.")
-        : ("This is the full committee/builder report. Distribute only to authorised personnel. " +
-           "It contains resident names, flat numbers, and complaint details.");
-    body.appendParagraph(discText)
+    body.appendParagraph("This is the full committee/builder report. Distribute only to authorised personnel. " +
+                          "It contains resident names, flat numbers, and complaint details.")
         .editAsText().setItalic(true).setForegroundColor("#888888").setFontSize(9);
 
     doc.saveAndClose();
@@ -392,12 +391,10 @@ function weeklyReport_appendKvTable_(body, rows) {
     }
 }
 
-// Per-issue table. Anonymised variant redacts resident + flat. Description
-// is truncated to keep the PDF readable; full text remains on the sheet.
-function weeklyReport_appendIssueTable_(body, slice, variant) {
-    const headers = (variant === "ANONYMISED")
-        ? ["Ticket", "Reported", "Tower", "Category", "Severity", "Status", "Description"]
-        : ["Ticket", "Reported", "Tower / Flat", "Resident", "Category", "Severity", "Status", "Description"];
+// Per-issue table. Full report only — all columns kept as-is.
+// Description is truncated to keep the PDF readable; full text remains on the sheet.
+function weeklyReport_appendIssueTable_(body, slice) {
+    const headers = ["Ticket", "Reported", "Tower / Flat", "Resident", "Category", "Severity", "Status", "Description"];
     const rows = [headers];
     const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
     const fmt = function (d) {
@@ -411,28 +408,16 @@ function weeklyReport_appendIssueTable_(body, slice, variant) {
     };
     for (let i = 0; i < slice.length; i++) {
         const r = slice[i];
-        if (variant === "ANONYMISED") {
-            rows.push([
-                r.ticketId,
-                fmt(r.dateReported),
-                r.tower || "—",
-                r.category + (r.subcategory ? " / " + r.subcategory : ""),
-                r.severity || "—",
-                r.status,
-                trim(r.description, 200)
-            ]);
-        } else {
-            rows.push([
-                r.ticketId,
-                fmt(r.dateReported),
-                (r.tower || "—") + " / " + (r.flat || "—"),
-                r.resident || "—",
-                r.category + (r.subcategory ? " / " + r.subcategory : ""),
-                r.severity || "—",
-                r.status,
-                trim(r.description, 200)
-            ]);
-        }
+        rows.push([
+            r.ticketId,
+            fmt(r.dateReported),
+            (r.tower || "—") + " / " + (r.flat || "—"),
+            r.resident || "—",
+            r.category + (r.subcategory ? " / " + r.subcategory : ""),
+            r.severity || "—",
+            r.status,
+            trim(r.description, 200)
+        ]);
     }
     const t = body.appendTable(rows);
     // Bold the header row
@@ -535,51 +520,6 @@ function weeklyReport_fetchDriveThumb_(fileId, widthPx) {
 // PUBLIC: BUILD + COMMIT
 // ----------------------------------------------------------------------------
 
-// Anonymised default report (login-page).
-function generateWeeklyReportPdf(reason) {
-    Logger.log("========== generateWeeklyReportPdf START (reason=" + (reason || "manual") + ") ==========");
-    if (!getFeatureFlag("FEATURE_WEEKLY_REPORT_BACKUP")) {
-        const msg = "FEATURE_WEEKLY_REPORT_BACKUP is OFF. Set it to 'true' in CONFIG and clear cache.";
-        Logger.log("[wr] ABORT: " + msg);
-        return { success: false, error: msg };
-    }
-    const cfg = weeklyReport_props_();
-    if (!cfg.token) {
-        const msg = "GITHUB_TOKEN script property is not set. Set it under Project Settings.";
-        Logger.log("[wr] ABORT: " + msg);
-        return { success: false, error: msg };
-    }
-    try {
-        const rows = [].concat(weeklyReport_readPending_(), weeklyReport_readActive_());
-        Logger.log("[wr] anonymised rows: pending=" + rows.filter(r => r.section === "Pending").length +
-                   " active=" + rows.filter(r => r.section === "Active").length);
-        const stats = weeklyReport_buildStats_(rows, false);
-        const bytes = weeklyReport_renderPdfBlob_(rows, stats, "ANONYMISED");
-        Logger.log("[wr] anonymised PDF size: " + bytes.length + " bytes");
-
-        const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
-        const stamp = Utilities.formatDate(stats.generatedAt, tz, "yyyy-MM-dd HH:mm z");
-        const path  = cfg.dir + "/" + cfg.filename;
-        const message = "weekly-report (anonymised): " + stamp +
-                        (reason ? " [" + reason + "]" : "");
-        const result = backup_putToGit_(cfg, path, bytes, message);
-        const info = {
-            variant: "ANONYMISED",
-            path:    path,
-            commit:  (result.commit && result.commit.sha) || "",
-            url:     (result.content && result.content.html_url) || "",
-            message: message,
-            bytes:   bytes.length,
-            totals:  stats.totals
-        };
-        Logger.log("[wr] anonymised SUCCESS: " + JSON.stringify(info));
-        return { success: true, data: info };
-    } catch (err) {
-        Logger.log("[wr] anonymised FAILED: " + err + "\n" + (err && err.stack || ""));
-        return { success: false, error: String(err) };
-    }
-}
-
 // Full report — server-side build (embeds photos via authenticated Drive thumbnail fetch).
 function generateFullReportPdf(reason) {
     Logger.log("========== generateFullReportPdf START (reason=" + (reason || "manual") + ") ==========");
@@ -606,7 +546,7 @@ function generateFullReportPdf(reason) {
                    " closed=" + rows.filter(r => r.section === "Closed").length +
                    " rejected=" + rows.filter(r => r.section === "Rejected").length);
         const stats = weeklyReport_buildStats_(rows, true);
-        const bytes = weeklyReport_renderPdfBlob_(rows, stats, "FULL");
+        const bytes = weeklyReport_renderPdfBlob_(rows, stats);
         Logger.log("[wr-full] full PDF size: " + bytes.length + " bytes");
 
         const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
@@ -615,6 +555,9 @@ function generateFullReportPdf(reason) {
         const message = "weekly-report (full, server fallback): " + stamp +
                         (reason ? " [" + reason + "]" : "");
         const result = backup_putToGit_(cfg, path, bytes, message);
+        const monthly = weeklyReport_commitMonthly_(cfg, stats.generatedAt, bytes,
+                                                    "weekly-report (full, server fallback, monthly): " + stamp +
+                                                    (reason ? " [" + reason + "]" : ""));
         const info = {
             variant: "FULL_SERVER",
             path:    path,
@@ -622,7 +565,8 @@ function generateFullReportPdf(reason) {
             url:     (result.content && result.content.html_url) || "",
             message: message,
             bytes:   bytes.length,
-            totals:  stats.totals
+            totals:  stats.totals,
+            monthly: monthly
         };
         Logger.log("[wr-full] SUCCESS: " + JSON.stringify(info));
         return { success: true, data: info };
@@ -666,20 +610,26 @@ function commitFullReportPdf(b64, source) {
             return { success: false, error: "Payload is not a PDF (missing %PDF header)." };
         }
         const tz = Session.getScriptTimeZone() || "Asia/Kolkata";
-        const stamp = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd HH:mm z");
+        const now = new Date();
+        const stamp = Utilities.formatDate(now, tz, "yyyy-MM-dd HH:mm z");
         const actor = (Session.getActiveUser().getEmail() || "unknown");
         const path  = cfg.dir + "/" + cfg.fullName;
         const message = "weekly-report (full, wizard): " + stamp +
                         " by " + actor +
                         " from=" + (source || "?");
         const result = backup_putToGit_(cfg, path, bytes, message);
+        const monthly = weeklyReport_commitMonthly_(cfg, now, bytes,
+                                                    "weekly-report (full, wizard, monthly): " + stamp +
+                                                    " by " + actor +
+                                                    " from=" + (source || "?"));
         const info = {
             variant: "FULL_WIZARD",
             path:    path,
             commit:  (result.commit && result.commit.sha) || "",
             url:     (result.content && result.content.html_url) || "",
             message: message,
-            bytes:   bytes.length
+            bytes:   bytes.length,
+            monthly: monthly
         };
         Logger.log("[wr-commit] SUCCESS: " + JSON.stringify(info));
         return { success: true, data: info };
@@ -689,18 +639,36 @@ function commitFullReportPdf(b64, source) {
     }
 }
 
-// Trigger handler. Builds BOTH PDFs sequentially. Logs each independently
-// so a failure on one does not block the other. The reason label reflects
-// the installed cadence so commit history makes it clear whether a given
-// commit came from the daily or weekly schedule.
+// Commit the per-month archive alongside the canonical file. Returns a
+// small info object (path/commit/error) so the caller can log it, and
+// never throws — a failure here must not break the primary commit.
+function weeklyReport_commitMonthly_(cfg, when, bytes, commitMessage) {
+    try {
+        const name = weeklyReport_monthlyFile_(when, cfg.fullName);
+        const path = cfg.dir + "/" + name;
+        const result = backup_putToGit_(cfg, path, bytes, commitMessage);
+        const info = {
+            path:    path,
+            commit:  (result.commit && result.commit.sha) || "",
+            url:     (result.content && result.content.html_url) || ""
+        };
+        Logger.log("[wr-monthly] SUCCESS: " + JSON.stringify(info));
+        return info;
+    } catch (err) {
+        Logger.log("[wr-monthly] FAILED: " + err + "\n" + (err && err.stack || ""));
+        return { error: String(err) };
+    }
+}
+
+// Trigger handler. Builds the full report (canonical + monthly archive).
+// The reason label reflects the installed cadence so commit history makes
+// it clear whether a given commit came from the daily or weekly schedule.
 function weeklyReportJob() {
     Logger.log("[trigger] weeklyReportJob fired at " + new Date().toISOString());
     const reason = backup_resolveFrequency_();
-    const a = generateWeeklyReportPdf(reason);
-    Logger.log("[trigger] anonymised result: " + JSON.stringify(a));
-    const b = generateFullReportPdf(reason);
-    Logger.log("[trigger] full server-fallback result: " + JSON.stringify(b));
-    return { anonymised: a, full: b };
+    const result = generateFullReportPdf(reason);
+    Logger.log("[trigger] full result: " + JSON.stringify(result));
+    return { full: result };
 }
 
 // One-shot trigger installer. Removes any prior weeklyReportJob trigger

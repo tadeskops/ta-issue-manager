@@ -82,8 +82,7 @@ const DEFAULT_TUNABLES = {
     TECH_WEBAPP_URL:           "",           // separate deployment URL that requires Google sign-in (committee/builder). Empty = same URL.
     PUBLIC_WEBAPP_URL:         "",           // public (anonymous) deployment URL — used as the landing page after sign-out. Empty = current URL.
     SUBMITTED_INCLUDE_REJECTED: "false",     // read-only "Submitted Issues" view: include rejected (archived) rows. Default off → public sees only pending + live.
-    WEEKLY_REPORT_PUBLIC_URL:  "",           // Raw URL to TA_IAP_Report.pdf (anonymised, pending+active only). When non-empty AND FEATURE_WEEKLY_REPORT_BACKUP is on, the login page shows a small "View Report" link beside the read-only button. Recommended: https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf
-    FULL_REPORT_PUBLIC_URL:    "",           // Raw URL to TA_IAP_Full_Report.pdf (full content incl. closed+rejected). When non-empty AND FEATURE_WEEKLY_REPORT_BACKUP is on, dashboard pages show a small "View Full Report" icon. Distribute the URL only to authorised personnel — the file contains resident names and flat numbers. Recommended: https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf
+    FULL_REPORT_PUBLIC_URL:    "",           // Raw URL to TA_IAP_Full_Report.pdf (full content incl. closed+rejected). Every page shows a small "View Full Report" pill when this URL resolves. When empty, the server auto-derives it from BACKUP_REPO + BACKUP_BRANCH so the pill works out-of-the-box. Distribute the URL only to authorised personnel — the file contains resident names and flat numbers. Recommended: https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf
     REPORT_BACKUP_FREQUENCY:   "3x-daily"   // Trigger frequency for BOTH the XLSX sheet backup (weeklyBackupJob) and the PDF report job (weeklyReportJob). Accepted values: "3x-daily" (default — every 8 hours via .everyHours(8); fires roughly 3 times per 24 h, no fixed wall-clock hour because Apps Script .everyHours can't be pinned to a specific hour-of-day), "daily" (every day at the legacy ~02:00/~03:00 slot via .everyDays(1).atHour(...)), "weekly" (Mondays only at the legacy slot). Any other value (typo, blank) is treated as "3x-daily". Apps Script time-based triggers are independent objects — editing this tunable does not move an already-installed trigger; re-run installWeeklyBackupTrigger + installWeeklyReportTrigger after changing this value so the existing triggers are recreated with the new cadence.
 };
 
@@ -157,11 +156,11 @@ function getClientConfig() {
         const cfg = getConfig();
         const features = Object.assign({}, DEFAULT_FEATURES, cfg.features || {});
         const tunables = Object.assign({}, DEFAULT_TUNABLES, cfg.tunables || {});
-        // Auto-derive the two report URLs from the GitHub backup config
-        // when the operator hasn't set them explicitly. The PDFs land at
+        // Auto-derive the full-report URL from the GitHub backup config
+        // when the operator hasn't set it explicitly. The PDF lands at
         // a known path inside the backup repo, so a default raw URL is
-        // safe — operators can still override per-tunable to point at a
-        // different mirror or a CDN. Always filled in (independent of
+        // safe — operators can still override to point at a different
+        // mirror or a CDN. Always filled in (independent of
         // FEATURE_WEEKLY_REPORT_BACKUP) so the View Full Report pill
         // works even on pages that don't gate by the flag — the link
         // resolves to whatever the cron last committed.
@@ -169,9 +168,8 @@ function getClientConfig() {
             const bp = backup_props_();
             const dir = (bp.dir || "backups").replace(/^\/+|\/+$/g, "");
             const base = "https://raw.githubusercontent.com/" + bp.repo + "/" + bp.branch + "/" + dir + "/";
-            if (!tunables.WEEKLY_REPORT_PUBLIC_URL) tunables.WEEKLY_REPORT_PUBLIC_URL = base + "TA_IAP_Report.pdf";
-            if (!tunables.FULL_REPORT_PUBLIC_URL)   tunables.FULL_REPORT_PUBLIC_URL   = base + "TA_IAP_Full_Report.pdf";
-        } catch (e) { /* non-fatal — tunables stay empty, buttons stay hidden */ }
+            if (!tunables.FULL_REPORT_PUBLIC_URL) tunables.FULL_REPORT_PUBLIC_URL = base + "TA_IAP_Full_Report.pdf";
+        } catch (e) { /* non-fatal — tunable stays empty, pill stays hidden */ }
         return {
             success: true,
             data: {

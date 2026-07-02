@@ -329,7 +329,7 @@ Resident Name · Flat Number · Category · Sub-Category · Tower · Exact Locat
 | `onFormSubmit` | On form submit | Create ticket in `PENDING_REVIEW` |
 | `clearConfigCache` *(optional)* | Hourly | Pick up CONFIG edits without manual run |
 | `weeklyBackupJob` *(optional)* | `REPORT_BACKUP_FREQUENCY` (default `"3x-daily"`) — every 8 hours by default; once per day at ~02:00 IST when `"daily"`; Mondays only at ~02:00 when `"weekly"` | XLSX snapshot of the spreadsheet committed to `backups/ta-issue-manager.xlsx`. Installed by `installWeeklyBackupTrigger` once `GITHUB_TOKEN` is set. Re-run the installer after editing the tunable so the trigger is recreated with the new cadence. |
-| `weeklyReportJob` *(optional, gated by `FEATURE_WEEKLY_REPORT_BACKUP`)* | `REPORT_BACKUP_FREQUENCY` (default `"3x-daily"`) — every 8 hours by default; once per day at ~03:00 IST when `"daily"` (one hour after the daily sheet backup so it picks up that day's snapshot); Mondays only at ~03:00 when `"weekly"` | Builds two PDF status reports server-side and commits both to GitHub: `backups/TA_IAP_Report.pdf` (anonymised — pending+active only, resident name and flat number redacted to `—`) and `backups/TA_IAP_Full_Report.pdf` (full content — pending+active+closed+rejected, photos embedded inline). Installed by `installWeeklyReportTrigger`. The full-report file is also overwritten on demand whenever a committee/builder clicks **Export Report** on a dashboard (the wizard streams the rendered PDF — including photos — back to the server via `commitFullReportPdf`); the scheduled trigger is the fallback when nobody exported in the last interval. Re-run `installWeeklyReportTrigger` after editing `REPORT_BACKUP_FREQUENCY`. See §19.14. |
+| `weeklyReportJob` *(optional, gated by `FEATURE_WEEKLY_REPORT_BACKUP`)* | `REPORT_BACKUP_FREQUENCY` (default `"3x-daily"`) — every 8 hours by default; once per day at ~03:00 IST when `"daily"` (one hour after the daily sheet backup so it picks up that day's snapshot); Mondays only at ~03:00 when `"weekly"` | Builds the full PDF status report server-side (pending + active + closed + rejected, photos embedded inline) and commits it to GitHub as **two files** in `backups/`: the canonical live copy `TA_IAP_Full_Report.pdf` (overwritten every run) and the per-month archive `TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` (e.g. `..._Jul_2026.pdf`) which freezes at month rollover because the filename changes. The same file is also overwritten on demand whenever any view's **Export Report** wizard finishes (committee, builder, or the public submitted page — the wizard streams jsPDF bytes back via `commitFullReportPdf`, and the monthly copy is written alongside). The scheduled trigger is the fallback when nobody exported in the last interval. Installed by `installWeeklyReportTrigger`; re-run after editing `REPORT_BACKUP_FREQUENCY`. See §19.14. |
 
 ---
 
@@ -513,10 +513,9 @@ of any client-supplied value. The submit form has no severity field.
 | `FEATURE_OPEN_SHEET_LINK` | `"false"` | When `"true"`, the public submitted-issues page renders the **Open in Sheets** pill (linking to the underlying spreadsheet) on the title row. Default OFF — opt-in. The button is server-rendered, so when off it is absent from the HTML entirely (no client-side gate to bypass). |
 | `FEATURE_COMMITTEE_PHOTO_ATTACH` | `"false"` | When `"true"`, committee detail view shows an **Upload Photo** button on issues without photos and the `addPhotosToIssue` API accepts writes. Default OFF — opt-in via the CONFIG sheet. |
 | `FEATURE_PDF_REPORT` | `"true"` | When `"true"` (the default), every list view (Committee / Builder / Submitted read-only) shows an **Export Report** button that opens a shared PDF wizard (sources, columns, embedded photos, image quality) and the `getReportPhotoB64` API accepts requests. **Full-privileges model:** every view now surfaces the **full 17-column catalog** in the wizard's Advanced Options — pages only pass `columnDefaultsOn` to pre-check the columns most useful for that view, and the operator can enable anything else (resident, action-by, rejection, subcategory, SLA, etc.) before rendering. The column catalog and per-view defaults live in `src/partials/pdf-report.html` and each page's `openExportReport()`. The first page opens with a compact title header (portal + title band + single meta line of generated/by/source-counts/filters) and the first section's list begins immediately below — no full cover page. Photos are embedded **only inline in the Photos column** (thumbnail grid sized by `INLINE_THUMB`); there is no separate end-of-section gallery. Each thumbnail in the PDF is a **clickable hyperlink** — clicking (in any PDF reader) opens the full-resolution image in the Drive viewer (`https://drive.google.com/file/d/<ID>/view`), where the built-in pan/zoom controls are available; placeholders for missing photos are also clickable and resolve to the same viewer URL. **Image-quality selector** (wizard → Advanced Options → *Image quality* radios): `Low` = 400 px thumbs (~30 KB/photo), `Medium` = 900 px (~90 KB/photo, **default**), `High` = 1600 px (~250 KB/photo); the selected width is sent as the `maxW` payload to `getReportPhotoB64`. The wizard's "Include photos" master switch gates inline rendering and, when off, also drops the Photos column from the table and greys out the quality selector. Default ON — turn off in the CONFIG sheet to hide the wizard. |
-| `FEATURE_WEEKLY_REPORT_BACKUP` | `"true"` | When `"true"` (the default), the scheduled `weeklyReportJob` cron commits two PDF status reports to GitHub (see §19.14): **(a)** `backups/TA_IAP_Report.pdf` — anonymised, pending+active only, resident name and flat number redacted to `—` (retained for legacy/external mirrors only, no UI surface); **(b)** `backups/TA_IAP_Full_Report.pdf` — full content including closed+rejected rows, names, flats, descriptions, and **photos embedded inline** (server-side fallback fetches Drive thumbnails authenticated via `UrlFetchApp` + script OAuth and embeds them via `Body.appendImage`, capped at 4 photos per issue / 60 per report). All five pages (login, submitted, committee, builder, admin) expose the full-report file via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty, so the pill works out-of-the-box). The pill renders **whenever the URL resolves** and is independent of this flag. **This flag now gates the scheduled cron only** — it no longer gates the on-demand wizard commit path, which fires from every view/every role unconditionally (see `commitFullReportPdf` in §7). The cron still requires the `GITHUB_TOKEN` script property and a configured `BACKUP_REPO`. Default ON — turn off in the CONFIG sheet to pause the scheduled cron (wizard exports continue to overwrite the canonical file on demand). |
+| `FEATURE_WEEKLY_REPORT_BACKUP` | `"true"` | When `"true"` (the default), the scheduled `weeklyReportJob` cron commits the full PDF status report to GitHub as **two files** in `backups/`: the canonical live copy `TA_IAP_Full_Report.pdf` (overwritten every run — pending + active + closed + rejected, resident names / flats / descriptions kept as-is, photos embedded inline via authenticated `UrlFetchApp` + script OAuth Drive thumbnail fetch, capped at 4 photos per issue / 60 per report) and the per-month archive `TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` (e.g. `TA_IAP_Full_Report_Jul_2026.pdf`) which is overwritten within the same calendar month and freezes at month rollover. All five pages (login, submitted, committee, builder, admin) expose the canonical file via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty). The pill renders **whenever the URL resolves** and is independent of this flag. **This flag now gates the scheduled cron only** — it no longer gates the on-demand wizard commit path, which fires from every view / every role unconditionally (see `commitFullReportPdf` in §7). The cron still requires the `GITHUB_TOKEN` script property and a configured `BACKUP_REPO`. Default ON — turn off in the CONFIG sheet to pause the scheduled cron (wizard exports continue to overwrite the canonical + monthly files on demand). |
 | `FEATURE_PUBLIC_FULL_REPORT` | `"true"` | When `"true"` (the default), the anonymous `submitted-issues.html` feed matches the committee/builder data scope: `getSubmittedIssues` unions `CLOSED_ISSUES` (alongside pending + live + the existing `SUBMITTED_INCLUDE_REJECTED` gate on rejected), so the wizard's PDF covers the full ticket lifecycle. **This flag no longer gates `commitFullReportPdf`** — every view (including anonymous) unconditionally pushes the rendered PDF to GitHub as `TA_IAP_Full_Report.pdf` (see §7). Flip OFF in CONFIG if the anonymous data scope should exclude closed tickets — the wizard commit itself keeps firing, and its integrity checks (`%PDF` magic, 30 MB cap, `GITHUB_TOKEN` required) remain the only defences. |
-| `WEEKLY_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Report.pdf` (the anonymised public copy) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Report.pdf`. **When empty, the server auto-derives this URL from `BACKUP_REPO` + `BACKUP_BRANCH`** unconditionally (no longer gated by `FEATURE_WEEKLY_REPORT_BACKUP`), so the URL is always served via `getClientConfig`. The login page no longer renders an anonymised pill (replaced by **View Full Report**); operators can still mirror the anonymised file externally if needed. |
-| `FULL_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Full_Report.pdf` (the full report including names, flats, closed/rejected rows, **and embedded photos**) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf`. **When empty, the server auto-derives this URL from `BACKUP_REPO` + `BACKUP_BRANCH`** unconditionally so the **View Full Report** pill on every page works out-of-the-box. **Privacy note:** the full file contains residents' names and flat numbers — keep the backup repo private, or override this tunable to point at an authenticated mirror, before sharing widely. |
+| `FULL_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Full_Report.pdf` (the full report including names, flats, closed/rejected rows, **and embedded photos**) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf`. **When empty, the server auto-derives this URL from `BACKUP_REPO` + `BACKUP_BRANCH`** unconditionally so the **View Full Report** pill on every page works out-of-the-box. **Privacy note:** the full file contains residents' names and flat numbers — keep the backup repo private, or override this tunable to point at an authenticated mirror, before sharing widely. The per-month archives (`TA_IAP_Full_Report_<Mon>_<YYYY>.pdf`) sit next to the canonical file at the same base URL and can be linked directly (`…/backups/TA_IAP_Full_Report_Jul_2026.pdf`) when a specific month's snapshot is needed. |
 | `REPORT_BACKUP_FREQUENCY` | `"3x-daily"` | Cadence for **both** scheduled trigger jobs that commit to the GitHub mirror — the XLSX sheet backup (`weeklyBackupJob`, ~02:00 anchor) and the PDF report job (`weeklyReportJob`, ~03:00 anchor). Accepted values: **`"3x-daily"` (default)** installs `.everyHours(8)` so each job fires roughly **3 times per 24 h** — chosen so the canonical `backups/TA_IAP_Full_Report.pdf` and `backups/ta-issue-manager.xlsx` stay fresh enough for an end-of-shift snapshot model without crossing the Apps Script daily-trigger quota; Apps Script `.everyHours()` cannot be pinned to a specific wall-clock hour, so the actual fire times depend on when the trigger was installed. `"daily"` falls back to once per day at the legacy ~02:00 / ~03:00 slot via `.everyDays(1).atHour(...)`. `"weekly"` reverts to the historic Mondays-only schedule. Any other value (typo, blank, common spelling variants like `"3x"` or `"thrice-daily"` are tolerated; everything else) is treated as `"3x-daily"`. Apps Script time-based triggers are independent objects — **editing this tunable does not move an already-installed trigger.** Re-run `installWeeklyBackupTrigger` and `installWeeklyReportTrigger` from the Apps Script editor after changing the value so each installer wipes its prior trigger and recreates it with the new cadence. The function names retain the `weekly` prefix for backward compatibility; only the schedule changes. |
 | `FEATURE_SLA` | `"false"` | When `"true"`, every list view (Committee / Builder / Admin) shows SLA breach KPI cards, the **SLA Days** column, the **SLA Breached** filter option, the **SLA Status / Due Date / Days Remaining** detail-modal block, and the PDF wizard exposes `slaDue` + `breached` columns. The `getLiveIssues` API still returns a `sla:{}` sub-object (with placeholder `dueDate:""`, `breached:false`, `daysRemaining:null` when off), and `getDashboardMetrics.slaBreaches` is forced to `0` when off so existing clients don't NPE. SLA due-date is still **computed and written** to `LIVE_ISSUES.SLA_DATE` at `approveIssue` time regardless of the flag, so flipping it on later "just works". The approve-modal severity labels also drop the `(SLA X day)` suffix and the helper note `SLA due date is computed…` when off. Default OFF — opt-in via the CONFIG sheet. |
 
@@ -669,34 +668,40 @@ and logging on policy block). For legacy / Form-uploaded files, run
 `makeAttachmentFolderPublic` once (§13.1) to retroactively open up the
 entire folder.
 
-### 19.14 Weekly PDF status report — dual-file model
+### 19.14 Full PDF status report — single canonical file + monthly archive
 
 **Goal.** Operators want a static PDF snapshot of the issue queue
 checked into the GitHub mirror so it survives Sheet edits, accidental
 deletions, and Apps Script outages, and is linked from **every** page
 (login, submitted, committee, builder, admin) via a small **View Full
-Report** pill. The cron itself is gated by `FEATURE_WEEKLY_REPORT_BACKUP`
-(default **on** as of v2026.06) and ships **two** files at the same `BACKUP_REPO`:
+Report** pill. The anonymised variant has been retired — every view,
+every role, and the scheduled cron all converge on the same full report,
+so there is only one artifact to reason about. The cron is gated by
+`FEATURE_WEEKLY_REPORT_BACKUP` (default **on**) and ships **two files at
+the same `BACKUP_REPO`** — a live canonical copy and a per-month archive:
 
-| File path (in repo) | Default scope | Content | Surfaced where |
+| File path (in repo) | Overwrite policy | Content | Surfaced where |
 |---|---|---|---|
-| `backups/TA_IAP_Report.pdf` | Pending + Active only | Per-issue table (Ticket / Date / Tower / Category / Severity / Status / Description). **Resident name and flat number are redacted to `—`.** No photos. | Retained for legacy/external mirrors only — no UI surface (the login page now points at the full report, see below). |
-| `backups/TA_IAP_Full_Report.pdf` | Pending + Active + Closed + Rejected | Per-issue table including resident name, full Tower / Flat, descriptions, **and inline photos** (server-side cron now fetches Drive thumbnails authenticated via `UrlFetchApp` + script OAuth and embeds them via `Body.appendImage`, capped at 4 photos per issue / 60 per report; the wizard-pushed copy is even richer). | **All five pages** (login, submitted, committee, builder, admin) via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty). The pill is **independent of `FEATURE_WEEKLY_REPORT_BACKUP`** — it renders whenever the URL resolves so the link keeps working even after the cron is paused. |
+| `backups/TA_IAP_Full_Report.pdf` | Overwritten by every commit (wizard export or cron run) | Pending + Active + Closed + Rejected. Per-issue table including resident name, full Tower / Flat, descriptions, **and inline photos** (server-side cron fetches Drive thumbnails authenticated via `UrlFetchApp` + script OAuth and embeds them via `Body.appendImage`, capped at 4 photos per issue / 60 per report; the wizard-pushed copy is even richer thanks to jsPDF's clickable thumbnails). | **All five pages** (login, submitted, committee, builder, admin) via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty). The pill is **independent of `FEATURE_WEEKLY_REPORT_BACKUP`** — it renders whenever the URL resolves so the link keeps working even after the cron is paused. |
+| `backups/TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` | Overwritten within the same calendar month; **freezes at month rollover** because the filename changes (`..._Jul_2026.pdf` → `..._Aug_2026.pdf`) | Identical bytes to the canonical file at commit time. | No UI surface — consumed by operators via the GitHub file browser (or by linking `…/backups/TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` directly when a specific month's snapshot is needed). Kept forever — small PDFs, ~12 files per year. |
 
-**Two write paths converge on the same files.**
+**Two write paths, both write both files.**
 
-1. **Wizard auto-commit (full file only).** Whenever ANY view's
-   **Export Report** wizard finishes rendering — committee,
-   builder, or the anonymous public `submitted-issues.html` — the
-   client (jsPDF + `jspdf-autotable`, optional photos) base64-encodes
-   the bytes and calls `commitFullReportPdf(b64, source)` on the
-   server fire-and-forget. The server validates the `%PDF` magic
-   bytes, enforces a 30 MB size cap, checks `GITHUB_TOKEN` is set,
-   and upserts the file via the existing `backup_putToGit_` helper.
-   Failures never block the user's local download / preview. **No
-   feature flag or per-page opt-in gates this write anymore** — every
-   view pushes the same canonical `TA_IAP_Full_Report.pdf` so the
-   **View Full Report** pill on every page always reflects the
+1. **Wizard auto-commit.** Whenever ANY view's **Export Report** wizard
+   finishes rendering — committee, builder, or the anonymous public
+   `submitted-issues.html` — the client (jsPDF + `jspdf-autotable`,
+   optional photos) base64-encodes the bytes and calls
+   `commitFullReportPdf(b64, source)` on the server fire-and-forget.
+   The server validates the `%PDF` magic bytes, enforces a 30 MB size
+   cap, checks `GITHUB_TOKEN` is set, and upserts the canonical file
+   via the existing `backup_putToGit_` helper. Immediately after,
+   `weeklyReport_commitMonthly_` writes the same bytes to
+   `TA_IAP_Full_Report_<Mon>_<YYYY>.pdf`; a failure there is logged
+   but does not fail the primary commit. Failures never block the
+   user's local download / preview. **No feature flag or per-page
+   opt-in gates this write** — every view pushes the same canonical
+   `TA_IAP_Full_Report.pdf` (and the corresponding monthly file) so
+   the **View Full Report** pill on every page always reflects the
    freshest export. The router lists `commitFullReportPdf` in
    `PUBLIC_ACTIONS` (unconditional anonymous access);
    `FEATURE_PUBLIC_FULL_REPORT` now only governs whether
@@ -704,31 +709,29 @@ Report** pill. The cron itself is gated by `FEATURE_WEEKLY_REPORT_BACKUP`
    feed; `FEATURE_WEEKLY_REPORT_BACKUP` now only gates the
    scheduled cron (path 2 below).
 
-2. **Scheduled server fallback (both files).** A time-based trigger
+2. **Scheduled server fallback.** A time-based trigger
    `weeklyReportJob` runs on a schedule controlled by
-   `REPORT_BACKUP_FREQUENCY` and rebuilds **both** files using
-   `DocumentApp` server-side. **Default `"3x-daily"` installs
-   `.everyHours(8)`** so each scheduled run refreshes the canonical
-   `backups/TA_IAP_Full_Report.pdf` (and the anonymised companion)
+   `REPORT_BACKUP_FREQUENCY` and rebuilds the full report using
+   `DocumentApp` server-side, then commits both files (canonical +
+   monthly). **Default `"3x-daily"` installs `.everyHours(8)`** so
+   each scheduled run refreshes `backups/TA_IAP_Full_Report.pdf`
    roughly three times every 24 h — a quiet shift never goes longer
    than ~8 h without a fresh snapshot, and the **View Full Report**
    pill on every page picks up the latest content automatically.
-   `"daily"` reverts to once per day at ~03:00 IST (one hour after the
-   daily sheet backup so it picks up that day's snapshot); `"weekly"`
-   keeps the legacy Mondays-only schedule. The companion
+   `"daily"` reverts to once per day at ~03:00 IST (one hour after
+   the daily sheet backup so it picks up that day's snapshot);
+   `"weekly"` keeps the legacy Mondays-only schedule. The companion
    `weeklyBackupJob` (XLSX snapshot, ~02:00 anchor) reads the same
    tunable so the sheet backup and PDF report stay aligned. The
-   anonymised file always overwrites; the full file overwrites too,
-   so a quiet interval (no manual export) still refreshes the
-   snapshot. `DocumentApp` cannot reliably embed Drive photos at
-   scale, so the server-built copy of `TA_IAP_Full_Report.pdf` is
-   text-only — the wizard-pushed copy (when available) is the richer
-   one. **Editing `REPORT_BACKUP_FREQUENCY` does not move an
-   already-installed trigger** — re-run both `installWeeklyBackupTrigger`
-   and `installWeeklyReportTrigger` after changing the value so each
-   installer wipes its prior trigger and recreates it with the new
-   cadence. The function names retain the `weekly` prefix for backward
-   compatibility; only the schedule changes.
+   canonical file overwrites every run; the monthly file overwrites
+   within the current calendar month and starts a fresh file at
+   month rollover. **Editing `REPORT_BACKUP_FREQUENCY` does not move
+   an already-installed trigger** — re-run both
+   `installWeeklyBackupTrigger` and `installWeeklyReportTrigger`
+   after changing the value so each installer wipes its prior
+   trigger and recreates it with the new cadence. The function names
+   retain the `weekly` prefix for backward compatibility; only the
+   schedule changes.
 
 **Implementation pointers.** All logic lives in
 [`src/WeeklyReport.gs`](../src/WeeklyReport.gs):
@@ -736,26 +739,28 @@ Report** pill. The cron itself is gated by `FEATURE_WEEKLY_REPORT_BACKUP`
 - `weeklyReport_props_()` reads `GITHUB_TOKEN` / `BACKUP_REPO` /
   `BACKUP_BRANCH` from script properties (reusing
   `backup_props_()` from `src/Backup.gs`) plus `WEEKLY_REPORT_DIR`
-  (default `backups`), `WEEKLY_REPORT_FILE` (default
-  `TA_IAP_Report.pdf`), `WEEKLY_FULL_REPORT_FILE` (default
+  (default `backups`) and `FULL_REPORT_FILE` (default
   `TA_IAP_Full_Report.pdf`).
-- `weeklyReport_renderPdfBlob_(rows, stats, variant)` — `variant ∈
-  { "ANONYMISED", "FULL" }`. Different per-issue table headers; no
-  photos in either server build.
-- `generateWeeklyReportPdf(reason)` and `generateFullReportPdf(reason)`
-  are also exposed as standalone runnable functions for one-off
-  rebuilds (operator runbook in `README.md`).
+- `weeklyReport_monthlyFile_(when, baseName)` inserts the
+  `_<Mon>_<YYYY>` suffix before the extension — e.g.
+  `TA_IAP_Full_Report.pdf` → `TA_IAP_Full_Report_Jul_2026.pdf` — using
+  the script time zone so month rollover matches operator wall-clock.
+- `weeklyReport_commitMonthly_(cfg, when, bytes, message)` upserts
+  the monthly file via `backup_putToGit_`; wraps any error so a
+  failure there never breaks the primary canonical-file commit.
+- `weeklyReport_renderPdfBlob_(rows, stats)` builds the full-report
+  PDF (no `variant` parameter — anonymised branch was removed).
+- `generateFullReportPdf(reason)` is the standalone runnable for
+  one-off rebuilds (operator runbook in `README.md`); it writes
+  both files.
 - `commitFullReportPdf(b64, source)` accepts the wizard's bytes;
-  rejects anything where the first three decoded bytes don't match the
-  `%PDF` signature (37 80 68 70) or where the payload exceeds 30 MB.
+  rejects anything where the first three decoded bytes don't match
+  the `%PDF` signature (37 80 68 70) or where the payload exceeds
+  30 MB; on success writes both canonical and monthly files.
 
-**Privacy stance.** The login-page link must remain safe to expose to
-any anonymous visitor of the issue tracker. Resident names and flat
-numbers are PII; descriptions, tower, category, status, and severity are
-considered acceptable in aggregate (and the operator can still leave
-`WEEKLY_REPORT_PUBLIC_URL` empty if the residents disagree — the file
-is then committed but not surfaced anywhere). The full report, by
-contrast, is gated on its own URL tunable AND distributed only via
-authorised channels — the operator should keep the GitHub repo private
-**or** treat the file as authenticated-only.
+**Privacy stance.** The full report contains residents' names, flat
+numbers, and complaint descriptions. Keep the backup repo private, or
+override `FULL_REPORT_PUBLIC_URL` to point at an authenticated mirror,
+before sharing the pill widely. The monthly archive files inherit the
+same privacy properties (same bytes, same folder).
 
