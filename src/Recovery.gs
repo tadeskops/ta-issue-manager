@@ -21,6 +21,15 @@
 //                                rows that already exist in LIVE_ISSUES
 //                                or CLOSED_ISSUES. The fallback when
 //                                pending data was lost / corrupted.
+//   rebuildAllFromForm()      -> DESTRUCTIVE full reset: wipe data rows
+//                                on PENDING_REVIEW + LIVE_ISSUES +
+//                                CLOSED_ISSUES + ARCHIVES_ISSUES, reset
+//                                the TICKET_COUNTER, then re-import
+//                                every row from Form Responses 1 with
+//                                fresh sequential TKT-NNNNN ids starting
+//                                at TKT-00001. All committee approvals,
+//                                assignments, status, closure fields
+//                                are permanently lost.
 //   dedupeTicketIds()         -> scan all four issue sheets, keep the
 //                                FIRST occurrence of each TICKET_ID
 //                                (earliest date-reported), and assign
@@ -223,6 +232,78 @@ function recoverPendingFromForm() {
     } catch (error) {
         Logger.log("[recover] FAILED: " + error.toString());
         return { success: false, data: null, error: "Recovery failed: " + error.toString() };
+    }
+}
+
+// FULL NUKE + REBUILD. Wipes data rows (header preserved) from
+// PENDING_REVIEW + LIVE_ISSUES + CLOSED_ISSUES + ARCHIVES_ISSUES,
+// resets the TICKET_COUNTER, then replays every row from Form
+// Responses 1 into PENDING_REVIEW via createPendingIssue_. Every new
+// ticket therefore gets a fresh sequential TKT-NNNNN id starting at
+// TKT-00001, in the order rows appear in Form Responses 1.
+//
+// DESTRUCTIVE: any committee approvals, assignments, status changes,
+// closure info, resident confirms, and remarks are permanently lost.
+// Only fields captured on the form survive.
+//
+// Returns: { success, data:{ cleared:{sheet:rows,...}, inserted, totalForm }, error }.
+function rebuildAllFromForm() {
+    try {
+        try { backupSheetToGit(); }
+        catch (e) { Logger.log("[rebuild] backup failed (continuing): " + e); }
+
+        const ss = getSpreadsheet();
+        const formSheet = ss.getSheetByName(SHEETS.FORM_RESPONSES);
+        if (!formSheet) throw new Error("Form Responses 1 sheet not found");
+
+        const cleared = {};
+        RECOVERY_TICKET_SHEETS.forEach(function (cfg) {
+            const sheet = ss.getSheetByName(cfg.name);
+            if (!sheet) { Logger.log("[rebuild] sheet not found, skip: " + cfg.name); return; }
+            const lastRow = sheet.getLastRow();
+            const lastCol = sheet.getLastColumn();
+            if (lastRow > 1 && lastCol > 0) {
+                sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+                cleared[cfg.name] = lastRow - 1;
+                Logger.log("[rebuild] cleared " + (lastRow - 1) + " rows from " + cfg.name);
+            } else {
+                cleared[cfg.name] = 0;
+            }
+        });
+
+        PropertiesService.getScriptProperties().deleteProperty("TICKET_COUNTER");
+        Logger.log("[rebuild] TICKET_COUNTER reset");
+
+        const formData = formSheet.getDataRange().getValues();
+        let inserted = 0;
+        for (let i = 1; i < formData.length; i++) {
+            const row = formData[i];
+            createPendingIssue_({
+                residentName: row[FORM_COL.RESIDENT]    || "",
+                flat:         row[FORM_COL.FLAT]        || "",
+                category:     row[FORM_COL.CATEGORY]    || "",
+                subCategory:  row[FORM_COL.SUBCATEGORY] || "",
+                severity:     row[FORM_COL.SEVERITY]    || "",
+                tower:        row[FORM_COL.TOWER]       || "",
+                description:  row[FORM_COL.LOCATION]    || "",
+                photoLinks:   row[FORM_COL.PHOTO]       || ""
+            }, "");
+            inserted++;
+        }
+
+        Logger.log("[rebuild] DONE — inserted=" + inserted + " totalForm=" + (formData.length - 1) + " cleared=" + JSON.stringify(cleared));
+        return {
+            success: true,
+            data: {
+                cleared:   cleared,
+                inserted:  inserted,
+                totalForm: formData.length - 1
+            },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("[rebuild] FAILED: " + error.toString());
+        return { success: false, data: null, error: "Rebuild failed: " + error.toString() };
     }
 }
 
