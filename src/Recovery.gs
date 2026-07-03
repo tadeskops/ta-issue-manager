@@ -262,10 +262,19 @@ function rebuildAllFromForm() {
             if (!sheet) { Logger.log("[rebuild] sheet not found, skip: " + cfg.name); return; }
             const lastRow = sheet.getLastRow();
             const lastCol = sheet.getLastColumn();
-            if (lastRow > 1 && lastCol > 0) {
-                sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
-                cleared[cfg.name] = lastRow - 1;
-                Logger.log("[rebuild] cleared " + (lastRow - 1) + " rows from " + cfg.name);
+            if (lastRow < 1 || lastCol < 1) { cleared[cfg.name] = 0; return; }
+            // Detect header vs headerless: some sheets (notably
+            // PENDING_REVIEW and ARCHIVES_ISSUES) were created without a
+            // labelled header row, so row 1 is real ticket data and
+            // MUST also be cleared. firstDataRow_ returns 0 (headerless)
+            // or 1 (has header) — convert to a 1-based sheet row.
+            const preview = sheet.getRange(1, 1, 1, Math.min(lastCol, 3)).getValues();
+            const startRow = firstDataRow_(preview) + 1; // 1 or 2
+            const rows = lastRow - startRow + 1;
+            if (rows > 0) {
+                sheet.getRange(startRow, 1, rows, lastCol).clearContent();
+                cleared[cfg.name] = rows;
+                Logger.log("[rebuild] cleared " + rows + " rows from " + cfg.name + " (startRow=" + startRow + ")");
             } else {
                 cleared[cfg.name] = 0;
             }
@@ -287,7 +296,7 @@ function rebuildAllFromForm() {
                 tower:        row[FORM_COL.TOWER]       || "",
                 description:  row[FORM_COL.LOCATION]    || "",
                 photoLinks:   row[FORM_COL.PHOTO]       || ""
-            }, "");
+            }, "", row[FORM_COL.TIMESTAMP]); // preserve original submission timestamp
             inserted++;
         }
 

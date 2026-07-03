@@ -454,13 +454,24 @@ function listProjectTriggers() {
  *   { residentName, flat, category, subCategory, severity, tower,
  *     description, photoLinks }   // photoLinks: string (CSV) OR string[]
  *
+ * `reportedDateOverride` (optional): when provided (a Date or ISO-ish
+ * string), that value is written to DATE_REPORTED instead of "now".
+ * Used by the rebuild/recovery paths to preserve original submission
+ * timestamps from Form Responses 1.
+ *
  * Returns: { ticketId, reportedDate }
  */
-function createPendingIssue_(fields, submittedBy) {
+function createPendingIssue_(fields, submittedBy, reportedDateOverride) {
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
-        const reportedDate = new Date();
+        let reportedDate = new Date();
+        if (reportedDateOverride) {
+            const d = (reportedDateOverride instanceof Date)
+                ? reportedDateOverride
+                : new Date(reportedDateOverride);
+            if (d && !isNaN(d.getTime())) reportedDate = d;
+        }
         const ticketId = generateTicketID();
         const photoCell = Array.isArray(fields.photoLinks)
             ? fields.photoLinks.filter(Boolean).join(", ")
