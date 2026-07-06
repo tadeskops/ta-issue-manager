@@ -106,7 +106,11 @@ function getConfig() {
         cache.put(CONFIG_CACHE_KEY, JSON.stringify(cfg), CONFIG_CACHE_TTL);
         return cfg;
     } catch (e) {
-        Logger.log("getConfig() fallback to defaults: " + e);
+        // Never crash the request path — fall back to defaults. But log
+        // loudly so the operator can see WHY the CONFIG sheet couldn't be
+        // read (missing permissions, wrong SHEET_ID, quota, etc.) instead
+        // of silently serving the two hard-coded default committee emails.
+        Logger.log("getConfig() FAILED — falling back to hard-coded defaults. err=" + e + " stack=" + (e && e.stack));
         return fallbackConfig_();
     }
 }
@@ -189,15 +193,33 @@ function getClientConfig() {
 
 /**
  * Returns the role for a given email: COMMITTEE | BUILDER | RESIDENT | UNKNOWN.
+ *
+ * ROLE RESOLUTION IS ALWAYS FRESH. Because operators frequently add
+ * committee members through the CONFIG sheet and expect the change to
+ * take effect on the next sign-in, this function bypasses the 5-min
+ * config cache and reads the sheet directly. One extra Sheets read per
+ * whoami call is cheap for a small society. If the fresh read fails
+ * (transient Drive error), we fall back to the cached config so the
+ * user still gets a role.
  */
 function getUserRole(email) {
     if (!email) return "UNKNOWN";
     const normalized = String(email).trim().toLowerCase();
-    const cfg = getConfig();
-    const committee = cfg.committeeEmails.map(e => String(e).trim().toLowerCase());
+    let committee, builder;
+    try {
+        const fresh = readConfigFromSheet_();
+        committee = fresh.committeeEmails.map(e => String(e).trim().toLowerCase());
+        builder   = String(fresh.builderEmail || "").trim().toLowerCase();
+    } catch (e) {
+        Logger.log("getUserRole: fresh read failed, falling back to cache: " + e);
+        const cfg = getConfig();
+        committee = cfg.committeeEmails.map(e => String(e).trim().toLowerCase());
+        builder   = String(cfg.builderEmail || "").trim().toLowerCase();
+    }
     if (committee.indexOf(normalized) !== -1) return "COMMITTEE";
-    if (normalized === String(cfg.builderEmail).trim().toLowerCase()) return "BUILDER";
+    if (normalized === builder) return "BUILDER";
     return "RESIDENT";
+}
 }
 
 /**
@@ -206,6 +228,105 @@ function getUserRole(email) {
 function clearConfigCache() {
     CacheService.getScriptCache().remove(CONFIG_CACHE_KEY);
     Logger.log("Config cache cleared.");
+}
+
+/**
+ * Installable onEdit trigger. Fires whenever ANY cell in the bound
+ * spreadsheet changes. If the edit was on the CONFIG tab we clear the
+ * cache immediately, so operator changes to COMMITTEE_EMAILS /
+ * BUILDER_EMAIL / feature flags take effect on the very next request —
+ * no more "I added myself to the sheet but still see Resident for 5
+ * minutes". Run installConfigOnEditTrigger() once from the Apps Script
+ * editor to install it.
+ */
+function onConfigSheetEdit_(e) {
+    try {
+        if (!e || !e.range) return;
+        const sheetName = e.range.getSheet().getName();
+        if (sheetName !== CONFIG_SHEET_NAME) return;
+        clearConfigCache();
+        Logger.log("onConfigSheetEdit_: cache cleared after edit at " + e.range.getA1Notation());
+    } catch (err) {
+        Logger.log("onConfigSheetEdit_ error: " + err);
+    }
+}
+
+/**
+ * Idempotent installer for the onEdit trigger above. Removes any
+ * previous copies of the same handler before installing a fresh one so
+ * re-running this doesn't accumulate duplicate triggers.
+ */
+function installConfigOnEditTrigger() {
+    const ss = getSpreadsheet();
+    const existing = ScriptApp.getProjectTriggers();
+    let removed = 0;
+    for (let i = 0; i < existing.length; i++) {
+        if (existing[i].getHandlerFunction() === "onConfigSheetEdit_") {
+            ScriptApp.deleteTrigger(existing[i]);
+            removed++;
+        }
+    }
+    ScriptApp.newTrigger("onConfigSheetEdit_").forSpreadsheet(ss).onEdit().create();
+    Logger.log("installConfigOnEditTrigger: removed " + removed + " old trigger(s), installed 1 new one on '" + ss.getName() + "'.");
+    return { removed: removed, installed: 1 };
+}
+
+/**
+ * Diagnostic used by the ?diag=whoami route. Returns everything the
+ * server sees when resolving the caller's role, so an operator can tell
+ * at a glance whether the CONFIG sheet was read, which committee list
+ * loaded, and what role the caller was given.
+ */
+function diag_whoami_() {
+    const out = {
+        version: "diag-whoami-r1",
+        when: new Date().toISOString(),
+        email: null,
+        role: null,
+        source: null,
+        committeeCount: null,
+        committeeSample: null,
+        builderEmail: null,
+        sheetId: SHEET_ID,
+        configSheetPresent: null,
+        cacheHit: null,
+        error: null
+    };
+    try {
+        out.email = (Session.getActiveUser().getEmail() || "").trim();
+    } catch (e) { out.error = "identity: " + e; }
+    try {
+        const cache = CacheService.getScriptCache();
+        out.cacheHit = !!cache.get(CONFIG_CACHE_KEY);
+    } catch (e) { /* non-fatal */ }
+    try {
+        const ss = SpreadsheetApp.openById(SHEET_ID);
+        out.configSheetPresent = !!ss.getSheetByName(CONFIG_SHEET_NAME);
+    } catch (e) {
+        out.configSheetPresent = false;
+        out.error = (out.error ? out.error + " | " : "") + "sheet-open: " + e;
+    }
+    try {
+        const fresh = readConfigFromSheet_();
+        out.source = "sheet";
+        out.committeeCount = fresh.committeeEmails.length;
+        // Only include the first 3 for privacy in logs shared over chat.
+        out.committeeSample = fresh.committeeEmails.slice(0, 3);
+        out.builderEmail = fresh.builderEmail;
+    } catch (e) {
+        out.source = "fallback";
+        const cfg = fallbackConfig_();
+        out.committeeCount = cfg.committeeEmails.length;
+        out.committeeSample = cfg.committeeEmails.slice(0, 3);
+        out.builderEmail = cfg.builderEmail;
+        out.error = (out.error ? out.error + " | " : "") + "read: " + e;
+    }
+    try {
+        out.role = getUserRole(out.email);
+    } catch (e) {
+        out.error = (out.error ? out.error + " | " : "") + "role: " + e;
+    }
+    return out;
 }
 
 /**
@@ -278,7 +399,16 @@ function readConfigFromSheet_() {
     const result = fallbackConfig_();
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-    if (!sheet) return result; // pure defaults
+    if (!sheet) {
+        Logger.log("readConfigFromSheet_: CONFIG sheet not found — using defaults. Run setupConfigSheet() once.");
+        return result;
+    }
+
+    // Accumulate committee emails across every COMMITTEE_EMAILS row so
+    // operators can add one email per row (common mistake) or use the
+    // canonical single comma-separated row — both work identically.
+    const committeeAcc = [];
+    let sawCommitteeRow = false;
 
     const values = sheet.getDataRange().getValues();
     for (let i = 1; i < values.length; i++) {
@@ -288,9 +418,10 @@ function readConfigFromSheet_() {
         if (!key) continue;
 
         if (key === "COMMITTEE_EMAILS") {
+            sawCommitteeRow = true;
             if (!val) continue;
             const list = val.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
-            if (list.length) result.committeeEmails = list;
+            for (let j = 0; j < list.length; j++) committeeAcc.push(list[j]);
         } else if (key === "BUILDER_EMAIL") {
             if (val) result.builderEmail = val;
         } else if (key === "ATTACHMENT_FOLDER_ID") {
@@ -309,6 +440,19 @@ function readConfigFromSheet_() {
             }
         }
         // Unknown keys are silently ignored — operators can add notes safely.
+    }
+
+    if (sawCommitteeRow) {
+        // De-dupe (case-insensitive) so a repeated entry doesn't inflate the list.
+        const seen = {};
+        const uniq = [];
+        for (let k = 0; k < committeeAcc.length; k++) {
+            const norm = String(committeeAcc[k]).trim().toLowerCase();
+            if (!norm || seen[norm]) continue;
+            seen[norm] = true;
+            uniq.push(committeeAcc[k]);
+        }
+        if (uniq.length) result.committeeEmails = uniq;
     }
     return result;
 }

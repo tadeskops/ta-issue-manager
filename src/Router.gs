@@ -43,6 +43,17 @@ function doGet(e) {
             .setMimeType(ContentService.MimeType.JSON);
     }
 
+    // Role-resolution diagnostic (?diag=whoami). Returns a JSON payload
+    // showing exactly what the server sees for the signed-in caller:
+    // the resolved email, the role, the loaded committee list, cache
+    // status, and any error. Use this when a user says "I added myself
+    // to the CONFIG sheet but still see (Resident)".
+    if (e && e.parameter && e.parameter.diag === "whoami") {
+        const out = diag_whoami_();
+        return ContentService.createTextOutput(JSON.stringify(out, null, 2))
+            .setMimeType(ContentService.MimeType.JSON);
+    }
+
     const email = (Session.getActiveUser().getEmail() || "").trim();
     const role  = getUserRole(email);
     const requested = (e && e.parameter && e.parameter.page) || "";
