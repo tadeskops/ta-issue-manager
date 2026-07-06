@@ -227,7 +227,6 @@ function getUserRole(email) {
     if (builders.indexOf(normalized)  !== -1) return "BUILDER";
     return "RESIDENT";
 }
-}
 
 /**
  * Clears the cached config so the next call re-reads from the CONFIG sheet.
