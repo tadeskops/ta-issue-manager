@@ -119,6 +119,9 @@ function fallbackConfig_() {
     return {
         committeeEmails: DEFAULT_COMMITTEE_EMAILS.slice(),
         builderEmail: DEFAULT_BUILDER_EMAIL,
+        // Same value seeded as a 1-item list so downstream role checks
+        // can iterate uniformly regardless of the sheet's format.
+        builderEmails: [DEFAULT_BUILDER_EMAIL],
         attachmentFolderId: "",
         logoUrl: "",
         features: Object.assign({}, DEFAULT_FEATURES),
@@ -205,19 +208,23 @@ function getClientConfig() {
 function getUserRole(email) {
     if (!email) return "UNKNOWN";
     const normalized = String(email).trim().toLowerCase();
-    let committee, builder;
+    let committee, builders;
     try {
         const fresh = readConfigFromSheet_();
         committee = fresh.committeeEmails.map(e => String(e).trim().toLowerCase());
-        builder   = String(fresh.builderEmail || "").trim().toLowerCase();
+        builders  = (fresh.builderEmails && fresh.builderEmails.length
+                     ? fresh.builderEmails
+                     : [fresh.builderEmail]).map(e => String(e || "").trim().toLowerCase()).filter(Boolean);
     } catch (e) {
         Logger.log("getUserRole: fresh read failed, falling back to cache: " + e);
         const cfg = getConfig();
         committee = cfg.committeeEmails.map(e => String(e).trim().toLowerCase());
-        builder   = String(cfg.builderEmail || "").trim().toLowerCase();
+        builders  = (cfg.builderEmails && cfg.builderEmails.length
+                     ? cfg.builderEmails
+                     : [cfg.builderEmail]).map(e => String(e || "").trim().toLowerCase()).filter(Boolean);
     }
     if (committee.indexOf(normalized) !== -1) return "COMMITTEE";
-    if (normalized === builder) return "BUILDER";
+    if (builders.indexOf(normalized)  !== -1) return "BUILDER";
     return "RESIDENT";
 }
 }
@@ -313,12 +320,14 @@ function diag_whoami_() {
         // Only include the first 3 for privacy in logs shared over chat.
         out.committeeSample = fresh.committeeEmails.slice(0, 3);
         out.builderEmail = fresh.builderEmail;
+        out.builderCount = fresh.builderEmails ? fresh.builderEmails.length : 1;
     } catch (e) {
         out.source = "fallback";
         const cfg = fallbackConfig_();
         out.committeeCount = cfg.committeeEmails.length;
         out.committeeSample = cfg.committeeEmails.slice(0, 3);
         out.builderEmail = cfg.builderEmail;
+        out.builderCount = cfg.builderEmails ? cfg.builderEmails.length : 1;
         out.error = (out.error ? out.error + " | " : "") + "read: " + e;
     }
     try {
@@ -423,7 +432,21 @@ function readConfigFromSheet_() {
             const list = val.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
             for (let j = 0; j < list.length; j++) committeeAcc.push(list[j]);
         } else if (key === "BUILDER_EMAIL") {
-            if (val) result.builderEmail = val;
+            // Tolerate a comma/semicolon/newline-separated list — some
+            // operators paste the same value they used for
+            // COMMITTEE_EMAILS. We keep .builderEmail as the FIRST entry
+            // for backward compatibility with existing callers, but
+            // exposing the full list via .builderEmails lets role
+            // resolution match any of them.
+            if (!val) continue;
+            const list = val.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+            if (list.length === 0) continue;
+            if (list.length > 1) {
+                Logger.log("readConfigFromSheet_: BUILDER_EMAIL has " + list.length +
+                           " entries — treating all as valid builder emails. If this is a paste error, edit the cell to a single email.");
+            }
+            result.builderEmail  = list[0];
+            result.builderEmails = list.slice();
         } else if (key === "ATTACHMENT_FOLDER_ID") {
             result.attachmentFolderId = val;
         } else if (key === "LOGO_URL") {
