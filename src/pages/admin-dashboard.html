@@ -200,7 +200,18 @@
             return f.FEATURE_SLA === true;
         }
 
-        let metrics = null;
+        // Empty defaults so a null/failed getDashboardMetrics response
+        // never crashes updateKPIs / renderCharts. The server envelope may
+        // return `data: null` (e.g. before the sheet is initialised, or a
+        // caught exception on the server) — loadData() falls back to
+        // these zero-value shapes instead of propagating a TypeError.
+        const EMPTY_METRICS = Object.freeze({
+            totalPending: 0, totalActive: 0, totalClosed: 0,
+            criticalPending: 0, slaBreaches: 0,
+            categoryBreakdown: {}, towerBreakdown: {},
+            agingIssues: 0, avgClosureTime: 0, builderWorkload: 0
+        });
+        let metrics = Object.assign({}, EMPTY_METRICS);
         let allIssues = [];
         let categoryChart, towerChart, severityChart, statusChart;
 
@@ -208,36 +219,47 @@
 
         async function loadData() {
             try {
-                metrics = await API.getDashboardMetrics();
-                allIssues = await API.getLiveIssues('ALL');
-                
+                const m = await API.getDashboardMetrics();
+                metrics = Object.assign({}, EMPTY_METRICS, m || {});
+                const live = await API.getLiveIssues('ALL');
+                allIssues = Array.isArray(live) ? live : [];
+
                 updateKPIs();
                 renderCharts();
                 renderTables();
             } catch (error) {
                 console.error('Error loading data:', error);
+                // Reset to safe empties and still render so the page shows
+                // zeros/empty tables instead of stuck "Loading…" placeholders.
+                metrics = Object.assign({}, EMPTY_METRICS);
+                allIssues = [];
+                try { updateKPIs(); renderCharts(); renderTables(); } catch (e) { /* non-fatal */ }
             }
         }
 
         function updateKPIs() {
-            document.getElementById('kpiPending').textContent = metrics.totalPending;
-            document.getElementById('kpiActive').textContent = metrics.totalActive;
-            document.getElementById('kpiClosed').textContent = metrics.totalClosed;
-            document.getElementById('kpiCritical').textContent = metrics.criticalPending;
+            const m = metrics || EMPTY_METRICS;
+            document.getElementById('kpiPending').textContent = m.totalPending || 0;
+            document.getElementById('kpiActive').textContent = m.totalActive || 0;
+            document.getElementById('kpiClosed').textContent = m.totalClosed || 0;
+            document.getElementById('kpiCritical').textContent = m.criticalPending || 0;
             const slaKpi = document.getElementById('kpiSLA');
-            if (slaKpi) slaKpi.textContent = metrics.slaBreaches;
+            if (slaKpi) slaKpi.textContent = m.slaBreaches || 0;
         }
 
         function renderCharts() {
+            const m = metrics || EMPTY_METRICS;
+            const catMap = m.categoryBreakdown || {};
+            const twrMap = m.towerBreakdown || {};
             // Category Chart
             const categoryCtx = document.getElementById('categoryChart').getContext('2d');
             if (categoryChart) categoryChart.destroy();
             categoryChart = new Chart(categoryCtx, {
                 type: 'pie',
                 data: {
-                    labels: Object.keys(metrics.categoryBreakdown),
+                    labels: Object.keys(catMap),
                     datasets: [{
-                        data: Object.values(metrics.categoryBreakdown),
+                        data: Object.values(catMap),
                         backgroundColor: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
                     }]
                 },
@@ -250,10 +272,10 @@
             towerChart = new Chart(towerCtx, {
                 type: 'bar',
                 data: {
-                    labels: Object.keys(metrics.towerBreakdown),
+                    labels: Object.keys(twrMap),
                     datasets: [{
                         label: 'Issues',
-                        data: Object.values(metrics.towerBreakdown),
+                        data: Object.values(twrMap),
                         backgroundColor: '#3b82f6'
                     }]
                 },

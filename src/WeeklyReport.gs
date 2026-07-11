@@ -592,6 +592,32 @@ function commitFullReportPdf(b64, source) {
     if (!b64 || typeof b64 !== "string") {
         return { success: false, error: "Missing PDF bytes (b64 string required)." };
     }
+    // Anti-abuse guard: this endpoint is deliberately public (see comment
+    // block above) so anonymous residents can commit a fresh full report
+    // from any dashboard. Cap the number of commits per UTC day via
+    // ScriptProperties so a malicious caller cannot spam the GitHub repo
+    // with valid-looking 30 MB PDFs. Tunable via ScriptProperties key
+    // "FULL_REPORT_MAX_COMMITS_PER_DAY" (default 48 ≈ one per 30 min).
+    try {
+        var props = PropertiesService.getScriptProperties();
+        var tzGuard = Session.getScriptTimeZone() || "UTC";
+        var today = Utilities.formatDate(new Date(), tzGuard, "yyyy-MM-dd");
+        var counterKey = "FULL_REPORT_COMMITS_" + today;
+        var maxPerDay = parseInt(props.getProperty("FULL_REPORT_MAX_COMMITS_PER_DAY") || "48", 10);
+        if (!(maxPerDay > 0)) maxPerDay = 48;
+        var used = parseInt(props.getProperty(counterKey) || "0", 10);
+        if (used >= maxPerDay) {
+            Logger.log("[wr-commit] RATE-LIMIT: " + used + "/" + maxPerDay + " for " + today);
+            return { success: false, error: "Daily commit limit reached (" + maxPerDay + "). Try again after midnight " + tzGuard + "." };
+        }
+        // Reserve the slot before the (potentially slow) GitHub PUT so a
+        // burst of concurrent callers cannot all pass the check.
+        props.setProperty(counterKey, String(used + 1));
+    } catch (e) {
+        // Never let the rate-limit machinery block a legitimate commit;
+        // if ScriptProperties is unavailable, fall through and log.
+        Logger.log("[wr-commit] rate-limit check skipped: " + e);
+    }
     const cfg = weeklyReport_props_();
     if (!cfg.token) {
         return { success: false, error: "GITHUB_TOKEN script property is not set." };

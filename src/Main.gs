@@ -1,7 +1,21 @@
 // ===== CONFIG (Update these values) =====
 // NOTE: COMMITTEE_EMAILS and BUILDER_EMAIL are now defined in `config.gs`.
 //       Update committee / builder email IDs there.
-const SHEET_ID = "1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU"; // Get from Sheets URL
+//
+// SHEET_ID resolution order:
+//   1. ScriptProperties key "SHEET_ID" — lets a fork/staging deployment point at
+//      a different spreadsheet without editing source (Extensions > Apps Script
+//      > Project Settings > Script Properties).
+//   2. Hardcoded literal below — the canonical production spreadsheet.
+// The constant is resolved once at script load; changes to ScriptProperties
+// take effect on the next execution.
+const SHEET_ID = (function () {
+    try {
+        var p = PropertiesService.getScriptProperties().getProperty("SHEET_ID");
+        if (p && String(p).trim()) return String(p).trim();
+    } catch (e) { /* fall through to literal */ }
+    return "1dvLsUyog-6Rbv22WBQWClwZkabNBVYqF4ChNL1LL_vU"; // Get from Sheets URL
+})();
 const SHEETS = {
     FORM_RESPONSES:  "Form Responses 1",
     PENDING_REVIEW:  "PENDING_REVIEW",

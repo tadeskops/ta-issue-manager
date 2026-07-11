@@ -209,6 +209,22 @@ const SHIM = `
             if (action === 'getLiveIssues')      return { success: true, data: mockIssues('active', 5), error: null };
             if (action === 'getClosedIssues')    return { success: true, data: mockIssues('closed', 6), error: null };
             if (action === 'getSubmittedIssues') return { success: true, data: mockIssues('pending', 4).concat(mockIssues('active', 3)).concat(mockIssues('closed', 3)), error: null };
+            if (action === 'getCategoryMaster') {
+                return { success: true, data: {
+                    towers:        ['Tower A','Tower B','Tower C','Common Area'],
+                    categories:    ['Civil','Plumbing','Electrical','Fire Safety','Lift','Security','Common Area','Amenities','Miscellaneous'],
+                    subcategories: ['Crack','Paint','Waterproofing','Tile Damage','Leakage','Drainage','Water Pressure','MCB','Earthing','Switch Issue','Refuge Area','Door','Intercom','CCTV','Access Control','Lobby','Parking','Gym','Pool','Fittings','Equipments','Other']
+                }, error: null };
+            }
+            if (action === 'getDashboardMetrics') {
+                return { success: true, data: {
+                    totalPending: 5, totalActive: 5, totalClosed: 6,
+                    criticalPending: 2, slaBreaches: 1,
+                    categoryBreakdown: { Plumbing: 4, Electrical: 3, Civil: 2, Cleaning: 3 },
+                    towerBreakdown:    { 'Tower A': 3, 'Tower B': 4, 'Tower C': 3, 'Common Area': 2 },
+                    agingIssues: 2, avgClosureTime: 4.2, builderWorkload: 5
+                }, error: null };
+            }
             if (action === 'getReportPhotoB64') {
                 // Preview-only: cycle through small solid-colour 1x1 PNGs
                 // so each inline thumb renders as a visible coloured swatch.
