@@ -12,9 +12,12 @@ const API = {
     // fork/staging deploy doesn't accidentally POST to the canonical dev
     // endpoint. Falls back to the historical hardcoded literal for
     // dev-mode callers that load api.html without the preceding include.
+    // Fallback URL is the PUBLIC deployment cut inside TA_IRP_Launch (the
+    // CI-target project) on 2026-07-12 — the previous literal pointed to a
+    // deployment inside a different, unmigrated project.
     ENDPOINT: (typeof window !== "undefined" && window.IRP_WEBAPP_URL)
         ? window.IRP_WEBAPP_URL
-        : "https://script.google.com/macros/s/AKfycbzfqTrf8fR-cc1ESy3qY13lxc8e0_K4-DeGgRkc-uK22D-NxVvab2V4Gu6Ac-vw9L-Ixw/exec",
+        : "https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec",
 
     get USES_APPS_SCRIPT() {
         return typeof google !== "undefined" &&

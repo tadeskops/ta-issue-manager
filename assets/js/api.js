@@ -15,7 +15,10 @@
 const API = {
     // Used only by the fetch fallback (local dev). Production HtmlService
     // ignores this — identity comes from the Google session, not from the URL.
-    ENDPOINT: "https://script.google.com/macros/s/AKfycbzfqTrf8fR-cc1ESy3qY13lxc8e0_K4-DeGgRkc-uK22D-NxVvab2V4Gu6Ac-vw9L-Ixw/exec",
+    // Updated 2026-07-12: previous URL pointed to a stale project (v24 May 10);
+    // this one is the canonical PUBLIC deployment cut inside TA_IRP_Launch,
+    // the project CI now bumps on every push.
+    ENDPOINT: "https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec",
 
     // Detect environment once.
     get USES_APPS_SCRIPT() {

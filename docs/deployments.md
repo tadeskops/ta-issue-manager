@@ -24,8 +24,13 @@ the cutting/updating runbook.
 
 | Deployment | Execute as | Who has access | Live `.../exec` URL | Verify with |
 |---|---|---|---|---|
-| **Public**  | `USER_DEPLOYING`  | `ANYONE_ANONYMOUS`             | `https://script.google.com/macros/s/AKfycbzfqTrf8fR-cc1ESy3qY13lxc8e0_K4-DeGgRkc-uK22D-NxVvab2V4Gu6Ac-vw9L-Ixw/exec` (identified via anonymous curl 2026-07-11 → `Content-Type: application/json`) | Open `<url>?diag=deployment` in incognito — expect `mode: "USER_DEPLOYING"`, empty `activeEmail`, non-empty `effectiveEmail`. |
+| **Public**  | `USER_DEPLOYING`  | `ANYONE_ANONYMOUS`             | `https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec` (rev 2026-07-12 — cut inside TA_IRP_Launch to consolidate onto the CI-target project) | Open `<url>?diag=deployment` in incognito — expect `mode: "USER_DEPLOYING"`, empty `activeEmail`, non-empty `effectiveEmail`. |
 | **Secure**  | `USER_ACCESSING`  | `ANYONE` (any Google account)  | `https://script.google.com/macros/s/AKfycbzWfDC5iq2RXoL5qtt4rQHwOrdj4nWGKNzytdByH67Lkk4QNetfYdrM3nXuuUj8rEQm/exec` (identified via anonymous curl 2026-07-11 → HTML title `"Issue Addressal Portal - Access Required"`) | Open `<url>?diag=deployment` — Google renders an HTML sign-in gate (HTTP 200, `text/html`, title contains `"Access Required"`). After sign-in, expect JSON with `mode: "USER_ACCESSING"`, `activeEmail == effectiveEmail == <you>`. |
+
+> **Superseded URL (2026-07-12):** the previous PUBLIC URL
+> `AKfycbzfqTrf8fR…` lived in a different Apps Script project
+> (`TA_Issue_Manager`, scriptId `1GHVaWaf…`) that CI was never wired to.
+> It kept serving May-10 code (`v24`, response `{"success":true,"message":"TA Issue Management API is running",…}`) while CI bumped versions inside `TA_IRP_Launch` (`1dcYix1t…`). Fix was to cut a fresh public deployment inside `TA_IRP_Launch` — now the canonical.
 
 > **Anonymous fingerprint** (confirmed against production 2026-07-11 via
 > `curl -sSL "<url>?diag=deployment"`):
