@@ -85,15 +85,21 @@ jobs:
         run: |
           set -uo pipefail
           probe() {
-            HTTP=$(curl -sSL --max-time 30 -o /tmp/sec.body -w '%{http_code}|%{content_type}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0")
+            HTTP=$(curl -sS --max-time 30 -D /tmp/sec.hdr -o /tmp/sec.body -w '%{http_code}|%{content_type}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0")
             CODE=$(echo "$HTTP" | cut -d'|' -f1)
             CT=$(echo   "$HTTP" | cut -d'|' -f2)
             TITLE=$(grep -oE '<title[^>]*>[^<]+</title>' /tmp/sec.body 2>/dev/null | head -n1 | sed 's/<[^>]*>//g' || true)
+            LOCATION=$(grep -iE '^location:' /tmp/sec.hdr 2>/dev/null | head -n1 | sed 's/\r$//' | cut -d' ' -f2- || true)
             echo "  attempt: HTTP=$CODE CT=$CT TITLE=$TITLE"
+            [ -n "$LOCATION" ] && echo "  LOCATION=$LOCATION"
+            # Signal A (current Google behaviour): 302 → accounts.google.com/ServiceLogin.
+            if [ "$CODE" = "302" ] && echo "$LOCATION" | grep -qi 'accounts.google.com/ServiceLogin'; then
+              return 0
+            fi
             [ "$CODE" = "200" ] || return 1
             # Must be HTML sign-in gate — JSON would mean the gate is off.
             echo "$CT" | grep -qi 'application/json' && return 1
-            # Title should contain "Access Required"; fall back to warden scaffold marker.
+            # Signal B (legacy Apps Script gate): title "Access Required" / warden markers.
             echo "$TITLE" | grep -qi 'access required' && return 0
             grep -q 'warden_bin_i18n\|macros/client' /tmp/sec.body 2>/dev/null && return 0
             return 1

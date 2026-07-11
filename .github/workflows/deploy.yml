@@ -227,13 +227,29 @@ jobs:
           echo "Probing: $URL?diag=deployment (no auth, expect sign-in gate)"
           # Retry (same rationale as PUBLIC): Apps Script edge sometimes
           # returns 502 for a single request after a fresh deploy.
+          #
+          # Two accepted "healthy gate" signals:
+          #   A) HTTP 302 with Location pointing at accounts.google.com/ServiceLogin
+          #      (current Google behaviour — a plain redirect to real sign-in).
+          #   B) HTTP 200 whose HTML is the "Access Required" / warden
+          #      scaffold page (legacy Apps Script gate).
+          # We intentionally do NOT follow redirects (-L removed) so we can
+          # see the 302 directly instead of downloading the 900KB Google
+          # sign-in page just to grep its title.
           attempt() {
-            HTTP=$(curl -sSL --max-time 30 -o /tmp/sec.body -w '%{http_code}|%{content_type}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0")
+            HTTP=$(curl -sS --max-time 30 -D /tmp/sec.hdr -o /tmp/sec.body -w '%{http_code}|%{content_type}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0")
             CODE=$(echo "$HTTP" | cut -d'|' -f1)
             CT=$(echo   "$HTTP" | cut -d'|' -f2)
             BYTES=$(wc -c < /tmp/sec.body)
             TITLE=$(grep -oE '<title[^>]*>[^<]+</title>' /tmp/sec.body 2>/dev/null | head -n1 | sed 's/<[^>]*>//g' || true)
+            LOCATION=$(grep -iE '^location:' /tmp/sec.hdr 2>/dev/null | head -n1 | sed 's/\r$//' | cut -d' ' -f2- || true)
             echo "  HTTP=$CODE  CONTENT_TYPE=$CT  BYTES=$BYTES  TITLE=$TITLE"
+            [ -n "$LOCATION" ] && echo "  LOCATION=$LOCATION"
+            # Signal A: 302 → accounts.google.com/ServiceLogin (real Google gate).
+            if [ "$CODE" = "302" ] && echo "$LOCATION" | grep -qi 'accounts.google.com/ServiceLogin'; then
+              return 0
+            fi
+            # From here on we expect an HTTP 200 (legacy in-app gate page).
             [ "$CODE" = "200" ] || return 2
             # JSON reply means the sign-in gate is off — that's a config
             # problem, not a transient failure; abort retries.
@@ -241,7 +257,7 @@ jobs:
               echo "  ::error::SECURE deployment served JSON to an anonymous caller — sign-in gate is DISABLED."
               return 5
             fi
-            # Prefer the "Access Required" title; fall back to warden scaffold markers.
+            # Signal B: prefer "Access Required" title; fall back to warden scaffold markers.
             echo "$TITLE" | grep -qi 'access required' && return 0
             grep -q 'warden_bin_i18n\|macros/client' /tmp/sec.body 2>/dev/null && return 0
             return 4
