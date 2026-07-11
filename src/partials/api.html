@@ -6,7 +6,15 @@ window.IRP_WEBAPP_URL = "<?= (function(){ try { return getWebAppUrl() || ''; } c
 </script>
 <script>
 const API = {
-    ENDPOINT: "https://script.google.com/macros/s/AKfycbzfqTrf8fR-cc1ESy3qY13lxc8e0_K4-DeGgRkc-uK22D-NxVvab2V4Gu6Ac-vw9L-Ixw/exec",
+    // In production the client uses `google.script.run` (see USES_APPS_SCRIPT
+    // below), so ENDPOINT is only exercised in non-Apps-Script dev mode.
+    // Prefer the current deployment's URL (set by the include above) so a
+    // fork/staging deploy doesn't accidentally POST to the canonical dev
+    // endpoint. Falls back to the historical hardcoded literal for
+    // dev-mode callers that load api.html without the preceding include.
+    ENDPOINT: (typeof window !== "undefined" && window.IRP_WEBAPP_URL)
+        ? window.IRP_WEBAPP_URL
+        : "https://script.google.com/macros/s/AKfycbzfqTrf8fR-cc1ESy3qY13lxc8e0_K4-DeGgRkc-uK22D-NxVvab2V4Gu6Ac-vw9L-Ixw/exec",
 
     get USES_APPS_SCRIPT() {
         return typeof google !== "undefined" &&

@@ -35,6 +35,11 @@ const SLA_RULES = {
     "Low": 15
 };
 
+// Canonical list of statuses this system understands. Referenced by docs
+// and diagnostics; NOT enforced at the writer boundary (updateBuilderStatus /
+// approveIssue / closeIssue accept the statuses they set explicitly). Kept
+// as a single source of truth for the state machine so a future validator
+// can consult it without re-listing the values.
 const ALLOWED_STATUSES = [
     "PENDING_APPROVAL", "APPROVED", "ASSIGNED",
     "IN_PROGRESS", "WORK_COMPLETED", "CLOSED", "REOPENED", "REJECTED"
@@ -1612,8 +1617,25 @@ function deleteIssue(ticketId, sheet) {
     }
 }
 
-// Get Dashboard Metrics
+// Get Dashboard Metrics.
+//
+// Reads three whole sheets on every call (pending + live + closed) which
+// is fine at society scale but adds noticeable latency when the admin
+// dashboard polls every 60s. Cache the computed payload in the
+// ScriptCache for a short TTL so a burst of consumers (multiple open
+// dashboards, refreshes) shares one Sheets scan. TTL is deliberately
+// short (60s) so writes propagate visibly without an explicit
+// invalidation on every approve/reject/close code path.
+const DASHBOARD_METRICS_CACHE_KEY = "IRP_DASH_V1";
+const DASHBOARD_METRICS_CACHE_TTL = 60; // seconds
 function getDashboardMetrics() {
+    try {
+        const _cache = CacheService.getScriptCache();
+        const _hit = _cache.get(DASHBOARD_METRICS_CACHE_KEY);
+        if (_hit) {
+            return { success: true, data: JSON.parse(_hit), error: null };
+        }
+    } catch (e) { /* cache miss / unavailable — compute fresh */ }
     try {
         const pendingSheet = getSheet(SHEETS.PENDING_REVIEW);
         const liveSheet    = getSheet(SHEETS.LIVE_ISSUES);
@@ -1664,23 +1686,27 @@ function getDashboardMetrics() {
             totalClosureTime += Number(closedData[i][resolutionIdx]) || 0;
         }
         const avgClosureTime = totalClosed > 0 ? (totalClosureTime / totalClosed).toFixed(1) : 0;
-        
-        return {
-            success: true,
-            data: {
-                totalPending: totalPending,
-                totalActive: totalActive,
-                totalClosed: totalClosed,
-                criticalPending: criticalPending,
-                slaBreaches: slaBreaches,
-                categoryBreakdown: categoryBreakdown,
-                towerBreakdown: towerBreakdown,
-                agingIssues: agingIssues,
-                avgClosureTime: parseFloat(avgClosureTime),
-                builderWorkload: totalActive
-            },
-            error: null
+
+        const payload = {
+            totalPending: totalPending,
+            totalActive: totalActive,
+            totalClosed: totalClosed,
+            criticalPending: criticalPending,
+            slaBreaches: slaBreaches,
+            categoryBreakdown: categoryBreakdown,
+            towerBreakdown: towerBreakdown,
+            agingIssues: agingIssues,
+            avgClosureTime: parseFloat(avgClosureTime),
+            builderWorkload: totalActive
         };
+        try {
+            CacheService.getScriptCache().put(
+                DASHBOARD_METRICS_CACHE_KEY,
+                JSON.stringify(payload),
+                DASHBOARD_METRICS_CACHE_TTL
+            );
+        } catch (e) { /* cache put failure must never break the request */ }
+        return { success: true, data: payload, error: null };
     } catch (error) {
         return { success: false, data: null, error: error.toString() };
     }
