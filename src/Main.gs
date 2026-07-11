@@ -238,7 +238,21 @@ function getSpreadsheet() {
         return SpreadsheetApp.openById(SHEET_ID);
     } catch (error) {
         Logger.log("Error opening spreadsheet: " + error.toString());
-        throw new Error("Cannot access spreadsheet with ID: " + SHEET_ID);
+        // Build a caller-friendly diagnostic. The secure deployment runs
+        // as USER_ACCESSING, so this call uses the SIGNED-IN user's Drive
+        // credentials — if their email is not shared on the source sheet,
+        // openById throws. Include the caller's email + the actionable
+        // fix so the operator can self-diagnose from the toast instead
+        // of seeing an opaque sheet id.
+        var callerEmail = "";
+        try { callerEmail = (Session.getActiveUser().getEmail() || "").trim(); }
+        catch (_e) { /* identity lookup can fail on anonymous sessions */ }
+        var msg = "Cannot open the issues spreadsheet (id " + SHEET_ID + ") as "
+                + (callerEmail ? callerEmail : "the current user")
+                + ". Your Google account may not have Drive access to the sheet. "
+                + "Ask the admin to run syncRoleAccessNow() (or share the sheet "
+                + "with your email as Viewer). Underlying error: " + error;
+        throw new Error(msg);
     }
 }
 

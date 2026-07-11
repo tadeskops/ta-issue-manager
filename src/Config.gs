@@ -252,6 +252,28 @@ function onConfigSheetEdit_(e) {
         if (sheetName !== CONFIG_SHEET_NAME) return;
         clearConfigCache();
         Logger.log("onConfigSheetEdit_: cache cleared after edit at " + e.range.getA1Notation());
+        // If the edit touched a row whose key column is COMMITTEE_EMAILS
+        // or BUILDER_EMAIL, also grant Drive access on the bound sheet
+        // + attachment folder to every listed email. This closes the
+        // "added committee member to CONFIG but they still get Cannot
+        // access spreadsheet" gap. Wrapped in its own try/catch so a
+        // sharing failure never blocks the operator's edit.
+        try {
+            const editedRow = e.range.getRow();
+            if (editedRow < 2) return; // header row
+            const sh = e.range.getSheet();
+            const keyCell = sh.getRange(editedRow, 1).getValue();
+            const key = String(keyCell || "").trim().toUpperCase();
+            if (key === "COMMITTEE_EMAILS" || key === "BUILDER_EMAIL") {
+                const report = syncRoleAccess_({ silent: true });
+                Logger.log("onConfigSheetEdit_: role-access sync after " + key +
+                           " edit -> granted=" + report.granted.length +
+                           " alreadyHad=" + report.alreadyHad.length +
+                           " failed=" + report.failed.length);
+            }
+        } catch (syncErr) {
+            Logger.log("onConfigSheetEdit_: role-access sync failed (non-fatal): " + syncErr);
+        }
     } catch (err) {
         Logger.log("onConfigSheetEdit_ error: " + err);
     }
@@ -278,6 +300,181 @@ function installConfigOnEditTrigger() {
 }
 
 /**
+ * Grants every configured committee + builder email at least Viewer
+ * access on the bound spreadsheet AND on the attachment folder, so
+ * the secure deployment (executeAs USER_ACCESSING) can actually read
+ * the sheet under each committee member's own Google identity.
+ *
+ * WHY THIS EXISTS:
+ *   Adding an email to the CONFIG!COMMITTEE_EMAILS row makes the app
+ *   *treat* that user as committee (getUserRole returns "COMMITTEE"),
+ *   but it does NOT grant Drive access. Because the secure web-app
+ *   deployment runs as the caller, every SpreadsheetApp.openById call
+ *   uses the caller's credentials — if their email is not on the
+ *   sheet's ACL, they see "Cannot open the issues spreadsheet". This
+ *   helper closes that gap.
+ *
+ * Runs automatically on any edit to COMMITTEE_EMAILS / BUILDER_EMAIL
+ * via onConfigSheetEdit_. Operators can also invoke it manually via
+ * `syncRoleAccessNow()` from the Apps Script editor after a bulk
+ * import.
+ *
+ * Returns a diff report:
+ *   { granted: [...], alreadyHad: [...], failed: [{email, error}] }
+ *
+ * Notes:
+ *   - Never throws. Individual failures are logged and returned in
+ *     `failed[]` so partial success is visible.
+ *   - Idempotent: skips emails already on the ACL.
+ *   - Requires the installer / caller to be the sheet owner (or an
+ *     editor with sharing enabled). Since installable triggers run as
+ *     the user who installed them, wiring this to onConfigSheetEdit_
+ *     via installConfigOnEditTrigger() ensures the owner's grants are
+ *     used automatically.
+ *   - Does NOT send Drive notification emails (Apps Script's
+ *     Spreadsheet.addViewer / Folder.addViewer are silent by default).
+ */
+function syncRoleAccess_(opts) {
+    opts = opts || {};
+    const report = { granted: [], alreadyHad: [], failed: [], skippedInvalid: [] };
+    let cfg;
+    try { cfg = readConfigFromSheet_(); }
+    catch (e) {
+        Logger.log("syncRoleAccess_: cannot read CONFIG: " + e);
+        report.failed.push({ email: "<config-read>", error: String(e) });
+        return report;
+    }
+    // Union of committee + builder emails, normalized + de-duped.
+    const emails = [];
+    const seen   = {};
+    const push   = function (raw) {
+        const s = String(raw || "").trim().toLowerCase();
+        // Minimal RFC-5321 shape check: at least one char, an '@', and
+        // at least one dot in the domain. Anything else is user error.
+        if (!s) return;
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) {
+            report.skippedInvalid.push(raw);
+            return;
+        }
+        if (seen[s]) return;
+        seen[s] = true;
+        emails.push(s);
+    };
+    (cfg.committeeEmails || []).forEach(push);
+    (cfg.builderEmails   || [cfg.builderEmail]).forEach(push);
+
+    if (!emails.length) {
+        Logger.log("syncRoleAccess_: no committee/builder emails configured — nothing to sync.");
+        return report;
+    }
+
+    // Grant on the spreadsheet.
+    let ss;
+    try { ss = SpreadsheetApp.openById(SHEET_ID); }
+    catch (e) {
+        Logger.log("syncRoleAccess_: cannot open spreadsheet (caller may not be owner): " + e);
+        report.failed.push({ email: "<open-spreadsheet>", error: String(e) });
+        return report;
+    }
+
+    // Pre-compute the set of emails that already have edit or view
+    // access so we can skip Drive round-trips for them.
+    const existingLower = {};
+    try {
+        ss.getEditors().forEach(function (u) { existingLower[String(u.getEmail() || "").toLowerCase()] = "editor"; });
+        ss.getViewers().forEach(function (u) { existingLower[String(u.getEmail() || "").toLowerCase()] = existingLower[String(u.getEmail() || "").toLowerCase()] || "viewer"; });
+        // Owner also counts.
+        try {
+            const owner = ss.getOwner();
+            if (owner) existingLower[String(owner.getEmail() || "").toLowerCase()] = "owner";
+        } catch (_ow) { /* Workspace files may lack an individual owner */ }
+    } catch (e) {
+        Logger.log("syncRoleAccess_: could not enumerate existing viewers/editors: " + e);
+    }
+
+    // Also grab the attachment folder once so we only resolve it per run.
+    let attachmentFolder = null;
+    try {
+        const fid = cfg.attachmentFolderId;
+        if (fid) attachmentFolder = DriveApp.getFolderById(fid);
+    } catch (e) {
+        Logger.log("syncRoleAccess_: attachment folder (" + cfg.attachmentFolderId + ") unavailable: " + e);
+    }
+    const folderExistingLower = {};
+    if (attachmentFolder) {
+        try {
+            attachmentFolder.getEditors().forEach(function (u) { folderExistingLower[String(u.getEmail() || "").toLowerCase()] = "editor"; });
+            attachmentFolder.getViewers().forEach(function (u) { folderExistingLower[String(u.getEmail() || "").toLowerCase()] = folderExistingLower[String(u.getEmail() || "").toLowerCase()] || "viewer"; });
+        } catch (e) {
+            Logger.log("syncRoleAccess_: could not enumerate folder viewers/editors: " + e);
+        }
+    }
+
+    for (let i = 0; i < emails.length; i++) {
+        const email = emails[i];
+        const hadSheet  = !!existingLower[email];
+        const hadFolder = !!folderExistingLower[email];
+        let didGrant = false;
+
+        if (hadSheet) {
+            report.alreadyHad.push({ email: email, resource: "spreadsheet", role: existingLower[email] });
+        } else {
+            try {
+                ss.addViewer(email);
+                report.granted.push({ email: email, resource: "spreadsheet" });
+                didGrant = true;
+            } catch (e) {
+                Logger.log("syncRoleAccess_: addViewer(spreadsheet, " + email + ") failed: " + e);
+                report.failed.push({ email: email, resource: "spreadsheet", error: String(e) });
+            }
+        }
+
+        if (attachmentFolder) {
+            if (hadFolder) {
+                report.alreadyHad.push({ email: email, resource: "attachmentFolder", role: folderExistingLower[email] });
+            } else {
+                try {
+                    attachmentFolder.addViewer(email);
+                    report.granted.push({ email: email, resource: "attachmentFolder" });
+                    didGrant = true;
+                } catch (e) {
+                    Logger.log("syncRoleAccess_: addViewer(folder, " + email + ") failed: " + e);
+                    report.failed.push({ email: email, resource: "attachmentFolder", error: String(e) });
+                }
+            }
+        }
+
+        if (!opts.silent && didGrant) {
+            Logger.log("syncRoleAccess_: granted Viewer to " + email);
+        }
+    }
+
+    Logger.log("syncRoleAccess_ complete: granted=" + report.granted.length +
+               " alreadyHad=" + report.alreadyHad.length +
+               " failed=" + report.failed.length +
+               " skippedInvalid=" + report.skippedInvalid.length);
+    return report;
+}
+
+/**
+ * Operator-facing one-shot: run syncRoleAccess_ and return the report.
+ * Safe to call repeatedly. Intended for the Apps Script editor after
+ * bulk edits to the CONFIG sheet, or from a support console when a
+ * committee member reports "Cannot open the issues spreadsheet".
+ */
+function syncRoleAccessNow() {
+    const r = syncRoleAccess_({ silent: false });
+    Logger.log("---- syncRoleAccessNow report ----");
+    Logger.log("Granted (" + r.granted.length + "): " + JSON.stringify(r.granted));
+    Logger.log("Already had (" + r.alreadyHad.length + "): " + JSON.stringify(r.alreadyHad));
+    Logger.log("Failed (" + r.failed.length + "): " + JSON.stringify(r.failed));
+    if (r.skippedInvalid.length) {
+        Logger.log("Skipped invalid emails (" + r.skippedInvalid.length + "): " + JSON.stringify(r.skippedInvalid));
+    }
+    return r;
+}
+
+/**
  * Diagnostic used by the ?diag=whoami route. Returns everything the
  * server sees when resolving the caller's role, so an operator can tell
  * at a glance whether the CONFIG sheet was read, which committee list
@@ -285,7 +482,7 @@ function installConfigOnEditTrigger() {
  */
 function diag_whoami_() {
     const out = {
-        version: "diag-whoami-r1",
+        version: "diag-whoami-r2",
         when: new Date().toISOString(),
         email: null,
         role: null,
@@ -296,6 +493,11 @@ function diag_whoami_() {
         sheetId: SHEET_ID,
         configSheetPresent: null,
         cacheHit: null,
+        sheetReadable: null,     // can THIS caller openById + read a cell?
+        sheetReadableError: null,
+        attachmentFolderReadable: null,
+        attachmentFolderError: null,
+        hint: null,
         error: null
     };
     try {
@@ -311,6 +513,31 @@ function diag_whoami_() {
     } catch (e) {
         out.configSheetPresent = false;
         out.error = (out.error ? out.error + " | " : "") + "sheet-open: " + e;
+    }
+    // Probe THIS caller's ability to open the sheet + read a cell. This
+    // is the definitive "does the user actually have Drive access" check
+    // — a passing role check with a failing sheet probe is exactly the
+    // symptom of the "added to CONFIG but not shared on Drive" gap.
+    try {
+        const ssProbe = SpreadsheetApp.openById(SHEET_ID);
+        // Force an actual read so we detect metadata-only permission cases.
+        ssProbe.getSheets()[0].getRange(1, 1).getValue();
+        out.sheetReadable = true;
+    } catch (e) {
+        out.sheetReadable = false;
+        out.sheetReadableError = String(e);
+    }
+    try {
+        const cfg = getConfig();
+        if (cfg.attachmentFolderId) {
+            DriveApp.getFolderById(cfg.attachmentFolderId).getName();
+            out.attachmentFolderReadable = true;
+        } else {
+            out.attachmentFolderReadable = null; // not configured
+        }
+    } catch (e) {
+        out.attachmentFolderReadable = false;
+        out.attachmentFolderError = String(e);
     }
     try {
         const fresh = readConfigFromSheet_();
@@ -333,6 +560,17 @@ function diag_whoami_() {
         out.role = getUserRole(out.email);
     } catch (e) {
         out.error = (out.error ? out.error + " | " : "") + "role: " + e;
+    }
+    // Compose an actionable hint that matches the observed state.
+    if (out.role === "UNKNOWN") {
+        out.hint = "Signed-in email is not in CONFIG!COMMITTEE_EMAILS or BUILDER_EMAIL. Add it, then re-open the app.";
+    } else if (out.sheetReadable === false) {
+        out.hint = "Role is " + out.role + " but this account cannot read the issues sheet on Drive. "
+                 + "Run syncRoleAccessNow() from the Apps Script editor (or manually share the sheet "
+                 + "with " + (out.email || "this email") + " as Viewer).";
+    } else if (out.attachmentFolderReadable === false) {
+        out.hint = "Sheet access OK, but the attachment folder is not readable — photo thumbnails will 404. "
+                 + "Run makeAttachmentFolderPublic() from the Apps Script editor.";
     }
     return out;
 }

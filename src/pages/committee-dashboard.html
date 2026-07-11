@@ -690,8 +690,8 @@
 
                 const msg = (error && error.message) || String(error);
                 let hint = '';
-                if (/permission|not have access|denied|openById/i.test(msg)) {
-                    hint = ' — your Google account may not have access to the spreadsheet. Ask the admin to share the issues sheet with you (Viewer is enough).';
+                if (/permission|not have access|denied|openById|cannot open the issues spreadsheet|cannot access spreadsheet/i.test(msg)) {
+                    hint = ' — your Google account may not have access to the spreadsheet. Ask the admin to run syncRoleAccessNow() (or share the issues sheet with you as Viewer).';
                 }
                 showToast('Could not load issues: ' + msg + hint, 'error');
             }
