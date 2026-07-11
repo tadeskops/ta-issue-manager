@@ -1,0 +1,235 @@
+name: Health check (scheduled)
+
+# Runs the same post-deploy verify steps as deploy.yml, on a cron, so we
+# catch drift between pushes:
+#   * Someone edits the manifest via the Apps Script UI and changes access
+#   * Google migrates infrastructure and a scope silently deauthorizes
+#   * The deployer's OAuth grant is revoked (drive/spreadsheets scopes)
+#   * A CONFIG sheet edit breaks the CONFIG_CACHE reader
+#
+# On failure, this workflow opens (or updates) a GitHub issue labeled
+# `production-broken` so the on-call sees it without needing to check
+# CI. When the URL variables (WEBAPP_URL_PUBLIC / WEBAPP_URL_SECURE)
+# are absent, the workflow is a no-op — it does not spam issues.
+
+on:
+  schedule:
+    # Every 6 hours at :17 past. Offset from :00 to avoid the
+    # thundering-herd effect against GitHub's scheduler.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: apps-script-health-check
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Probe live deployments
+    runs-on: ubuntu-latest
+    outputs:
+      failed: ${{ steps.summary.outputs.failed }}
+      failure_reason: ${{ steps.summary.outputs.failure_reason }}
+    steps:
+      - name: Skip when URLs are not configured
+        if: vars.WEBAPP_URL_PUBLIC == '' && vars.WEBAPP_URL_SECURE == ''
+        run: |
+          echo "::notice::Both WEBAPP_URL_* variables are unset — scheduled health-check is a no-op."
+          echo "Configure them under Settings → Secrets and variables → Actions → Variables to enable."
+          exit 0
+
+      # Public deployment. Retry up to 3 times with 15s backoff — Apps
+      # Script cold starts and Google's edge sometimes return 502 for a
+      # single request; a real outage will fail all three attempts.
+      - name: Probe PUBLIC deployment
+        id: pub
+        if: vars.WEBAPP_URL_PUBLIC != ''
+        env:
+          URL: ${{ vars.WEBAPP_URL_PUBLIC }}
+        run: |
+          set -uo pipefail
+          probe() {
+            HTTP=$(curl -sSL --max-time 30 -o /tmp/pub.body -w '%{http_code}|%{content_type}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0")
+            CODE=$(echo "$HTTP" | cut -d'|' -f1)
+            CT=$(echo   "$HTTP" | cut -d'|' -f2)
+            echo "  attempt: HTTP=$CODE CT=$CT"
+            [ "$CODE" = "200" ] || return 1
+            echo "$CT" | grep -qi 'application/json' || return 1
+            node -e "const j=JSON.parse(require('fs').readFileSync('/tmp/pub.body','utf8')); if(j.mode!=='USER_DEPLOYING' || j.activeEmail || !j.effectiveEmail){process.exit(1)}" 2>/dev/null || return 1
+            return 0
+          }
+          ok=0
+          for i in 1 2 3; do
+            echo "Probe #$i of PUBLIC $URL"
+            if probe; then ok=1; break; fi
+            [ $i -lt 3 ] && sleep 15
+          done
+          if [ $ok -eq 0 ]; then
+            echo "public_ok=false" >> "$GITHUB_OUTPUT"
+            echo "----- last body (first 400 bytes) -----"
+            head -c 400 /tmp/pub.body 2>/dev/null; echo
+            exit 1
+          fi
+          echo "public_ok=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Public deployment healthy."
+
+      - name: Probe SECURE deployment
+        id: sec
+        if: vars.WEBAPP_URL_SECURE != ''
+        env:
+          URL: ${{ vars.WEBAPP_URL_SECURE }}
+        run: |
+          set -uo pipefail
+          probe() {
+            HTTP=$(curl -sSL --max-time 30 -o /tmp/sec.body -w '%{http_code}|%{content_type}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0")
+            CODE=$(echo "$HTTP" | cut -d'|' -f1)
+            CT=$(echo   "$HTTP" | cut -d'|' -f2)
+            TITLE=$(grep -oE '<title[^>]*>[^<]+</title>' /tmp/sec.body 2>/dev/null | head -n1 | sed 's/<[^>]*>//g' || true)
+            echo "  attempt: HTTP=$CODE CT=$CT TITLE=$TITLE"
+            [ "$CODE" = "200" ] || return 1
+            # Must be HTML sign-in gate — JSON would mean the gate is off.
+            echo "$CT" | grep -qi 'application/json' && return 1
+            # Title should contain "Access Required"; fall back to warden scaffold marker.
+            echo "$TITLE" | grep -qi 'access required' && return 0
+            grep -q 'warden_bin_i18n\|macros/client' /tmp/sec.body 2>/dev/null && return 0
+            return 1
+          }
+          ok=0
+          for i in 1 2 3; do
+            echo "Probe #$i of SECURE $URL"
+            if probe; then ok=1; break; fi
+            [ $i -lt 3 ] && sleep 15
+          done
+          if [ $ok -eq 0 ]; then
+            echo "secure_ok=false" >> "$GITHUB_OUTPUT"
+            echo "----- last body (first 400 bytes) -----"
+            head -c 400 /tmp/sec.body 2>/dev/null; echo
+            exit 1
+          fi
+          echo "secure_ok=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Secure deployment healthy."
+
+      - name: Summarise outcome
+        id: summary
+        if: always() && (vars.WEBAPP_URL_PUBLIC != '' || vars.WEBAPP_URL_SECURE != '')
+        env:
+          PUB_OK: ${{ steps.pub.outcome }}
+          SEC_OK: ${{ steps.sec.outcome }}
+        run: |
+          set -uo pipefail
+          reasons=""
+          failed=false
+          if [ -n "${{ vars.WEBAPP_URL_PUBLIC }}" ] && [ "$PUB_OK" = "failure" ]; then
+            failed=true
+            reasons="${reasons}Public deployment (${{ vars.WEBAPP_URL_PUBLIC }}) failed health-check.%0A"
+          fi
+          if [ -n "${{ vars.WEBAPP_URL_SECURE }}" ] && [ "$SEC_OK" = "failure" ]; then
+            failed=true
+            reasons="${reasons}Secure deployment (${{ vars.WEBAPP_URL_SECURE }}) failed health-check.%0A"
+          fi
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          echo "failure_reason=$reasons" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Health check results"
+            echo "- Public: $PUB_OK"
+            echo "- Secure: $SEC_OK"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Only opens a fresh issue when the probe job failed. Uses
+  # actions/github-script to look for an already-open issue with the
+  # `production-broken` label so we don't spam the tracker with a new
+  # issue every 6 hours during a sustained outage.
+  open_issue:
+    name: Open / update production issue
+    needs: probe
+    if: always() && needs.probe.outputs.failed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update production-broken issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reason = `${{ needs.probe.outputs.failure_reason }}`.replaceAll('%0A', '\n');
+            const runUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const bodyLines = [
+              '# Production health check failed',
+              '',
+              reason,
+              '',
+              `**Run:** ${runUrl}`,
+              `**Detected:** ${new Date().toISOString()}`,
+              '',
+              '## Triage checklist',
+              '- [ ] Open Apps Script editor → **Executions** and look for recent failures',
+              '- [ ] Confirm deployment IDs in secrets still match Deploy → Manage deployments in the editor',
+              '- [ ] Confirm the CONFIG sheet is reachable by the deployer (run `?diag=whoami` on the secure URL when signed in as deployer)',
+              '- [ ] Confirm OAuth scopes still granted (run `checkOAuthScopes` from the editor)',
+              '- [ ] If a scope was revoked: re-run `syncRoleAccessNow`, re-consent, then re-run the failed deploy',
+              '',
+              '## Auto-close',
+              'This issue will be closed automatically by the next successful scheduled health-check run.',
+            ];
+            const body = bodyLines.join('\n');
+            const label = 'production-broken';
+
+            // Ensure label exists (best-effort; failure is not fatal).
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch (e) {
+              try {
+                await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label, color: 'B60205', description: 'Scheduled health-check detected a live-URL failure.' });
+              } catch (e2) { /* ignore */ }
+            }
+
+            // Find existing open issue.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: label, per_page: 5
+            });
+            if (existing.data.length > 0) {
+              const num = existing.data[0].number;
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: num, body: `Repeat failure — see ${runUrl}\n\n${reason}` });
+              core.notice(`Appended comment to existing issue #${num}.`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: '⚠️ Production health check failed',
+                body, labels: [label],
+              });
+              core.notice(`Opened new issue #${created.data.number}.`);
+            }
+
+  # Auto-close the production-broken issue once the probe succeeds again.
+  auto_close:
+    name: Auto-close production issue if healthy
+    needs: probe
+    if: always() && needs.probe.outputs.failed == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Close resolved production issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = 'production-broken';
+            const list = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', labels: label, per_page: 20
+            });
+            for (const issue of list.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number,
+                body: `Health-check probe recovered (run ${context.runId}). Closing.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number, state: 'closed',
+              });
+              core.notice(`Closed recovered issue #${issue.number}.`);
+            }

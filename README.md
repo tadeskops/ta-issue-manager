@@ -146,12 +146,82 @@ jsPDF and the cell renders the "photo unavailable" placeholder.
 
 ## Deploy
 
-Use clasp (`clasp push` from project root). Filenames in Apps Script preserve
-their `src/...` prefix; `HtmlService.createTemplateFromFile("src/pages/index")`
-resolves correctly.
+The portal is one Apps Script project (standalone — NOT a container-bound
+script under the sheet's Extensions menu) with **two** web-app deployments
+cut from it. Both share identical code and manifest scopes; only the
+per-deployment `Execute as` + `Who has access` differ. See
+[`docs/deployments.md`](docs/deployments.md) for the URL registry and
+[`requirement.md`](./requirement.md) §19.8 for the design rationale.
 
-Run `setupConfigSheet` once after the first deploy to seed the CONFIG sheet
-(idempotent — preserves existing edits).
+| Deployment | `Execute as` | `Who has access` | Purpose |
+|---|---|---|---|
+| **Public** | `Me` (`USER_DEPLOYING`) | `Anyone` (`ANYONE_ANONYMOUS`) | Landing page, read-only board (`?page=submitted`), full-report PDF link, resident submit form |
+| **Secure** | `User accessing the web app` (`USER_ACCESSING`) | `Anyone with a Google account` (`ANYONE`) | Committee / Builder / Admin dashboards — role is enforced by `getUserRole()` *and* Google's sheet ACL |
+
+### First-time clasp setup
+
+```powershell
+# 1. Copy the scriptId template — .clasp.json is gitignored on purpose so
+#    every deployer picks the same canonical project instead of accidentally
+#    creating (or reviving) a second one.
+Copy-Item .clasp.example.json .clasp.json
+# 2. Edit .clasp.json and fill in "scriptId" with the standalone project id.
+#    Do NOT use a container-bound script id (opened via a Sheet's Extensions
+#    menu) — that is a different project and pushes will drift.
+clasp push -f
+```
+
+### Cutting both deployments (one-time, per project)
+
+1. Open the standalone Apps Script project in the editor.
+2. **Deploy → New deployment → Web app.**
+   - Description: `Public (anonymous landing + submitted)`
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+   - Copy the resulting `.../exec` URL — this is `PUBLIC_WEBAPP_URL`.
+3. **Deploy → New deployment → Web app** again.
+   - Description: `Secure (committee/builder/admin)`
+   - Execute as: **User accessing the web app**
+   - Who has access: **Anyone with Google account**
+   - Copy the resulting `.../exec` URL — this is `TECH_WEBAPP_URL`.
+4. In the CONFIG sheet, populate both rows:
+   - `PUBLIC_WEBAPP_URL` = the public `.../exec`
+   - `TECH_WEBAPP_URL`   = the secure `.../exec`
+   - Then run `clearConfigCache` from the editor.
+5. Verify with the deployment fingerprint diagnostic (see below).
+
+### Updating both deployments (every code change)
+
+`clasp push` uploads code but does **not** publish new deployment versions.
+You must bump each deployment separately:
+
+```
+Deploy → Manage deployments → (edit pencil on each) → Version: New version → Deploy
+```
+
+Both deployments run the same code — you always bump both together.
+
+### Verifying the deployments
+
+Open **each** `AKfycbz…/exec` URL in a separate incognito window with
+`?diag=deployment` appended:
+
+- The **public** URL should return `mode: "USER_DEPLOYING"` with an
+  empty `activeEmail` and the deployer's email as `effectiveEmail`.
+- The **secure** URL should force Google sign-in first, then return
+  `mode: "USER_ACCESSING"` with `activeEmail` == `effectiveEmail` ==
+  your signed-in address.
+
+If those don't match expectations, the URL is not what you think it is.
+Note: this test is **only conclusive from an incognito window with no Google
+sign-in**. On the public deployment Google trusts the deployer's own account
+and returns their email for both fields, which looks identical to the secure
+deployment's signed-in case.
+
+> `clasp push` preserves the `src/...` prefix on filenames, so
+> `HtmlService.createTemplateFromFile("src/pages/index")` resolves correctly
+> once pushed. See the **Apps Script setup runbook** below for the
+> post-push bootstrap steps (starting with `setupConfigSheet`).
 
 ## Apps Script setup runbook
 
@@ -170,6 +240,7 @@ running is always safe.
 | — | _Optional_ — bulk-publish legacy / Form-uploaded files already inside the folder | `makeAttachmentFolderPublic` | Sets the folder **and every file currently inside it** to "Anyone with the link – Viewer". New uploads are made public automatically by `trySharePublic_`; this only matters for files Google Forms / Drive added before public-view was wired in. Falls back to `ANYONE` if the strict variant is blocked, and logs a clear warning if both are blocked by a Workspace policy. |
 | — | Anytime, to confirm where uploads will land | `whereDoUploadsGo` | Read-only. Prints the configured attachment folder's full path + URL. Does **not** change anything. |
 | — | After editing a CONFIG row by hand | `clearConfigCache` | Forces the next API call to re-read the `CONFIG` sheet (otherwise the cached values stay for up to 5 minutes). |
+| — | After adding or upgrading a scope in `appsscript.json` (e.g. `drive.readonly` → `drive`) — before you'll notice via `syncRoleAccessNow` throwing "Required permissions" | `checkOAuthScopes` (`src/Config.gs`) | Read-only self-check. Fetches the current deployer's OAuth token, expands it via Google's `tokeninfo` endpoint, and diffs the granted scopes against the manifest. Logs `ok=false` + `missing=[…]` when the deployer needs to re-consent. Remediation: run any function that uses the missing scope (typically `syncRoleAccessNow`) from the editor, accept the fresh consent dialog, then bump both deployment versions so the URLs pick up the refreshed grant. |
 | — | **Recovery** — when ticket ids have drifted, duplicated, or the counter is desynced | `renumberAllTicketIds` (`src/Recovery.gs`) | Takes a full XLSX backup to GitHub, then rewrites `TICKET_ID` across `PENDING_REVIEW` + `LIVE_ISSUES` + `CLOSED_ISSUES` + `ARCHIVES_ISSUES` as a single monotonic `TKT-NNNNN` series sorted by `DATE_REPORTED`. Resets the `TICKET_COUNTER` ScriptProperty to the new max. Drive folder names are not renamed (existing photos still resolve by id). |
 | — | **Recovery** — when `PENDING_REVIEW` is corrupted / missing rows but `Form Responses 1` is intact | `recoverPendingFromForm` (`src/Recovery.gs`) | Takes a backup, wipes `PENDING_REVIEW` data rows, then re-imports every form row whose `{timestamp,resident,flat}` signature is **not** already in `LIVE_ISSUES` / `CLOSED_ISSUES`. Drops the cached `TICKET_COUNTER` so new pending ids are minted from the surviving live/closed max. |
 | — | **Recovery** — when an external paste / CSV import has seeded duplicate `TICKET_ID`s (e.g. three rows with the same legacy `TA-0001`) | `dedupeTicketIds` (`src/Recovery.gs`) | Surgical fix — takes a backup, scans all four issue sheets, keeps the row with the earliest `DATE_REPORTED` for each id, and assigns a fresh `TKT-NNNNN` id (via `generateTicketID()`) to every other occurrence. Non-duplicated rows are untouched, so existing photo folders and external references survive. Returns `{success, data:{renamed:[{sheet,row,oldId,newId}], scanned}, error}`. |

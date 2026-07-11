@@ -1,0 +1,246 @@
+name: Bootstrap Apps Script project + deployments
+
+# One-shot bootstrap that eliminates the manual UI steps for creating
+# the standalone Apps Script project and cutting the two web-app
+# deployments. Run this once per repo (or once per fork). It replaces
+# steps A + C + partly D from docs/deployments.md.
+#
+# Usage (from GitHub UI → Actions → Bootstrap → Run workflow):
+#   * create_project = true   → creates a new standalone Apps Script project
+#                               and prints its scriptId. Copy into CLASP_JSON.
+#                               Skip if you already have CLASP_JSON set.
+#   * create_public  = true   → cuts a PUBLIC deployment (USER_DEPLOYING /
+#                               ANYONE_ANONYMOUS) and prints DEPLOYMENT_ID +
+#                               /exec URL. Skip if DEPLOYMENT_ID already set.
+#   * create_secure  = true   → cuts a SECURE deployment (USER_ACCESSING /
+#                               ANYONE). Prints DEPLOYMENT_ID_SECURE + URL.
+#
+# After running, paste the printed IDs/URLs into repo Settings →
+# Secrets and variables → Actions. From then on, every push to main
+# is fully automated via deploy.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_project:
+        description: 'Create a new standalone Apps Script project (only if CLASP_JSON is not set)'
+        type: boolean
+        default: false
+      project_title:
+        description: 'Title for the new project (used only when create_project=true)'
+        type: string
+        default: 'Issue Addressal Portal (IRP)'
+      create_public:
+        description: 'Cut the PUBLIC deployment (USER_DEPLOYING / ANYONE_ANONYMOUS)'
+        type: boolean
+        default: true
+      create_secure:
+        description: 'Cut the SECURE deployment (USER_ACCESSING / ANYONE)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script-bootstrap
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  bootstrap:
+    name: Bootstrap project + deployments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Write clasp credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::CLASPRC_JSON secret is missing. Generate it in Google Cloud Shell (shell.cloud.google.com):"
+            echo "  npm i -g @google/clasp && clasp login --no-localhost"
+            echo "  base64 -w 0 ~/.clasprc.json"
+            echo "Then paste as repo secret CLASPRC_JSON."
+            exit 1
+          fi
+          if printf '%s' "$CLASPRC_JSON" | base64 -d > "$HOME/.clasprc.json" 2>/dev/null \
+             && node -e "JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json','utf8'))" 2>/dev/null; then
+            echo "Decoded base64 credentials."
+          else
+            printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          fi
+          chmod 600 "$HOME/.clasprc.json"
+
+      - name: Create standalone Apps Script project (optional)
+        id: create_project
+        if: inputs.create_project == true
+        env:
+          CLASP_JSON: ${{ secrets.CLASP_JSON }}
+          TITLE: ${{ inputs.project_title }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CLASP_JSON" ]; then
+            echo "::warning::CLASP_JSON secret is already set. Skipping project creation to avoid drift."
+            echo "If you truly want a new project, unset the CLASP_JSON secret first."
+            exit 0
+          fi
+          echo "Creating new standalone Apps Script project: $TITLE"
+          # clasp create-script prints "Created new Google Sheets script: <url>" and writes .clasp.json.
+          clasp create-script --type standalone --title "$TITLE" --rootDir .
+          if [ ! -f .clasp.json ]; then
+            echo "::error::clasp did not produce .clasp.json"
+            exit 1
+          fi
+          SCRIPT_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('.clasp.json','utf8')).scriptId)")
+          echo "script_id=$SCRIPT_ID" >> "$GITHUB_OUTPUT"
+          echo "### Project created" >> "$GITHUB_STEP_SUMMARY"
+          echo "- scriptId: \`$SCRIPT_ID\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Action required:** paste the following as the \`CLASP_JSON\` repository secret (Settings → Secrets and variables → Actions):" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat .clasp.json >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "(Then re-run this workflow with create_public+create_secure to cut the deployments.)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write project link from secret (existing project)
+        if: inputs.create_project != true
+        env:
+          CLASP_JSON: ${{ secrets.CLASP_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLASP_JSON" ]; then
+            echo "::error::CLASP_JSON secret is missing AND create_project=false. Nothing to link."
+            echo "Either set create_project=true to create a new one, or paste an existing scriptId into CLASP_JSON."
+            exit 1
+          fi
+          if printf '%s' "$CLASP_JSON" | base64 -d > .clasp.json 2>/dev/null \
+             && node -e "JSON.parse(require('fs').readFileSync('.clasp.json','utf8'))" 2>/dev/null; then
+            echo "Decoded base64 project link."
+          else
+            printf '%s' "$CLASP_JSON" > .clasp.json
+          fi
+          SCRIPT_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync('.clasp.json','utf8')).scriptId)")
+          echo "Linked to scriptId=$SCRIPT_ID"
+
+      - name: Push source before cutting deployments
+        run: |
+          set -euo pipefail
+          OUT=$(clasp push -f 2>&1) && EC=0 || EC=$?
+          echo "$OUT"
+          if [ $EC -ne 0 ]; then
+            echo "::error::clasp push failed — cannot cut deployments against empty project."
+            exit $EC
+          fi
+
+      - name: Cut PUBLIC deployment (USER_DEPLOYING / ANYONE_ANONYMOUS)
+        id: cut_public
+        if: inputs.create_public == true
+        run: |
+          set -euo pipefail
+          # The committed appsscript.json already declares USER_DEPLOYING +
+          # ANYONE_ANONYMOUS, so a fresh deployment created from the current
+          # manifest inherits the public shape by default.
+          DESC="Public deployment (auto-bootstrap $(date -u +'%Y-%m-%dT%H:%M:%SZ'))"
+          echo "Creating: $DESC"
+          OUT=$(clasp create-deployment --description "$DESC" 2>&1)
+          echo "$OUT"
+          # clasp prints something like:
+          #   Created version 1.
+          #   - AKfycb... @1.
+          # Parse the deployment ID (starts with AKfycb) from the output.
+          DEP_ID=$(echo "$OUT" | grep -oE 'AKfyc[A-Za-z0-9_-]+' | head -n1 || true)
+          if [ -z "$DEP_ID" ]; then
+            echo "::error::Could not parse deployment ID from clasp output. Check the log above."
+            exit 1
+          fi
+          URL="https://script.google.com/macros/s/${DEP_ID}/exec"
+          echo "public_id=$DEP_ID" >> "$GITHUB_OUTPUT"
+          echo "public_url=$URL" >> "$GITHUB_OUTPUT"
+          echo "### Public deployment cut" >> "$GITHUB_STEP_SUMMARY"
+          echo "- deploymentId (paste as \`DEPLOYMENT_ID\` secret): \`$DEP_ID\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- webapp URL (paste as \`WEBAPP_URL_PUBLIC\` **variable**): \`$URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cut SECURE deployment (USER_ACCESSING / ANYONE)
+        id: cut_secure
+        if: inputs.create_secure == true
+        run: |
+          set -euo pipefail
+          DESC="Secure deployment (auto-bootstrap $(date -u +'%Y-%m-%dT%H:%M:%SZ'))"
+          echo "Patching appsscript.json → USER_ACCESSING / ANYONE for the secure cut…"
+          node -e "
+            const fs = require('fs');
+            const j = JSON.parse(fs.readFileSync('appsscript.json','utf8'));
+            j.webapp = { executeAs: 'USER_ACCESSING', access: 'ANYONE' };
+            fs.writeFileSync('appsscript.json', JSON.stringify(j, null, 2));
+            console.log('Patched:', JSON.stringify(j.webapp));
+          "
+          clasp push -f
+          OUT=$(clasp create-deployment --description "$DESC" 2>&1)
+          echo "$OUT"
+          DEP_ID=$(echo "$OUT" | grep -oE 'AKfyc[A-Za-z0-9_-]+' | head -n1 || true)
+          # Restore the committed manifest (public defaults) so future
+          # workflow runs and local dev see the canonical state.
+          git checkout -- appsscript.json
+          if [ -z "$DEP_ID" ]; then
+            echo "::error::Could not parse secure deployment ID from clasp output."
+            exit 1
+          fi
+          URL="https://script.google.com/macros/s/${DEP_ID}/exec"
+          echo "secure_id=$DEP_ID" >> "$GITHUB_OUTPUT"
+          echo "secure_url=$URL" >> "$GITHUB_OUTPUT"
+          echo "### Secure deployment cut" >> "$GITHUB_STEP_SUMMARY"
+          echo "- deploymentId (paste as \`DEPLOYMENT_ID_SECURE\` secret): \`$DEP_ID\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- webapp URL (paste as \`WEBAPP_URL_SECURE\` **variable**): \`$URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Auto-write secrets/variables via gh CLI (optional)
+        if: env.GH_ADMIN_PAT != ''
+        env:
+          GH_ADMIN_PAT: ${{ secrets.GH_ADMIN_PAT }}
+          PUB_ID:  ${{ steps.cut_public.outputs.public_id }}
+          PUB_URL: ${{ steps.cut_public.outputs.public_url }}
+          SEC_ID:  ${{ steps.cut_secure.outputs.secure_id }}
+          SEC_URL: ${{ steps.cut_secure.outputs.secure_url }}
+        run: |
+          set -euo pipefail
+          # Optional shortcut: if the repo has a fine-grained PAT with
+          # secrets:write + variables:write (stored as GH_ADMIN_PAT), we
+          # write the discovered IDs/URLs directly back to the repo so no
+          # human paste is needed. When GH_ADMIN_PAT is absent, the step
+          # summary above still tells the operator exactly what to paste.
+          echo "$GH_ADMIN_PAT" | gh auth login --with-token
+          REPO="${GITHUB_REPOSITORY}"
+          if [ -n "${PUB_ID:-}" ];  then gh secret   set DEPLOYMENT_ID        --repo "$REPO" --body "$PUB_ID";  fi
+          if [ -n "${SEC_ID:-}" ];  then gh secret   set DEPLOYMENT_ID_SECURE --repo "$REPO" --body "$SEC_ID";  fi
+          if [ -n "${PUB_URL:-}" ]; then gh variable set WEBAPP_URL_PUBLIC    --repo "$REPO" --body "$PUB_URL"; fi
+          if [ -n "${SEC_URL:-}" ]; then gh variable set WEBAPP_URL_SECURE    --repo "$REPO" --body "$SEC_URL"; fi
+          echo "::notice::All discovered IDs/URLs written back to repo secrets/variables via GH_ADMIN_PAT."
+
+      - name: Post-bootstrap next steps
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "### Next steps"
+            echo ""
+            echo "1. If any secrets/variables were printed above, paste them into repo Settings → Secrets and variables → Actions."
+            echo "2. Populate the CONFIG sheet with \`PUBLIC_WEBAPP_URL\` and \`TECH_WEBAPP_URL\` (values above), then run \`clearConfigCache()\` from the Apps Script editor."
+            echo "3. From the Apps Script editor, run \`setupConfigSheet\` once (approve the OAuth consent screen)."
+            echo "4. From now on, every push to \`main\` under \`src/**\` triggers deploy.yml automatically — no more manual steps."
+          } >> "$GITHUB_STEP_SUMMARY"

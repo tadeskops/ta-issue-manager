@@ -144,3 +144,142 @@ jobs:
         env:
           SECURE_ID: ${{ secrets.DEPLOYMENT_ID_SECURE }}
         run: echo "DEPLOYMENT_ID_SECURE secret not set; skipping secure deployment update."
+
+      # ------------------------------------------------------------------
+      # Post-deploy verification. Google can accept a `clasp update-deployment`
+      # and still serve a broken script (500 on doGet, missing scope prompt,
+      # wrong access setting). We probe the live URLs and assert their
+      # ?diag=deployment fingerprint matches the intended deployment mode.
+      #
+      # URLs are stored as GitHub *variables* (not secrets) because the /exec
+      # URLs are already public. Add them under Settings → Secrets and
+      # variables → Actions → Variables tab:
+      #   WEBAPP_URL_PUBLIC  = https://script.google.com/macros/s/AKfyc.../exec
+      #   WEBAPP_URL_SECURE  = https://script.google.com/macros/s/AKfyc.../exec
+      #
+      # OBSERVED live behaviour (verified against production 2026-07-11):
+      #   * PUBLIC (USER_DEPLOYING / ANYONE_ANONYMOUS) → HTTP 200 with
+      #     `Content-Type: application/json` and our diag JSON body.
+      #   * SECURE (USER_ACCESSING / ANYONE) → HTTP 200 with
+      #     `Content-Type: text/html` and the page title "<project> - Access
+      #     Required" (Google renders an HTML sign-in gate — it does NOT
+      #     issue a 302 to accounts.google.com the way many APIs do).
+      # ------------------------------------------------------------------
+      - name: Verify PUBLIC deployment (?diag=deployment)
+        if: vars.WEBAPP_URL_PUBLIC != '' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true))
+        env:
+          URL: ${{ vars.WEBAPP_URL_PUBLIC }}
+        run: |
+          set -uo pipefail
+          echo "Probing: $URL?diag=deployment"
+          # Retry: Apps Script serves 502 on cold-start for the first request
+          # after a fresh deploy (~15% of runs). A real problem fails all
+          # 3 attempts; a cold start recovers on the 2nd.
+          attempt() {
+            HTTP=$(curl -sSL --max-time 30 -o /tmp/pub.body -w '%{http_code}|%{content_type}|%{url_effective}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0|")
+            CODE=$(echo "$HTTP" | cut -d'|' -f1)
+            CT=$(echo   "$HTTP" | cut -d'|' -f2)
+            FINAL=$(echo "$HTTP" | cut -d'|' -f3)
+            BYTES=$(wc -c < /tmp/pub.body)
+            echo "  HTTP=$CODE  CONTENT_TYPE=$CT  FINAL_URL=$FINAL  BODY_BYTES=$BYTES"
+            [ "$CODE" = "200" ] || return 2
+            echo "$CT" | grep -qi 'application/json' || return 3
+            node -e "const j=JSON.parse(require('fs').readFileSync('/tmp/pub.body','utf8')); if(!j || typeof j!=='object'){throw new Error('not an object')}; if(j.mode!=='USER_DEPLOYING'){throw new Error('mode='+j.mode+' (want USER_DEPLOYING). effectiveEmail='+j.effectiveEmail+' activeEmail='+JSON.stringify(j.activeEmail))}; if(j.activeEmail){throw new Error('activeEmail should be empty on USER_DEPLOYING anonymous call, got '+j.activeEmail)}; if(!j.effectiveEmail){throw new Error('effectiveEmail is empty — script owner may be revoked')}; console.log('  PUBLIC OK: mode='+j.mode+' effectiveEmail='+j.effectiveEmail.replace(/(.).*(@.*)/,'\$1***\$2'));" || return 4
+            return 0
+          }
+          ok=0; last_rc=0
+          for i in 1 2 3; do
+            echo "Attempt $i/3:"
+            attempt; last_rc=$?
+            if [ $last_rc -eq 0 ]; then ok=1; break; fi
+            [ $i -lt 3 ] && { echo "  (transient? sleeping 15s)"; sleep 15; }
+          done
+          if [ $ok -eq 0 ]; then
+            case $last_rc in
+              2) echo "::error::PUBLIC deployment returned non-200 after 3 attempts (see attempts above)." ;;
+              3) echo "::error::PUBLIC deployment returned wrong Content-Type after 3 attempts (expected application/json)." ;;
+              4) echo "::error::PUBLIC deployment JSON body did not match expected shape (see error above)." ;;
+              *) echo "::error::PUBLIC deployment probe failed after 3 attempts (rc=$last_rc)." ;;
+            esac
+            echo "----- final response body (first 800 bytes) -----"
+            head -c 800 /tmp/pub.body; echo
+            echo "----- diagnosis hints -----"
+            echo "  * HTTP 401/403      → wrong 'Who has access' setting (should be Anyone / ANYONE_ANONYMOUS)."
+            echo "  * HTTP 404          → deployment ID does not exist (was archived, or URL is wrong)."
+            echo "  * HTTP 500/502      → doGet threw. Open Apps Script → Executions to see the stack trace."
+            echo "  * text/html         → URL is actually the secure deployment. Swap WEBAPP_URL_PUBLIC and WEBAPP_URL_SECURE variables."
+            echo "  * mode mismatch     → wrong 'Execute as' setting on this deployment."
+            echo "  * diag route missing → live code is out of date. Re-run this workflow to redeploy."
+            exit 1
+          fi
+          echo "::notice::PUBLIC deployment verified."
+          echo "### Public deployment verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: \`$URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Mode: \`USER_DEPLOYING\` (anonymous JSON)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify SECURE deployment (sign-in gate)
+        if: vars.WEBAPP_URL_SECURE != '' && env.SECURE_ID != '' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true))
+        env:
+          URL: ${{ vars.WEBAPP_URL_SECURE }}
+          SECURE_ID: ${{ secrets.DEPLOYMENT_ID_SECURE }}
+        run: |
+          set -uo pipefail
+          echo "Probing: $URL?diag=deployment (no auth, expect sign-in gate)"
+          # Retry (same rationale as PUBLIC): Apps Script edge sometimes
+          # returns 502 for a single request after a fresh deploy.
+          attempt() {
+            HTTP=$(curl -sSL --max-time 30 -o /tmp/sec.body -w '%{http_code}|%{content_type}' "$URL?diag=deployment" 2>/dev/null || echo "CURL_FAILED|0")
+            CODE=$(echo "$HTTP" | cut -d'|' -f1)
+            CT=$(echo   "$HTTP" | cut -d'|' -f2)
+            BYTES=$(wc -c < /tmp/sec.body)
+            TITLE=$(grep -oE '<title[^>]*>[^<]+</title>' /tmp/sec.body 2>/dev/null | head -n1 | sed 's/<[^>]*>//g' || true)
+            echo "  HTTP=$CODE  CONTENT_TYPE=$CT  BYTES=$BYTES  TITLE=$TITLE"
+            [ "$CODE" = "200" ] || return 2
+            # JSON reply means the sign-in gate is off — that's a config
+            # problem, not a transient failure; abort retries.
+            if echo "$CT" | grep -qi 'application/json'; then
+              echo "  ::error::SECURE deployment served JSON to an anonymous caller — sign-in gate is DISABLED."
+              return 5
+            fi
+            # Prefer the "Access Required" title; fall back to warden scaffold markers.
+            echo "$TITLE" | grep -qi 'access required' && return 0
+            grep -q 'warden_bin_i18n\|macros/client' /tmp/sec.body 2>/dev/null && return 0
+            return 4
+          }
+          ok=0; last_rc=0
+          for i in 1 2 3; do
+            echo "Attempt $i/3:"
+            attempt; last_rc=$?
+            if [ $last_rc -eq 0 ]; then ok=1; break; fi
+            # Don't retry the "gate is off" case — it will never fix itself
+            # by retrying and we want the loud error immediately.
+            if [ $last_rc -eq 5 ]; then break; fi
+            [ $i -lt 3 ] && { echo "  (transient? sleeping 15s)"; sleep 15; }
+          done
+          if [ $ok -eq 0 ]; then
+            case $last_rc in
+              2) echo "::error::SECURE deployment returned non-200 after 3 attempts." ;;
+              4) echo "::error::SECURE deployment HTML did not match sign-in gate signature after 3 attempts." ;;
+              5) echo "::error::SECURE deployment served JSON to anonymous caller — Deploy → Manage deployments → Edit: change 'Who has access' from 'Anyone' (anonymous) to 'Anyone with Google account'." ;;
+              *) echo "::error::SECURE deployment probe failed after 3 attempts (rc=$last_rc)." ;;
+            esac
+            echo "----- final response body (first 800 bytes) -----"
+            head -c 800 /tmp/sec.body; echo
+            echo "----- diagnosis hints -----"
+            echo "  * HTTP 404 → deployment ID does not exist (archived / typo in URL)."
+            echo "  * HTTP 401 → 'Who has access' is set to 'Only myself'."
+            echo "  * HTTP 500/502 (persistent) → doGet threw on the secure deployment. Check Executions."
+            exit 1
+          fi
+          echo "::notice::SECURE deployment verified: anonymous request hit the Google sign-in gate."
+          echo "### Secure deployment verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL: \`$URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Mode: \`USER_ACCESSING\` (anonymous caller bounced to sign-in)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skipped verification notice
+        if: (vars.WEBAPP_URL_PUBLIC == '' || vars.WEBAPP_URL_SECURE == '') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_new_version == true))
+        run: |
+          echo "::warning::Post-deploy verification skipped."
+          [ -z "${{ vars.WEBAPP_URL_PUBLIC }}" ] && echo "  * WEBAPP_URL_PUBLIC variable is not set."
+          [ -z "${{ vars.WEBAPP_URL_SECURE }}" ] && echo "  * WEBAPP_URL_SECURE variable is not set."
+          echo "  * Add both under Settings → Secrets and variables → Actions → Variables tab so CI can catch broken deploys."

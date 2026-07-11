@@ -1,0 +1,7 @@
+{
+  "_comment": "TEMPLATE — DO NOT USE DIRECTLY. Copy this file to .clasp.json (which is gitignored) before running clasp push. This prevents the scriptId from being version-controlled while still giving every deployer the canonical target.",
+  "_canonical_project": "The Issue Addressal Portal (IRP) is a STANDALONE Apps Script project. There is exactly ONE project. Two web-app deployments (public + secure) are cut from it via 'Deploy → Manage deployments'. See docs/deployments.md.",
+  "_container_bound_script_warning": "If clasp is currently pointing at a project opened from a Google Sheet's Extensions → Apps Script menu (a container-bound script), STOP. That is a different project id. Fix your local .clasp.json to point at the standalone project id instead.",
+  "scriptId": "REPLACE_WITH_STANDALONE_PROJECT_ID",
+  "rootDir": "."
+}

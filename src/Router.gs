@@ -34,6 +34,38 @@ const PAGE_MAP = {
 };
 
 function doGet(e) {
+    // Top-level try/catch. Every ?diag=* route MUST return JSON — CI +
+    // any post-deploy probe parses these responses strictly. Without
+    // this wrapper, an uncaught exception in diag_* would surface as
+    // Google's stock HTML error page ("Sorry, unable to open the file
+    // at this time"), which CI mis-diagnoses as "wrong deployment
+    // shape" instead of "your code threw". The wrapper narrows the
+    // failure signal to a machine-parseable JSON blob with the actual
+    // error message + type + stack.
+    var isDiag = !!(e && e.parameter && e.parameter.diag);
+    try {
+        return doGet_(e);
+    } catch (err) {
+        if (isDiag) {
+            var payload = {
+                success: false,
+                error: String(err && err.message || err),
+                errorName: String(err && err.name || 'Error'),
+                stack: String(err && err.stack || '').split('\n').slice(0, 8),
+                diagRequested: e.parameter.diag,
+                when: new Date().toISOString(),
+                hint: 'doGet threw before the ?diag=' + e.parameter.diag + ' handler could complete. Check Apps Script → Executions for the full stack. Most common cause: the CONFIG sheet is not reachable by the caller (or by the deployer under USER_DEPLOYING).'
+            };
+            return ContentService.createTextOutput(JSON.stringify(payload, null, 2))
+                .setMimeType(ContentService.MimeType.JSON);
+        }
+        // Non-diag GETs re-throw so Apps Script renders its stock error
+        // page for browser users (better UX than a raw JSON blob).
+        throw err;
+    }
+}
+
+function doGet_(e) {
     // Schema introspection endpoint (?diag=sheets). Returns JSON describing
     // header rows + a couple of sample rows so we can verify the live sheet
     // layout against our column constants.
@@ -50,6 +82,19 @@ function doGet(e) {
     // to the CONFIG sheet but still see (Resident)".
     if (e && e.parameter && e.parameter.diag === "whoami") {
         const out = diag_whoami_();
+        return ContentService.createTextOutput(JSON.stringify(out, null, 2))
+            .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Deployment-mode fingerprint (?diag=deployment). Lets an operator
+    // open the URL in a private-window (no Google account) and see the
+    // shape of the deployment: USER_DEPLOYING (public) shows an empty
+    // activeEmail + the deployer's effectiveEmail; USER_ACCESSING
+    // (secure) forces Google sign-in first, then shows the caller's
+    // email in both fields. This is how you match an AKfycbz… URL to
+    // "public vs secure" without opening the Apps Script editor.
+    if (e && e.parameter && e.parameter.diag === "deployment") {
+        const out = diag_deployment_();
         return ContentService.createTextOutput(JSON.stringify(out, null, 2))
             .setMimeType(ContentService.MimeType.JSON);
     }
@@ -168,11 +213,13 @@ function api_whoAmI() {
 // always sees a real diagnostic instead of an opaque null.
 function api_diag() {
     var out = {
-        version: "diag-2026-05-31-r2",
+        version: "diag-2026-07-11-r3",
         when: new Date().toISOString(),
         identity: null,
         identityError: null,
         webappUrl: null,
+        deployment: null,           // { activeEmail, effectiveEmail, mode }
+        deploymentError: null,
         pendingTest: null,
         pendingTestError: null
     };
@@ -185,6 +232,33 @@ function api_diag() {
     try {
         out.webappUrl = ScriptApp.getService().getUrl();
     } catch (e) { /* ignore */ }
+    // Deployment-mode fingerprint. Under USER_DEPLOYING, Session.getActiveUser()
+    // returns "" for external callers while getEffectiveUser() returns the
+    // script owner. Under USER_ACCESSING, both return the signed-in caller.
+    // Comparing them lets us prove from a browser tab which shape of
+    // deployment served the request — no Apps Script editor access needed.
+    try {
+        var active    = "";
+        var effective = "";
+        try { active    = (Session.getActiveUser().getEmail()    || "").trim(); } catch (e1) {}
+        try { effective = (Session.getEffectiveUser().getEmail() || "").trim(); } catch (e2) {}
+        var mode = "UNKNOWN";
+        if (active && effective && active === effective) {
+            // Both non-empty and equal → could be either mode when the caller
+            // IS the deployer; otherwise USER_ACCESSING (caller signed in).
+            mode = "USER_ACCESSING";
+        } else if (!active && effective) {
+            // Classic USER_DEPLOYING signature: no caller identity, but the
+            // script runs as its owner.
+            mode = "USER_DEPLOYING";
+        } else if (active && !effective) {
+            // Unusual — treat as USER_ACCESSING but flag for the operator.
+            mode = "USER_ACCESSING_NO_OWNER";
+        }
+        out.deployment = { activeEmail: active, effectiveEmail: effective, mode: mode };
+    } catch (e) {
+        out.deploymentError = String(e);
+    }
     try {
         var r = getPendingIssues();
         // Return a small summary, not the whole payload, to keep the
@@ -197,6 +271,58 @@ function api_diag() {
         };
     } catch (e) {
         out.pendingTestError = String(e);
+    }
+    return out;
+}
+
+/**
+ * Deployment-mode fingerprint served by GET ?diag=deployment. Compares
+ * Session.getActiveUser() (the caller) against Session.getEffectiveUser()
+ * (the script owner) and reports the inferred deployment shape. Meant to
+ * be opened in an incognito window with no Google session on the PUBLIC
+ * URL — you should see USER_DEPLOYING and an empty activeEmail. The
+ * SECURE URL will force sign-in first and then return USER_ACCESSING with
+ * matching activeEmail + effectiveEmail. Any other combination is drift.
+ */
+function diag_deployment_() {
+    var out = {
+        version: "diag-deployment-r1",
+        when: new Date().toISOString(),
+        webappUrl: null,
+        activeEmail: "",
+        effectiveEmail: "",
+        mode: "UNKNOWN",
+        mustTestInIncognito: true,   // See comment below the emails block.
+        expected: {
+            public: { executeAs: "USER_DEPLOYING", access: "ANYONE_ANONYMOUS", pattern: "activeEmail=='' AND effectiveEmail==<deployer>" },
+            secure: { executeAs: "USER_ACCESSING", access: "ANYONE",          pattern: "activeEmail==<caller> AND effectiveEmail==<caller>" }
+        },
+        hint: null
+    };
+    try { out.webappUrl = ScriptApp.getService().getUrl(); } catch (e) {}
+    try { out.activeEmail    = (Session.getActiveUser().getEmail()    || "").trim(); } catch (e) {}
+    try { out.effectiveEmail = (Session.getEffectiveUser().getEmail() || "").trim(); } catch (e) {}
+    // IMPORTANT — this test is only conclusive when called from an INCOGNITO
+    // window with no Google session. Reason: on the PUBLIC deployment
+    // (USER_DEPLOYING), Google trusts the deployer's own account and
+    // returns their email for both getActiveUser and getEffectiveUser — so
+    // a deployer testing the public URL from their own browser would look
+    // identical to a signed-in caller on the secure deployment. In
+    // incognito with no Google cookie, the public URL falls through with an
+    // empty activeEmail and any other visitor on the secure URL is bounced
+    // to Google's sign-in page before this code runs.
+    if (out.activeEmail && out.effectiveEmail && out.activeEmail === out.effectiveEmail) {
+        out.mode = "USER_ACCESSING";
+        out.hint = "Both active + effective emails equal (" + out.activeEmail + "). If you opened this in incognito with NO Google sign-in and STILL got a response, this URL is the SECURE deployment (Google would have forced sign-in). If you tested from your own browser as the deployer, this reading is inconclusive — retry from a private window signed out of Google, or from a different Google account. When SECURE is confirmed: populate CONFIG.PUBLIC_WEBAPP_URL with the sibling public URL.";
+    } else if (!out.activeEmail && out.effectiveEmail) {
+        out.mode = "USER_DEPLOYING";
+        out.hint = "activeEmail is empty and effectiveEmail is the script owner — this URL is the PUBLIC deployment (USER_DEPLOYING + ANYONE_ANONYMOUS). Populate CONFIG.TECH_WEBAPP_URL with the sibling secure URL so the Sign-in button works.";
+    } else if (out.activeEmail && !out.effectiveEmail) {
+        out.mode = "USER_ACCESSING_NO_OWNER";
+        out.hint = "Unusual — treated as USER_ACCESSING but effective user is empty. Check that the script owner is still valid.";
+    } else {
+        out.mode = "UNKNOWN";
+        out.hint = "Neither active nor effective user resolved — usually means the deployment is not reachable or a Workspace policy is stripping identity headers.";
     }
     return out;
 }

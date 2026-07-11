@@ -10,15 +10,13 @@ name: parse-check (preview HTML script blocks)
 on:
   pull_request:
     paths:
-      - 'src/pages/**'
-      - 'src/partials/**'
+      - 'src/**'
       - 'scripts/build-preview.js'
       - '.github/workflows/parse-check.yml'
   push:
     branches: [main]
     paths:
-      - 'src/pages/**'
-      - 'src/partials/**'
+      - 'src/**'
       - 'scripts/build-preview.js'
       - '.github/workflows/parse-check.yml'
   workflow_dispatch:
@@ -76,3 +74,48 @@ jobs:
             exit 1
           fi
           echo "All preview <script> blocks parsed clean."
+
+  parse-check-gs:
+    name: node --check on src/**/*.gs (server-side)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # `clasp push` is the *authoritative* syntax check for Apps Script,
+      # but it runs after code is already live. This job catches the
+      # obvious "unexpected token" / "await outside async" / dangling
+      # brace class of parse errors BEFORE merge so a bad push never
+      # reaches the deploy job. Node's V8 parser and Apps Script's V8
+      # runtime agree on syntax; semantic differences (SpreadsheetApp,
+      # DriveApp, etc.) don't matter for parse-only checks.
+      - name: Parse-check every .gs as JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          shopt -s globstar nullglob
+          count=0
+          for gs in src/**/*.gs; do
+            [ -f "$gs" ] || continue
+            count=$((count + 1))
+            # Copy to a .js path so `node --check` treats it as a script.
+            js="/tmp/gs_$(echo "$gs" | tr '/.' '__').js"
+            cp "$gs" "$js"
+            if ! node --check "$js" 2> "/tmp/err_$$"; then
+              echo "::error file=$gs::$(cat /tmp/err_$$)"
+              fail=1
+            fi
+            rm -f /tmp/err_$$
+          done
+          echo "Parse-checked $count .gs file(s)."
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::One or more .gs files failed node --check. Fix syntax before merge."
+            exit 1
+          fi
+          echo "All .gs files parsed clean."

@@ -142,10 +142,20 @@
             const want = (window.IRP_REQUESTED_PAGE || new URLSearchParams(location.search).get('page') || '').replace(/[^a-z]/gi, '');
             const url = secureUrl(want);
             if (url) { openTop(url); return; }
-            // No secure deployment configured — last-resort account chooser so
-            // the user can at least sign in to Google before retrying.
-            const here = new URL(location.href);
-            openTop('https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(here.toString()));
+            // No secure deployment configured — surface the misconfiguration
+            // instead of silently sending the user to Google's account
+            // chooser (which loops back to the SAME public URL where
+            // Session.getActiveUser() still returns empty for external
+            // callers, making sign-in appear broken). Operators see this
+            // and know to populate CONFIG.TECH_WEBAPP_URL.
+            const statusEl = document.getElementById('authStatus');
+            const msg = 'Sign-in is not available: <b>TECH_WEBAPP_URL</b> is not set in the CONFIG sheet. '
+                      + 'Ask an administrator to set it to the secure deployment URL, then run <code>clearConfigCache()</code> and refresh this page.';
+            if (statusEl) {
+                statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-400 mr-2"></i>' + msg;
+            } else {
+                alert(msg.replace(/<[^>]+>/g, ''));
+            }
         }
 
         // Apps Script renders inside a sandboxed iframe, so plain

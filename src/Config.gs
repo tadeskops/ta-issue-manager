@@ -475,6 +475,94 @@ function syncRoleAccessNow() {
 }
 
 /**
+ * Operator-facing OAuth scope self-check. Run this from the Apps Script
+ * editor after `clasp push` if you added or upgraded scopes in
+ * `appsscript.json`. Compares the scopes the CURRENT authorization
+ * grant carries (from ScriptApp.getOAuthToken) against the scopes the
+ * manifest advertises. Any scope listed in the manifest but MISSING
+ * from the grant means the deployer has not re-consented after the
+ * manifest was upgraded — that is exactly why runtime calls like
+ * `Folder.addViewer` throw "Required permissions .../auth/drive" even
+ * though the manifest already includes the drive scope.
+ *
+ * Returns { ok, granted, expected, missing } and also logs a
+ * remediation hint. This function itself needs no elevated permission;
+ * getOAuthToken is available on every deployment.
+ */
+function checkOAuthScopes() {
+    var out = {
+        version: "check-scopes-r1",
+        when: new Date().toISOString(),
+        granted: [],
+        expected: [],
+        missing: [],
+        extra: [],
+        ok: false,
+        hint: null,
+        error: null
+    };
+    // The manifest is the source of truth for what SHOULD be authorized.
+    // Keep this list in lockstep with appsscript.json:oauthScopes.
+    out.expected = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/script.container.ui",
+        "https://www.googleapis.com/auth/script.send_mail",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/script.external_request",
+        "https://www.googleapis.com/auth/script.scriptapp"
+    ];
+    // Google's tokeninfo endpoint returns the scopes bound to the token
+    // the currently-running script would use. This is the ground truth
+    // for "what have I actually consented to", independent of what the
+    // manifest advertises.
+    try {
+        var token = ScriptApp.getOAuthToken();
+        var url   = "https://oauth2.googleapis.com/tokeninfo?access_token=" + encodeURIComponent(token);
+        var resp  = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+        var code  = resp.getResponseCode();
+        var body  = resp.getContentText();
+        if (code !== 200) {
+            out.error = "tokeninfo returned HTTP " + code + ": " + body;
+            Logger.log("checkOAuthScopes: " + out.error);
+            return out;
+        }
+        var json = JSON.parse(body);
+        if (!json.scope) {
+            out.error = "tokeninfo response had no scope field: " + body;
+            Logger.log("checkOAuthScopes: " + out.error);
+            return out;
+        }
+        out.granted = String(json.scope).split(/\s+/).filter(Boolean);
+    } catch (e) {
+        out.error = "tokeninfo fetch failed: " + e;
+        Logger.log("checkOAuthScopes: " + out.error);
+        return out;
+    }
+    var have = {};
+    out.granted.forEach(function (s) { have[s] = true; });
+    out.missing = out.expected.filter(function (s) { return !have[s]; });
+    var want = {};
+    out.expected.forEach(function (s) { want[s] = true; });
+    out.extra = out.granted.filter(function (s) {
+        // Ignore Google's implicit userinfo/openid scopes and Apps Script
+        // internal scopes that come along for the ride — they're not drift.
+        if (/^openid$/.test(s)) return false;
+        if (/googleapis\.com\/auth\/(userinfo\.profile|drive\.file)$/.test(s)) return false;
+        return !want[s];
+    });
+    out.ok = out.missing.length === 0;
+    if (!out.ok) {
+        out.hint = "Missing scopes: " + out.missing.join(", ") +
+                   ". Run any function that uses those scopes (e.g. syncRoleAccessNow) from the Apps Script editor — Google will show a re-consent dialog. Click 'Advanced' → 'Go to project' → 'Allow'. Then cut a new deployment version so the URLs pick up the refreshed grant.";
+    } else {
+        out.hint = "All manifest scopes are authorized on this deployer's grant.";
+    }
+    Logger.log("checkOAuthScopes: ok=" + out.ok + " missing=[" + out.missing.join(",") + "]");
+    return out;
+}
+
+/**
  * Diagnostic used by the ?diag=whoami route. Returns everything the
  * server sees when resolving the caller's role, so an operator can tell
  * at a glance whether the CONFIG sheet was read, which committee list
