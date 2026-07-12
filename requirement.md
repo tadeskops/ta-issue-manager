@@ -7,50 +7,57 @@
 
 ## 1. System Overview
 
-| Aspect | Value |
-|---|---|
-| Purpose | Track resident-reported issues from intake → committee approval → builder execution → closure |
-| Hosting | Single Apps Script web app (HtmlService) |
-| Storage | One bound Google Sheet (7 tabs incl. `CONFIG`) |
-| Identity | Google account sign-in (`Session.getActiveUser()`) |
-| Authorization | Role lookup against the `CONFIG` sheet |
-| Cost | Free (Google Sheets + Apps Script quotas only) |
-| External services | None — no Firebase, no OAuth Client ID, no GitHub Pages |
+| Aspect            | Valueare                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| Purpose           | Track resident-reported issues from intake → committee approval → builder execution → closure |
+| Hosting           | Single Apps Script web app (HtmlService)                                                         |
+| Storage           | One bound Google Sheet (7 tabs incl.`CONFIG`)                                                  |
+| Identity          | Google account sign-in (`Session.getActiveUser()`)                                             |
+| Authorization     | Role lookup against the`CONFIG` sheet                                                          |
+| Cost              | Free (Google Sheets + Apps Script quotas only)                                                   |
+| External services | None — no Firebase, no OAuth Client ID, no GitHub Pages                                         |
 
 ---
 
 ## 2. Roles
 
-| Role | How identified | Capabilities |
-|---|---|---|
-| Resident | Submits Google Form (no sign-in to portal) | Submit issues only |
-| Technical Committee | Google email listed in `CONFIG.COMMITTEE_EMAILS` | Approve/reject pending, view all dashboards, close/reopen, delete, full read |
-| Builder | Google email matching `CONFIG.BUILDER_EMAIL` | Read assigned issues, update builder status / comment / vendor, close/reopen |
-| Unknown | Any signed-in Google user not in CONFIG | Denied — sees a "not authorized" landing page |
+`getUserRole(email)` in [src/Config.gs](src/Config.gs) resolves the role. It returns one of `COMMITTEE | BUILDER | RESIDENT | UNKNOWN`; `UNKNOWN` is reserved for the anonymous (no-email) caller of the public deployment.
+
+| Role                | How identified                                                                | Capabilities                                                                 |
+| ------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Resident            | Signed-in Google user whose email is not in `COMMITTEE_EMAILS` / `BUILDER_EMAIL` | Submit issues (in-portal + Google Form), read submitted-issues, category master, client config |
+| Technical Committee | Google email listed in `CONFIG.COMMITTEE_EMAILS`                              | Approve/reject pending, view all dashboards, close/reopen, delete, full read |
+| Builder             | Google email matching `CONFIG.BUILDER_EMAIL`                                  | Read assigned issues, update builder status / comment / vendor, close/reopen |
+| Unknown (anonymous) | No verified email — the public (`USER_DEPLOYING` / `ANYONE_ANONYMOUS`) deployment | Read-only access to the actions in `PUBLIC_ACTIONS` (submitted-issues, category master, client config, `getReportPhotoB64`, `commitFullReportPdf`, `diag`). Every other action is denied. |
 
 > Committee membership and builder email are runtime-editable via the `CONFIG` sheet.
-> No code changes required to onboard or remove a member.
+> No code changes required to onboard or remove a member. Google Form intake
+> still flows through `onFormSubmit` regardless of the submitter's portal role.
 
 ---
 
 ## 3. Authentication & Authorization (Google Auth — MANDATORY)
 
 ### 3.1 Authentication
+
 - Web app deployed with `executeAs: USER_ACCESSING`, `access: ANYONE` (any Google account).
 - Google forces sign-in before any request reaches the script.
 - Server reads identity via `Session.getActiveUser().getEmail()` — **must not** be supplied by the client.
 - Browser must never send `userEmail` in a payload; if present, it is ignored.
 
 ### 3.2 Authorization
+
 - `getUserRole(email)` (see [config.gs](config.gs)) resolves `COMMITTEE | BUILDER | UNKNOWN`.
 - Per-action allow-list enforced server-side in `isActionAllowed_(action, role)` (see [Router.gs](Router.gs)).
 - `UNKNOWN` is denied on every action and is shown an access-denied landing page.
 
 ### 3.3 Sign-out
+
 - No programmatic sign-out for an Apps Script web app session.
 - Logout button triggers `API.signOut()` which redirects through Google's account-chooser.
 
 ### 3.4 What is forbidden
+
 - Client-typed email + role form (removed).
 - `sessionStorage` for identity (removed).
 - "Allow all as COMMITTEE" fallback in `validateUserAccess` (removed).
@@ -84,46 +91,51 @@
 
 ### 4.1 File map
 
-| File | Role |
-|---|---|
-| [appsscript.json](appsscript.json) | Manifest — web app deploy config + OAuth scopes |
-| [Router.gs](Router.gs) | `doGet`, role-based routing, `api_call`, `api_whoAmI`, allow-list |
-| [config.gs](config.gs) | CONFIG-sheet reader, `getUserRole()`, cache, `setupConfigSheet()` |
-| [apps-script.gs](apps-script.gs) | Business logic, sheet handlers, hardened `doPost` |
-| [assets/js/api.js](assets/js/api.js) | Transport shim: `google.script.run` in prod, `fetch` for local dev |
-| [index.html](index.html) | Landing / access-denied / "Switch account" |
-| [committee-dashboard.html](committee-dashboard.html) | Committee queue + active issues |
-| [builder-dashboard.html](builder-dashboard.html) | Builder task list + status updates |
-| [dashboard.html](dashboard.html) | Admin analytics (committee only) |
-| [submitted-issues.html](src/pages/submitted-issues.html) | Read-only view of `PENDING_REVIEW` enriched with downstream LIVE / CLOSED status (severity hidden by default — controlled by `FEATURE_SHOW_SEVERITY_ON_SUBMITTED`) |
-| [DEPLOYMENT_AUTH.md](DEPLOYMENT_AUTH.md) | Deploy steps for the auth model |
+| File                                                             | Role                                                                                                                                                                   |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [appsscript.json](appsscript.json)                                | Manifest — web app deploy config + OAuth scopes                                                                                                                       |
+| [src/Router.gs](src/Router.gs)                                    | `doGet`, `?diag=*` handlers, role-based routing, `api_call`, `api_whoAmI`, `isActionAllowed_` allow-list                                                     |
+| [src/Config.gs](src/Config.gs)                                    | CONFIG-sheet reader, `getUserRole()`, cache, `setupConfigSheet()`, `DEFAULT_FEATURES` / `DEFAULT_TUNABLES`, role-access sync trigger                       |
+| [src/Main.gs](src/Main.gs)                                        | `SHEET_ID`, `SHEETS`, sheet schemas (`PENDING_COL` / `LIVE_COL`), business logic, sheet handlers, form trigger installer, safe-str / drive-URL helpers         |
+| [src/Backup.gs](src/Backup.gs)                                    | `backup_props_`, GitHub Contents API helpers (`backup_putToGit_`, `putBinaryB64`) used by both the XLSX weekly backup and the PDF report                        |
+| [src/WeeklyReport.gs](src/WeeklyReport.gs)                        | Scheduled PDF report job (`weeklyReportJob`), `commitFullReportPdf`, `weeklyReport_commitMonthly_`, `installWeeklyReportTrigger`                             |
+| [src/Recovery.gs](src/Recovery.gs)                                | Operator recovery tools: `renumberAllTicketIds`, `recoverPendingFromForm`, `dedupeTicketIds`, `normalizeLegacyTicketIds`                                     |
+| [src/pages/index.html](src/pages/index.html)                      | Landing / access-denied / "Switch account"                                                                                                                             |
+| [src/pages/committee-dashboard.html](src/pages/committee-dashboard.html) | Committee queue + active + closed tabs                                                                                                                          |
+| [src/pages/builder-dashboard.html](src/pages/builder-dashboard.html)     | Builder task list + status updates                                                                                                                              |
+| [src/pages/admin-dashboard.html](src/pages/admin-dashboard.html)         | Admin analytics (committee only)                                                                                                                                 |
+| [src/pages/submitted-issues.html](src/pages/submitted-issues.html)       | Read-only view of `PENDING_REVIEW` enriched with downstream LIVE / CLOSED status (severity hidden by default — controlled by `FEATURE_SHOW_SEVERITY_ON_SUBMITTED`) |
+| [src/pages/submit-issue.html](src/pages/submit-issue.html)               | In-portal intake form (gated by `FEATURE_IN_PORTAL_SUBMIT`) — used by residents, committee, and builder                                                        |
+| [src/partials/api.html](src/partials/api.html)                    | Client `API` shim (`google.script.run` in production, `fetch(API.ENDPOINT)` locally); reads `window.IRP_WEBAPP_URL` when present                             |
+| [src/partials/theme.html](src/partials/theme.html)                | Shared theme tokens + font-scale switcher                                                                                                                            |
+| [src/partials/pdf-report.html](src/partials/pdf-report.html)      | PDF export wizard (column catalog, image-quality selector, `commitFullReportPdf` post-hook)                                                                        |
 
 ---
 
 ## 5. Google Sheet Schema (9 tabs)
 
-| # | Tab | Purpose |
-|---|---|---|
-| 1 | `Form Responses 1` | Raw form intake (auto-populated by Google Forms) |
-| 2 | `PENDING_REVIEW` | Issues **currently** awaiting committee approval. Rows leave this sheet on approve/reject (strict move). |
-| 3 | `LIVE_ISSUES` | Approved, active issues (builder updates here). Rows leave on close. |
-| 4 | `BUILDER_VIEW` | Spreadsheet-side formula view of `LIVE_ISSUES` for the builder — no code reader |
-| 5 | `ARCHIVES_ISSUES` | **Rejected** issues (moved here from `PENDING_REVIEW` on reject). Read-only from the app. |
-| 6 | `CLOSED_ISSUES` | Resolved, archived issues. Layout = `LIVE_COL` + 4 closure columns `[reason, closedDate, closedBy, resolutionDays]`. |
-| 7 | `CATEGORY_MASTER` | Dropdown values |
-| 8 | `DASHBOARD` | Formula-only metric tab |
-| 9 | `CONFIG` | Runtime config: identity, assets, feature flags, tunables |
+| # | Tab                  | Purpose                                                                                                                 |
+| - | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 1 | `Form Responses 1` | Raw form intake (auto-populated by Google Forms)                                                                        |
+| 2 | `PENDING_REVIEW`   | Issues**currently** awaiting committee approval. Rows leave this sheet on approve/reject (strict move).           |
+| 3 | `LIVE_ISSUES`      | Approved, active issues (builder updates here). Rows leave on close.                                                    |
+| 4 | `BUILDER_VIEW`     | Spreadsheet-side formula view of`LIVE_ISSUES` for the builder — no code reader                                       |
+| 5 | `ARCHIVES_ISSUES`  | **Rejected** issues (moved here from `PENDING_REVIEW` on reject). Read-only from the app.                       |
+| 6 | `CLOSED_ISSUES`    | Resolved, archived issues. Layout =`LIVE_COL` + 4 closure columns `[reason, closedDate, closedBy, resolutionDays]`. |
+| 7 | `CATEGORY_MASTER`  | Dropdown values                                                                                                         |
+| 8 | `DASHBOARD`        | Formula-only metric tab                                                                                                 |
+| 9 | `CONFIG`           | Runtime config: identity, assets, feature flags, tunables                                                               |
 
 `SHEET_ID` is hardcoded in [src/Main.gs](src/Main.gs#L4); all sheet names live in the `SHEETS` constant.
 
 ### 5.1 CONFIG tab layout
 
-| Key | Value | Notes |
-|---|---|---|
-| `COMMITTEE_EMAILS` | `a@x.com, b@x.com` | Comma- or newline-separated |
-| `BUILDER_EMAIL` | `builder@x.com` | Single email |
-| `LOGO_URL` | `https://drive.google.com/uc?id=…` | Optional — falls back to bundled asset |
-| `ATTACHMENT_FOLDER_ID` | `1AbC…xyz` | Drive folder ID for **all** in-portal photo uploads (resident submit page + committee "attach later" uploader). **Auto-populated on first upload** by `resolveAttachmentFolder_({ autoSetup: true })` — walks the canonical path under My Drive and persists the result. Operators can pre-seed it via `setupAttachmentFolder` (see §13.1) or override it with a different folder id manually. |
+| Key                      | Value                                 | Notes                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COMMITTEE_EMAILS`     | `a@x.com, b@x.com`                  | Comma- or newline-separated                                                                                                                                                                                                                                                                                                                                                                                     |
+| `BUILDER_EMAIL`        | `builder@x.com`                     | Single email                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `LOGO_URL`             | `https://drive.google.com/uc?id=…` | Optional — falls back to bundled asset                                                                                                                                                                                                                                                                                                                                                                         |
+| `ATTACHMENT_FOLDER_ID` | `1AbC…xyz`                         | Drive folder ID for**all** in-portal photo uploads (resident submit page + committee "attach later" uploader). **Auto-populated on first upload** by `resolveAttachmentFolder_({ autoSetup: true })` — walks the canonical path under My Drive and persists the result. Operators can pre-seed it via `setupAttachmentFolder` (see §13.1) or override it with a different folder id manually. |
 
 Feature flags and numeric tunables are stored as additional rows; their canonical defaults live in `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` (`src/Config.gs`). Cached 5 min in `CacheService`; `clearConfigCache()` forces refresh.
 
@@ -131,15 +143,21 @@ Feature flags and numeric tunables are stored as additional rows; their canonica
 
 ## 6. Web App URL Routes (`doGet` parameters)
 
-| URL | Behaviour |
-|---|---|
-| `/exec` | Role-based landing — committee → committee dashboard, builder → builder dashboard, unknown → denied page |
-| `/exec?page=committee` | Force committee dashboard (committee only) |
-| `/exec?page=builder` | Force builder dashboard (builder or committee) |
-| `/exec?page=admin` | Admin analytics (committee only) |
-| `/exec?page=submitted` | Read-only submitted-issues table (committee or builder) |
+Routed through the `PAGE_MAP` table in [src/Router.gs](src/Router.gs).
 
-Unauthorized requests for a page never reach the HTML — `Router.gs` substitutes the denied page.
+| URL                      | Behaviour                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/exec`                  | Landing / login screen (`src/pages/index.html`). **Not** role-auto-routed — the user picks a destination explicitly (public submitted view vs. tech mode). |
+| `/exec?page=committee`   | Force committee dashboard (committee only)                                                                                                                   |
+| `/exec?page=builder`     | Force builder dashboard (builder or committee); gated by `FEATURE_BUILDER_DASHBOARD`                                                                       |
+| `/exec?page=admin`       | Admin analytics (committee only); gated by `FEATURE_ADMIN_DASHBOARD`                                                                                       |
+| `/exec?page=submitted`   | Read-only submitted-issues table; gated by `FEATURE_SUBMITTED_PAGE`; `public: true` so anonymous callers on the public deployment can also load it     |
+| `/exec?page=submit`      | In-portal intake form (RESIDENT / COMMITTEE / BUILDER); gated by `FEATURE_IN_PORTAL_SUBMIT`                                                                |
+| `/exec?diag=whoami`      | JSON diagnostic — the resolved `email` + `role` for the caller                                                                                           |
+| `/exec?diag=sheets`      | JSON diagnostic — header rows + sample data per sheet                                                                                                      |
+| `/exec?diag=deployment`  | JSON diagnostic — deployment shape (`USER_DEPLOYING` vs `USER_ACCESSING`) fingerprinted via `Session.getActiveUser` vs `getEffectiveUser`              |
+
+Unauthorized requests for a page never reach the HTML — `Router.gs` substitutes the denied page. `?diag=*` handlers are wrapped in a top-level try/catch so any thrown error still returns a JSON error blob (CI/probes parse these strictly).
 
 ---
 
@@ -148,31 +166,36 @@ Unauthorized requests for a page never reach the HTML — `Router.gs` substitute
 All requests pass through `api_call(action, payload)` in [Router.gs](Router.gs).
 `isActionAllowed_(action, role)` is the single source of truth for capabilities.
 
-| Action | Committee | Builder | Resident |
-|---|:---:|:---:|:---:|
-| `getFormResponses` | ✅ | ✅ | — |
-| `getIssuesWithStatus` | ✅ | ✅ | ✅ |
-| `getSubmittedIssues` | ✅ | ✅ | ✅ |
-| `getPendingIssues` | ✅ | — | — |
-| `approveIssue` (payload: `{ticketId, severity}`) | ✅ | — | — |
-| `rejectIssue` | ✅ | — | — |
-| `getLiveIssues` | ✅ | ✅ | — |
-| `getClosedIssues` | ✅ | ✅ | — |
-| `updateBuilderStatus` | ✅ | ✅ | — |
-| `closeIssue` | ✅ | ✅ | — |
-| `reopenIssue` | ✅ | ✅ | — |
-| `deleteIssue` | ✅ | — | — |
-| `generateTicketId` | ✅ | — | — |
-| `approveIssueWithTicketId` _(deprecated shim → `approveIssue`)_ | ✅ | — | — |
-| `getDashboardMetrics` | ✅ | ✅ | — |
-| `syncFormResponses` | ✅ | — | — |
-| `submitIssue` | ✅ | ✅ | ✅ |
-| `addPhotosToIssue` (payload: `{ticketId, sheet, photos:[{name,mime,b64}]}`) | ✅ | — | — |
-| `getReportPhotoB64` (payload: `{fileId, maxW}`) | ✅ | ✅ | ✅ |
-| `commitFullReportPdf` (payload: `{b64, source}`) | ✅ | ✅ | ✅ |
-| `getCategoryMaster` | ✅ | ✅ | ✅ |
-| `getClientConfig` | ✅ | ✅ | ✅ |
-| `validateUserAccess` | ✅ | ✅ | ✅ |
+| Action                                                                          | Committee | Builder | Resident |
+| ------------------------------------------------------------------------------- | :-------: | :-----: | :------: |
+| `getFormResponses`                                                            |    ✅    |   ✅   |    —    |
+| `getIssuesWithStatus`                                                         |    ✅    |   ✅   |    ✅    |
+| `getSubmittedIssues`                                                          |    ✅    |   ✅   |    ✅    |
+| `getPendingIssues`                                                            |    ✅    |   —   |    —    |
+| `approveIssue` (payload: `{ticketId, severity}`)                            |    ✅    |   —   |    —    |
+| `rejectIssue`                                                                 |    ✅    |   —   |    —    |
+| `getLiveIssues`                                                               |    ✅    |   ✅   |    —    |
+| `getClosedIssues`                                                             |    ✅    |   ✅   |    —    |
+| `updateBuilderStatus`                                                         |    ✅    |   ✅   |    —    |
+| `closeIssue`                                                                  |    ✅    |   ✅   |    —    |
+| `reopenIssue`                                                                 |    ✅    |   ✅   |    —    |
+| `deleteIssue`                                                                 |    ✅    |   —   |    —    |
+| `generateTicketId`                                                            |    ✅    |   —   |    —    |
+| `approveIssueWithTicketId` _(deprecated shim → `approveIssue`)_          |    ✅    |   —   |    —    |
+| `getDashboardMetrics`                                                         |    ✅    |   ✅   |    —    |
+| `syncFormResponses`                                                           |    ✅    |   —   |    —    |
+| `submitIssue`                                                                 |    ✅    |   ✅   |    ✅    |
+| `addPhotosToIssue` (payload: `{ticketId, sheet, photos:[{name,mime,b64}]}`) |    ✅    |   —   |    —    |
+| `getReportPhotoB64` (payload: `{fileId, maxW}`)                             |    ✅    |   ✅   |    ✅    |
+| `commitFullReportPdf` (payload: `{b64, source}`)                            |    ✅    |   ✅   |    ✅    |
+| `getCategoryMaster`                                                           |    ✅    |   ✅   |    ✅    |
+| `getClientConfig`                                                             |    ✅    |   ✅   |    ✅    |
+| `validateUserAccess`                                                          |    ✅    |   ✅   |    ✅    |
+| `diag`                                                                        |    ✅    |   ✅   |    ✅    |
+
+> **Anonymous-visitor allow-list (`PUBLIC_ACTIONS` in [src/Router.gs](src/Router.gs)).** When the caller has no verified email (role `UNKNOWN` — the public deployment), the per-role allow-list is bypassed for a small whitelist: `getSubmittedIssues`, `getClientConfig`, `getCategoryMaster`, `diag`, `getReportPhotoB64`, `commitFullReportPdf`. Every other action returns `Unauthorized`. Note that this bypass applies to `UNKNOWN` only; a signed-in `RESIDENT` still needs the action in `RESIDENT_ALLOWED` (`submitIssue`, `getCategoryMaster`, `getIssuesWithStatus`, `getSubmittedIssues`, `validateUserAccess`, `getClientConfig`, `getReportPhotoB64`). In particular, `commitFullReportPdf` is only reachable by COMMITTEE, BUILDER, or an anonymous caller — not by a signed-in RESIDENT.
+
+> **`diag`** returns the same payload as `api_diag()` — identity, deployment mode, webapp URL, and a sample `getPendingIssues` probe — so client code can surface why an action is failing without opening the Apps Script editor.
 
 `addPhotosToIssue` lets the committee attach photos to an existing issue that was submitted without any (e.g. bulk Form imports). `sheet` must be one of `PENDING_REVIEW`, `LIVE_ISSUES`, or `CLOSED_ISSUES`. New URLs are appended (comma-separated) to the row's existing `PHOTO` column. Gated by **two** flags — both must be true: `FEATURE_COMMITTEE_PHOTO_ATTACH` (master switch for this feature, **default OFF**) and `FEATURE_PHOTO_UPLOAD` (global photo kill-switch). The committee dashboard also hides the **Upload Photo** button client-side when `FEATURE_COMMITTEE_PHOTO_ATTACH` is false.
 
@@ -218,13 +241,13 @@ CLOSED_ISSUES:
 Every page must fetch from **every** lifecycle sheet it surfaces — do not
 infer counts from `getDashboardMetrics` alone.
 
-| Page | Fetches | Renders |
-|---|---|---|
-| `committee-dashboard.html` | `getPendingIssues` (PENDING + ARCHIVES) + `getLiveIssues('ALL')` + `getClosedIssues` + `getDashboardMetrics` | Pending tab (filter: Pending/Rejected/All), Active tab, Closed tab |
-| `builder-dashboard.html` | `getLiveIssues('BUILDER')` + `getClosedIssues` | Merged into single table; "Work Completed" filter covers both builder-marked and committee-closed |
-| `admin-dashboard.html` | `getDashboardMetrics` + `getLiveIssues('ALL')` | KPIs + charts + aging/SLA tables |
-| `submitted-issues.html` | `getSubmittedIssues` (unions PENDING + LIVE + optional ARCHIVES) | Single table with Status filter; archives gated by `SUBMITTED_INCLUDE_REJECTED` |
-| `submit-issue.html` | `getClientConfig` + `getCategoryMaster` | Intake form |
+| Page                         | Fetches                                                                                                              | Renders                                                                                           |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `committee-dashboard.html` | `getPendingIssues` (PENDING + ARCHIVES) + `getLiveIssues('ALL')` + `getClosedIssues` + `getDashboardMetrics` | Pending tab (filter: Pending/Rejected/All), Active tab, Closed tab                                |
+| `builder-dashboard.html`   | `getLiveIssues('BUILDER')` + `getClosedIssues`                                                                   | Merged into single table; "Work Completed" filter covers both builder-marked and committee-closed |
+| `admin-dashboard.html`     | `getDashboardMetrics` + `getLiveIssues('ALL')`                                                                   | KPIs + charts + aging/SLA tables                                                                  |
+| `submitted-issues.html`    | `getSubmittedIssues` (unions PENDING + LIVE + optional ARCHIVES)                                                   | Single table with Status filter; archives gated by`SUBMITTED_INCLUDE_REJECTED`                  |
+| `submit-issue.html`        | `getClientConfig` + `getCategoryMaster`                                                                          | Intake form                                                                                       |
 
 > **Photo array shape (canonical).** Every reader emits the photo URLs as
 > `i.issue.photoLinks` (array of normalized Drive thumbnail URLs).
@@ -297,11 +320,11 @@ backup to GitHub before any write:
 ## 10. SLA Rules
 
 | Severity | Days |
-|---|---|
-| Critical | 1 |
-| High | 3 |
-| Medium | 7 |
-| Low | 15 |
+| -------- | ---- |
+| Critical | 1    |
+| High     | 3    |
+| Medium   | 7    |
+| Low      | 15   |
 
 Auto-calculated on approval (`calculateSLADate`). Dashboard surfaces breaches.
 
@@ -324,38 +347,38 @@ Resident Name · Flat Number · Category · Sub-Category · Tower · Exact Locat
 
 ## 12. Apps Script Triggers
 
-| Trigger | Schedule | Purpose |
-|---|---|---|
-| `onFormSubmit` | On form submit | Create ticket in `PENDING_REVIEW` |
-| `clearConfigCache` *(optional)* | Hourly | Pick up CONFIG edits without manual run |
-| `weeklyBackupJob` *(optional)* | `REPORT_BACKUP_FREQUENCY` (default `"3x-daily"`) — every 8 hours by default; once per day at ~02:00 IST when `"daily"`; Mondays only at ~02:00 when `"weekly"` | XLSX snapshot of the spreadsheet committed to `backups/ta-issue-manager.xlsx`. Installed by `installWeeklyBackupTrigger` once `GITHUB_TOKEN` is set. Re-run the installer after editing the tunable so the trigger is recreated with the new cadence. |
-| `weeklyReportJob` *(optional, gated by `FEATURE_WEEKLY_REPORT_BACKUP`)* | `REPORT_BACKUP_FREQUENCY` (default `"3x-daily"`) — every 8 hours by default; once per day at ~03:00 IST when `"daily"` (one hour after the daily sheet backup so it picks up that day's snapshot); Mondays only at ~03:00 when `"weekly"` | Builds the full PDF status report server-side (pending + active + closed + rejected, photos embedded inline) and commits it to GitHub as **two files** in `backups/`: the canonical live copy `TA_IAP_Full_Report.pdf` (overwritten every run) and the per-month archive `TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` (e.g. `..._Jul_2026.pdf`) which freezes at month rollover because the filename changes. The same file is also overwritten on demand whenever any view's **Export Report** wizard finishes (committee, builder, or the public submitted page — the wizard streams jsPDF bytes back via `commitFullReportPdf`, and the monthly copy is written alongside). The scheduled trigger is the fallback when nobody exported in the last interval. Installed by `installWeeklyReportTrigger`; re-run after editing `REPORT_BACKUP_FREQUENCY`. See §19.14. |
+| Trigger                                                                       | Schedule                                                                                                                                                                                                                                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `onFormSubmit`                                                              | On form submit                                                                                                                                                                                                                                     | Create ticket in`PENDING_REVIEW`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `clearConfigCache` *(optional)*                                           | Hourly                                                                                                                                                                                                                                             | Pick up CONFIG edits without manual run                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `weeklyBackupJob` *(optional)*                                            | `REPORT_BACKUP_FREQUENCY` (default `"3x-daily"`) — every 8 hours by default; once per day at ~02:00 IST when `"daily"`; Mondays only at ~02:00 when `"weekly"`                                                                            | XLSX snapshot of the spreadsheet committed to`backups/ta-issue-manager.xlsx`. Installed by `installWeeklyBackupTrigger` once `GITHUB_TOKEN` is set. Re-run the installer after editing the tunable so the trigger is recreated with the new cadence.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `weeklyReportJob` *(optional, gated by `FEATURE_WEEKLY_REPORT_BACKUP`)* | `REPORT_BACKUP_FREQUENCY` (default `"3x-daily"`) — every 8 hours by default; once per day at ~03:00 IST when `"daily"` (one hour after the daily sheet backup so it picks up that day's snapshot); Mondays only at ~03:00 when `"weekly"` | Builds the full PDF status report server-side (pending + active + closed + rejected, photos embedded inline) and commits it to GitHub as**two files** in `backups/`: the canonical live copy `TA_IAP_Full_Report.pdf` (overwritten every run) and the per-month archive `TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` (e.g. `..._Jul_2026.pdf`) which freezes at month rollover because the filename changes. The same file is also overwritten on demand whenever any view's **Export Report** wizard finishes (committee, builder, or the public submitted page — the wizard streams jsPDF bytes back via `commitFullReportPdf`, and the monthly copy is written alongside). The scheduled trigger is the fallback when nobody exported in the last interval. Installed by `installWeeklyReportTrigger`; re-run after editing `REPORT_BACKUP_FREQUENCY`. See §19.14. |
 
 ---
 
 ## 13. Deployment (mandatory settings)
 
-| Setting | Value |
-|---|---|
-| Manifest | [appsscript.json](appsscript.json) (`USER_ACCESSING`, `ANYONE`) |
-| Required scopes | `spreadsheets`, `userinfo.email`, `script.container.ui`, `script.send_mail`, `drive` (read + write for uploads) |
-| Deploy as | Web app, *Execute as: User accessing the web app*, *Who has access: Anyone with a Google account* (secure deployment) plus a sibling public deployment (`USER_DEPLOYING` / `ANYONE_ANONYMOUS`) for intake — see §19.8 |
+| Setting         | Value                                                                                                                                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Manifest        | [appsscript.json](appsscript.json) (`USER_ACCESSING`, `ANYONE`)                                                                                                                                                             |
+| Required scopes | `spreadsheets`, `userinfo.email`, `script.container.ui`, `script.send_mail`, `drive` (read + write for uploads)                                                                                                      |
+| Deploy as       | Web app,*Execute as: User accessing the web app*, *Who has access: Anyone with a Google account* (secure deployment) plus a sibling public deployment (`USER_DEPLOYING` / `ANYONE_ANONYMOUS`) for intake — see §19.8 |
 
 ### 13.1 Apps Script setup runbook (one-time, in order)
 
 All functions live in `src/Config.gs`. Run from the Apps Script editor → function dropdown → Run. All are idempotent.
 
-| # | When | Function | What it does |
-|---|---|---|---|
-| 1 | Fresh deploy, or after pulling new `DEFAULT_FEATURES` / `DEFAULT_TUNABLES` | `setupConfigSheet` | Seeds the `CONFIG` tab. Preserves existing operator values; appends only missing keys with defaults. |
-| 2 | **Fresh deploy, or after re-binding to a different spreadsheet / form** — without this, form submissions land in `Form Responses 1` but **never become tickets** | `installFormSubmitTrigger` (`src/Main.gs`) | Idempotent. Removes any prior `onFormSubmit` triggers on this script project and creates a fresh spreadsheet-form-submit trigger so each new Google Form response runs `onFormSubmit(e)` → `createPendingIssue_()` → row appended to `PENDING_REVIEW` with a fresh `TKT-NNNNN` id. Returns `{success, message, data:{removed, triggerId}}`. |
-| — | _Diagnostic_ — confirm form / weekly / report triggers are wired up | `listProjectTriggers` (`src/Main.gs`) | Read-only. Lists every trigger on the script project (`handler`, `type`, `triggerSource`, `sourceId`, `uniqueId`). If `onFormSubmit` is missing, run `installFormSubmitTrigger`. |
-| — | _Optional_ — pre-seed `ATTACHMENT_FOLDER_ID` without waiting for the first upload | `setupAttachmentFolder` | Walks `My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating ` (File responses)` suffix), persists the folder id in CONFIG, and forces public-view on the folder. **Not required** — `uploadSubmissionPhotos_` calls the same resolver lazily on first upload via `resolveAttachmentFolder_({ autoSetup: true, makePublic: true })`. |
-| — | _Optional_ — bulk-publish files already inside the attachment folder (Form-uploaded, etc.) | `makeAttachmentFolderPublic` | Walks every file in the folder and re-applies *Anyone with link → Viewer*. New uploads after this build are made public automatically by `trySharePublic_` in the upload path. Falls back to `ANYONE` if domain policy blocks link sharing. |
-| — | Anytime, to verify | `whereDoUploadsGo` | Read-only. Prints the configured folder's full path + URL. Does not change anything. |
-| — | After editing CONFIG by hand | `clearConfigCache` | Forces the next call to re-read CONFIG (5-min cache otherwise). |
+| #  | When                                                                                                                                                                            | Function                                       | What it does                                                                                                                                                                                                                                                                                                                                                                                       |
+| -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1  | Fresh deploy, or after pulling new`DEFAULT_FEATURES` / `DEFAULT_TUNABLES`                                                                                                   | `setupConfigSheet`                           | Seeds the`CONFIG` tab. Preserves existing operator values; appends only missing keys with defaults.                                                                                                                                                                                                                                                                                              |
+| 2  | **Fresh deploy, or after re-binding to a different spreadsheet / form** — without this, form submissions land in `Form Responses 1` but **never become tickets** | `installFormSubmitTrigger` (`src/Main.gs`) | Idempotent. Removes any prior`onFormSubmit` triggers on this script project and creates a fresh spreadsheet-form-submit trigger so each new Google Form response runs `onFormSubmit(e)` → `createPendingIssue_()` → row appended to `PENDING_REVIEW` with a fresh `TKT-NNNNN` id. Returns `{success, message, data:{removed, triggerId}}`.                                           |
+| — | _Diagnostic_ — confirm form / weekly / report triggers are wired up                                                                                                          | `listProjectTriggers` (`src/Main.gs`)      | Read-only. Lists every trigger on the script project (`handler`, `type`, `triggerSource`, `sourceId`, `uniqueId`). If `onFormSubmit` is missing, run `installFormSubmitTrigger`.                                                                                                                                                                                                     |
+| — | _Optional_ — pre-seed `ATTACHMENT_FOLDER_ID` without waiting for the first upload                                                                                          | `setupAttachmentFolder`                      | Walks`My Drive / TA_HANDOVER / ISSUE_UPLOADS / TA Issue Reporting Portal / Upload Photos/Video` (tolerating ` (File responses)` suffix), persists the folder id in CONFIG, and forces public-view on the folder. **Not required** — `uploadSubmissionPhotos_` calls the same resolver lazily on first upload via `resolveAttachmentFolder_({ autoSetup: true, makePublic: true })`. |
+| — | _Optional_ — bulk-publish files already inside the attachment folder (Form-uploaded, etc.)                                                                                   | `makeAttachmentFolderPublic`                 | Walks every file in the folder and re-applies*Anyone with link → Viewer*. New uploads after this build are made public automatically by `trySharePublic_` in the upload path. Falls back to `ANYONE` if domain policy blocks link sharing.                                                                                                                                                  |
+| — | Anytime, to verify                                                                                                                                                              | `whereDoUploadsGo`                           | Read-only. Prints the configured folder's full path + URL. Does not change anything.                                                                                                                                                                                                                                                                                                               |
+| — | After editing CONFIG by hand                                                                                                                                                    | `clearConfigCache`                           | Forces the next call to re-read CONFIG (5-min cache otherwise).                                                                                                                                                                                                                                                                                                                                    |
 
-Full operator steps in [DEPLOYMENT_AUTH.md](DEPLOYMENT_AUTH.md) and the **Apps Script setup runbook** table in `README.md`.
+Full operator steps in the **Apps Script setup runbook** table in `README.md`.
 
 ---
 
@@ -435,6 +458,7 @@ cells with `getValues()`.
 
 **Rule:** Every value returned to the client must pass through the helpers
 in `src/Main.gs`:
+
 - `safeStr_(v)` — coerce to string, blank for null/undefined.
 - `safeDateIso_(v)` — ISO string, or `""` if invalid/empty.
 
@@ -506,18 +530,18 @@ of any client-supplied value. The submit form has no severity field.
 
 ### 19.7 Tunables that gate visibility
 
-| Tunable (CONFIG sheet) | Default | Effect |
-|---|---|---|
-| `SUBMITTED_INCLUDE_REJECTED` | `"false"` | When `"true"`, `getSubmittedIssues` also unions `ARCHIVES_ISSUES`. Read-only submitted view hides rejected rows by default. |
-| `FEATURE_SHOW_SEVERITY_ON_SUBMITTED` | `"false"` | When `"true"`, severity column is visible on the submitted-issues page. |
-| `FEATURE_OPEN_SHEET_LINK` | `"false"` | When `"true"`, the public submitted-issues page renders the **Open in Sheets** pill (linking to the underlying spreadsheet) on the title row. Default OFF — opt-in. The button is server-rendered, so when off it is absent from the HTML entirely (no client-side gate to bypass). |
-| `FEATURE_COMMITTEE_PHOTO_ATTACH` | `"false"` | When `"true"`, committee detail view shows an **Upload Photo** button on issues without photos and the `addPhotosToIssue` API accepts writes. Default OFF — opt-in via the CONFIG sheet. |
-| `FEATURE_PDF_REPORT` | `"true"` | When `"true"` (the default), every list view (Committee / Builder / Submitted read-only) shows an **Export Report** button that opens a shared PDF wizard (sources, columns, embedded photos, image quality) and the `getReportPhotoB64` API accepts requests. **Full-privileges model:** every view now surfaces the **full 17-column catalog** in the wizard's Advanced Options — pages only pass `columnDefaultsOn` to pre-check the columns most useful for that view, and the operator can enable anything else (resident, action-by, rejection, subcategory, SLA, etc.) before rendering. The column catalog and per-view defaults live in `src/partials/pdf-report.html` and each page's `openExportReport()`. The first page opens with a compact title header (portal + title band + single meta line of generated/by/source-counts/filters) and the first section's list begins immediately below — no full cover page. Photos are embedded **only inline in the Photos column** (thumbnail grid sized by `INLINE_THUMB`); there is no separate end-of-section gallery. Each thumbnail in the PDF is a **clickable hyperlink** — clicking (in any PDF reader) opens the full-resolution image in the Drive viewer (`https://drive.google.com/file/d/<ID>/view`), where the built-in pan/zoom controls are available; placeholders for missing photos are also clickable and resolve to the same viewer URL. **Image-quality selector** (wizard → Advanced Options → *Image quality* radios): `Low` = 400 px thumbs (~30 KB/photo, **default**), `Medium` = 900 px (~90 KB/photo), `High` = 1600 px (~250 KB/photo); the selected width is sent as the `maxW` payload to `getReportPhotoB64`. The wizard's "Include photos" master switch gates inline rendering and, when off, also drops the Photos column from the table and greys out the quality selector. Default ON — turn off in the CONFIG sheet to hide the wizard. |
-| `FEATURE_WEEKLY_REPORT_BACKUP` | `"true"` | When `"true"` (the default), the scheduled `weeklyReportJob` cron commits the full PDF status report to GitHub as **two files** in `backups/`: the canonical live copy `TA_IAP_Full_Report.pdf` (overwritten every run — pending + active + closed + rejected, resident names / flats / descriptions kept as-is, photos embedded inline via authenticated `UrlFetchApp` + script OAuth Drive thumbnail fetch, capped at 4 photos per issue / 60 per report) and the per-month archive `TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` (e.g. `TA_IAP_Full_Report_Jul_2026.pdf`) which is overwritten within the same calendar month and freezes at month rollover. All five pages (login, submitted, committee, builder, admin) expose the canonical file via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty). The pill renders **whenever the URL resolves** and is independent of this flag. **This flag now gates the scheduled cron only** — it no longer gates the on-demand wizard commit path, which fires from every view / every role unconditionally (see `commitFullReportPdf` in §7). The cron still requires the `GITHUB_TOKEN` script property and a configured `BACKUP_REPO`. Default ON — turn off in the CONFIG sheet to pause the scheduled cron (wizard exports continue to overwrite the canonical + monthly files on demand). |
-| `FEATURE_PUBLIC_FULL_REPORT` | `"true"` | When `"true"` (the default), the anonymous `submitted-issues.html` feed matches the committee/builder data scope: `getSubmittedIssues` unions `CLOSED_ISSUES` (alongside pending + live + the existing `SUBMITTED_INCLUDE_REJECTED` gate on rejected), so the wizard's PDF covers the full ticket lifecycle. **This flag no longer gates `commitFullReportPdf`** — every view (including anonymous) unconditionally pushes the rendered PDF to GitHub as `TA_IAP_Full_Report.pdf` (see §7). Flip OFF in CONFIG if the anonymous data scope should exclude closed tickets — the wizard commit itself keeps firing, and its integrity checks (`%PDF` magic, 30 MB cap, `GITHUB_TOKEN` required) remain the only defences. |
-| `FULL_REPORT_PUBLIC_URL` | `""` | Raw URL where `TA_IAP_Full_Report.pdf` (the full report including names, flats, closed/rejected rows, **and embedded photos**) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf`. **When empty, the server auto-derives this URL from `BACKUP_REPO` + `BACKUP_BRANCH`** unconditionally so the **View Full Report** pill on every page works out-of-the-box. **Privacy note:** the full file contains residents' names and flat numbers — keep the backup repo private, or override this tunable to point at an authenticated mirror, before sharing widely. The per-month archives (`TA_IAP_Full_Report_<Mon>_<YYYY>.pdf`) sit next to the canonical file at the same base URL and can be linked directly (`…/backups/TA_IAP_Full_Report_Jul_2026.pdf`) when a specific month's snapshot is needed. |
-| `REPORT_BACKUP_FREQUENCY` | `"3x-daily"` | Cadence for **both** scheduled trigger jobs that commit to the GitHub mirror — the XLSX sheet backup (`weeklyBackupJob`, ~02:00 anchor) and the PDF report job (`weeklyReportJob`, ~03:00 anchor). Accepted values: **`"3x-daily"` (default)** installs `.everyHours(8)` so each job fires roughly **3 times per 24 h** — chosen so the canonical `backups/TA_IAP_Full_Report.pdf` and `backups/ta-issue-manager.xlsx` stay fresh enough for an end-of-shift snapshot model without crossing the Apps Script daily-trigger quota; Apps Script `.everyHours()` cannot be pinned to a specific wall-clock hour, so the actual fire times depend on when the trigger was installed. `"daily"` falls back to once per day at the legacy ~02:00 / ~03:00 slot via `.everyDays(1).atHour(...)`. `"weekly"` reverts to the historic Mondays-only schedule. Any other value (typo, blank, common spelling variants like `"3x"` or `"thrice-daily"` are tolerated; everything else) is treated as `"3x-daily"`. Apps Script time-based triggers are independent objects — **editing this tunable does not move an already-installed trigger.** Re-run `installWeeklyBackupTrigger` and `installWeeklyReportTrigger` from the Apps Script editor after changing the value so each installer wipes its prior trigger and recreates it with the new cadence. The function names retain the `weekly` prefix for backward compatibility; only the schedule changes. |
-| `FEATURE_SLA` | `"false"` | When `"true"`, every list view (Committee / Builder / Admin) shows SLA breach KPI cards, the **SLA Days** column, the **SLA Breached** filter option, the **SLA Status / Due Date / Days Remaining** detail-modal block, and the PDF wizard exposes `slaDue` + `breached` columns. The `getLiveIssues` API still returns a `sla:{}` sub-object (with placeholder `dueDate:""`, `breached:false`, `daysRemaining:null` when off), and `getDashboardMetrics.slaBreaches` is forced to `0` when off so existing clients don't NPE. SLA due-date is still **computed and written** to `LIVE_ISSUES.SLA_DATE` at `approveIssue` time regardless of the flag, so flipping it on later "just works". The approve-modal severity labels also drop the `(SLA X day)` suffix and the helper note `SLA due date is computed…` when off. Default OFF — opt-in via the CONFIG sheet. |
+| Tunable (CONFIG sheet)                 | Default        | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SUBMITTED_INCLUDE_REJECTED`         | `"false"`    | When`"true"`, `getSubmittedIssues` also unions `ARCHIVES_ISSUES`. Read-only submitted view hides rejected rows by default.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `FEATURE_SHOW_SEVERITY_ON_SUBMITTED` | `"false"`    | When`"true"`, severity column is visible on the submitted-issues page.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `FEATURE_OPEN_SHEET_LINK`            | `"false"`    | When`"true"`, the public submitted-issues page renders the **Open in Sheets** pill (linking to the underlying spreadsheet) on the title row. Default OFF — opt-in. The button is server-rendered, so when off it is absent from the HTML entirely (no client-side gate to bypass).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `FEATURE_COMMITTEE_PHOTO_ATTACH`     | `"false"`    | When`"true"`, committee detail view shows an **Upload Photo** button on issues without photos and the `addPhotosToIssue` API accepts writes. Default OFF — opt-in via the CONFIG sheet.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `FEATURE_PDF_REPORT`                 | `"true"`     | When`"true"` (the default), every list view (Committee / Builder / Submitted read-only) shows an **Export Report** button that opens a shared PDF wizard (sources, columns, embedded photos, image quality) and the `getReportPhotoB64` API accepts requests. **Full-privileges model:** every view now surfaces the **full 17-column catalog** in the wizard's Advanced Options — pages only pass `columnDefaultsOn` to pre-check the columns most useful for that view, and the operator can enable anything else (resident, action-by, rejection, subcategory, SLA, etc.) before rendering. The column catalog and per-view defaults live in `src/partials/pdf-report.html` and each page's `openExportReport()`. The first page opens with a compact title header (portal + title band + single meta line of generated/by/source-counts/filters) and the first section's list begins immediately below — no full cover page. Photos are embedded **only inline in the Photos column** (thumbnail grid sized by `INLINE_THUMB`); there is no separate end-of-section gallery. Each thumbnail in the PDF is a **clickable hyperlink** — clicking (in any PDF reader) opens the full-resolution image in the Drive viewer (`https://drive.google.com/file/d/<ID>/view`), where the built-in pan/zoom controls are available; placeholders for missing photos are also clickable and resolve to the same viewer URL. **Image-quality selector** (wizard → Advanced Options → *Image quality* radios): `Low` = 400 px thumbs (~30 KB/photo, **default**), `Medium` = 900 px (~90 KB/photo), `High` = 1600 px (~250 KB/photo); the selected width is sent as the `maxW` payload to `getReportPhotoB64`. The wizard's "Include photos" master switch gates inline rendering and, when off, also drops the Photos column from the table and greys out the quality selector. Default ON — turn off in the CONFIG sheet to hide the wizard. |
+| `FEATURE_WEEKLY_REPORT_BACKUP`       | `"true"`     | When`"true"` (the default), the scheduled `weeklyReportJob` cron commits the full PDF status report to GitHub as **two files** in `backups/`: the canonical live copy `TA_IAP_Full_Report.pdf` (overwritten every run — pending + active + closed + rejected, resident names / flats / descriptions kept as-is, photos embedded inline via authenticated `UrlFetchApp` + script OAuth Drive thumbnail fetch, capped at 4 photos per issue / 60 per report) and the per-month archive `TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` (e.g. `TA_IAP_Full_Report_Jul_2026.pdf`) which is overwritten within the same calendar month and freezes at month rollover. All five pages (login, submitted, committee, builder, admin) expose the canonical file via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty). The pill renders **whenever the URL resolves** and is independent of this flag. **This flag now gates the scheduled cron only** — it no longer gates the on-demand wizard commit path, which fires from every view / every role unconditionally (see `commitFullReportPdf` in §7). The cron still requires the `GITHUB_TOKEN` script property and a configured `BACKUP_REPO`. Default ON — turn off in the CONFIG sheet to pause the scheduled cron (wizard exports continue to overwrite the canonical + monthly files on demand).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `FEATURE_PUBLIC_FULL_REPORT`         | `"true"`     | When`"true"` (the default), the anonymous `submitted-issues.html` feed matches the committee/builder data scope: `getSubmittedIssues` unions `CLOSED_ISSUES` (alongside pending + live + the existing `SUBMITTED_INCLUDE_REJECTED` gate on rejected), so the wizard's PDF covers the full ticket lifecycle. **This flag no longer gates `commitFullReportPdf`** — every view (including anonymous) unconditionally pushes the rendered PDF to GitHub as `TA_IAP_Full_Report.pdf` (see §7). Flip OFF in CONFIG if the anonymous data scope should exclude closed tickets — the wizard commit itself keeps firing, and its integrity checks (`%PDF` magic, 30 MB cap, `GITHUB_TOKEN` required) remain the only defences.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `FULL_REPORT_PUBLIC_URL`             | `""`         | Raw URL where`TA_IAP_Full_Report.pdf` (the full report including names, flats, closed/rejected rows, **and embedded photos**) lands. Recommended: `https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf`. **When empty, the server auto-derives this URL from `BACKUP_REPO` + `BACKUP_BRANCH`** unconditionally so the **View Full Report** pill on every page works out-of-the-box. **Privacy note:** the full file contains residents' names and flat numbers — keep the backup repo private, or override this tunable to point at an authenticated mirror, before sharing widely. The per-month archives (`TA_IAP_Full_Report_<Mon>_<YYYY>.pdf`) sit next to the canonical file at the same base URL and can be linked directly (`…/backups/TA_IAP_Full_Report_Jul_2026.pdf`) when a specific month's snapshot is needed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `REPORT_BACKUP_FREQUENCY`            | `"3x-daily"` | Cadence for**both** scheduled trigger jobs that commit to the GitHub mirror — the XLSX sheet backup (`weeklyBackupJob`, ~02:00 anchor) and the PDF report job (`weeklyReportJob`, ~03:00 anchor). Accepted values: **`"3x-daily"` (default)** installs `.everyHours(8)` so each job fires roughly **3 times per 24 h** — chosen so the canonical `backups/TA_IAP_Full_Report.pdf` and `backups/ta-issue-manager.xlsx` stay fresh enough for an end-of-shift snapshot model without crossing the Apps Script daily-trigger quota; Apps Script `.everyHours()` cannot be pinned to a specific wall-clock hour, so the actual fire times depend on when the trigger was installed. `"daily"` falls back to once per day at the legacy ~02:00 / ~03:00 slot via `.everyDays(1).atHour(...)`. `"weekly"` reverts to the historic Mondays-only schedule. Any other value (typo, blank, common spelling variants like `"3x"` or `"thrice-daily"` are tolerated; everything else) is treated as `"3x-daily"`. Apps Script time-based triggers are independent objects — **editing this tunable does not move an already-installed trigger.** Re-run `installWeeklyBackupTrigger` and `installWeeklyReportTrigger` from the Apps Script editor after changing the value so each installer wipes its prior trigger and recreates it with the new cadence. The function names retain the `weekly` prefix for backward compatibility; only the schedule changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `FEATURE_SLA`                        | `"false"`    | When`"true"`, every list view (Committee / Builder / Admin) shows SLA breach KPI cards, the **SLA Days** column, the **SLA Breached** filter option, the **SLA Status / Due Date / Days Remaining** detail-modal block, and the PDF wizard exposes `slaDue` + `breached` columns. The `getLiveIssues` API still returns a `sla:{}` sub-object (with placeholder `dueDate:""`, `breached:false`, `daysRemaining:null` when off), and `getDashboardMetrics.slaBreaches` is forced to `0` when off so existing clients don't NPE. SLA due-date is still **computed and written** to `LIVE_ISSUES.SLA_DATE` at `approveIssue` time regardless of the flag, so flipping it on later "just works". The approve-modal severity labels also drop the `(SLA X day)` suffix and the helper note `SLA due date is computed…` when off. Default OFF — opt-in via the CONFIG sheet.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 Defaults live in `DEFAULT_TUNABLES` (`src/Config.gs`); CONFIG sheet values
 override.
@@ -527,10 +551,10 @@ override.
 The app is published as two web-app deployments and CI keeps both in sync
 via `clasp 3.3.0`:
 
-| Deployment | `executeAs` | `access` | Purpose |
-|---|---|---|---|
-| Public  | `USER_DEPLOYING` | `ANYONE_ANONYMOUS` | Landing + intake form (no Google sign-in) |
-| Secure  | `USER_ACCESSING` | `ANYONE` | All authenticated dashboards |
+| Deployment | `executeAs`      | `access`           | Purpose                                   |
+| ---------- | ------------------ | -------------------- | ----------------------------------------- |
+| Public     | `USER_DEPLOYING` | `ANYONE_ANONYMOUS` | Landing + intake form (no Google sign-in) |
+| Secure     | `USER_ACCESSING` | `ANYONE`           | All authenticated dashboards              |
 
 `signOut()` and "Back to Login" redirect to `PUBLIC_WEBAPP_URL`. Do not
 merge these into a single deployment — the public one must not require
@@ -544,15 +568,15 @@ show empty results and confuses users.
 
 Canonical status set (single source of truth):
 
-| Status | Set by | Lives on |
-|---|---|---|
-| `PENDING_APPROVAL` | form intake / `onFormSubmit` | `PENDING_REVIEW` |
-| `REJECTED` | `rejectIssue` | `ARCHIVES_ISSUES` |
-| `ASSIGNED` | `approveIssue` | `LIVE_ISSUES` |
-| `IN_PROGRESS` | builder update | `LIVE_ISSUES` |
-| `WORK_COMPLETED` | builder update | `LIVE_ISSUES` |
-| `REOPENED` | `reopenIssue` | `LIVE_ISSUES` |
-| `CLOSED` | `closeIssue` | `CLOSED_ISSUES` |
+| Status               | Set by                        | Lives on            |
+| -------------------- | ----------------------------- | ------------------- |
+| `PENDING_APPROVAL` | form intake /`onFormSubmit` | `PENDING_REVIEW`  |
+| `REJECTED`         | `rejectIssue`               | `ARCHIVES_ISSUES` |
+| `ASSIGNED`         | `approveIssue`              | `LIVE_ISSUES`     |
+| `IN_PROGRESS`      | builder update                | `LIVE_ISSUES`     |
+| `WORK_COMPLETED`   | builder update                | `LIVE_ISSUES`     |
+| `REOPENED`         | `reopenIssue`               | `LIVE_ISSUES`     |
+| `CLOSED`           | `closeIssue`                | `CLOSED_ISSUES`   |
 
 When adding a new state, update **every** page's filter dropdown,
 `getStatusBadge()`, `getStatusIcon()`, and any `status || 'FALLBACK'`
@@ -680,10 +704,10 @@ so there is only one artifact to reason about. The cron is gated by
 `FEATURE_WEEKLY_REPORT_BACKUP` (default **on**) and ships **two files at
 the same `BACKUP_REPO`** — a live canonical copy and a per-month archive:
 
-| File path (in repo) | Overwrite policy | Content | Surfaced where |
-|---|---|---|---|
-| `backups/TA_IAP_Full_Report.pdf` | Overwritten by every commit (wizard export or cron run) | Pending + Active + Closed + Rejected. Per-issue table including resident name, full Tower / Flat, descriptions, **and inline photos** (server-side cron fetches Drive thumbnails authenticated via `UrlFetchApp` + script OAuth and embeds them via `Body.appendImage`, capped at 4 photos per issue / 60 per report; the wizard-pushed copy is even richer thanks to jsPDF's clickable thumbnails). | **All five pages** (login, submitted, committee, builder, admin) via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty). The pill is **independent of `FEATURE_WEEKLY_REPORT_BACKUP`** — it renders whenever the URL resolves so the link keeps working even after the cron is paused. |
-| `backups/TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` | Overwritten within the same calendar month; **freezes at month rollover** because the filename changes (`..._Jul_2026.pdf` → `..._Aug_2026.pdf`) | Identical bytes to the canonical file at commit time. | No UI surface — consumed by operators via the GitHub file browser (or by linking `…/backups/TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` directly when a specific month's snapshot is needed). Kept forever — small PDFs, ~12 files per year. |
+| File path (in repo)                             | Overwrite policy                                                                                                                                           | Content                                                                                                                                                                                                                                                                                                                                                                                                       | Surfaced where                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `backups/TA_IAP_Full_Report.pdf`              | Overwritten by every commit (wizard export or cron run)                                                                                                    | Pending + Active + Closed + Rejected. Per-issue table including resident name, full Tower / Flat, descriptions,**and inline photos** (server-side cron fetches Drive thumbnails authenticated via `UrlFetchApp` + script OAuth and embeds them via `Body.appendImage`, capped at 4 photos per issue / 60 per report; the wizard-pushed copy is even richer thanks to jsPDF's clickable thumbnails). | **All five pages** (login, submitted, committee, builder, admin) via a small **View Full Report** pill that resolves to `FULL_REPORT_PUBLIC_URL` (auto-derived from `BACKUP_REPO` + `BACKUP_BRANCH` when the tunable is empty). The pill is **independent of `FEATURE_WEEKLY_REPORT_BACKUP`** — it renders whenever the URL resolves so the link keeps working even after the cron is paused. |
+| `backups/TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` | Overwritten within the same calendar month;**freezes at month rollover** because the filename changes (`..._Jul_2026.pdf` → `..._Aug_2026.pdf`) | Identical bytes to the canonical file at commit time.                                                                                                                                                                                                                                                                                                                                                         | No UI surface — consumed by operators via the GitHub file browser (or by linking`…/backups/TA_IAP_Full_Report_<Mon>_<YYYY>.pdf` directly when a specific month's snapshot is needed). Kept forever — small PDFs, ~12 files per year.                                                                                                                                                                                |
 
 **Two write paths, both write both files.**
 
@@ -708,7 +732,6 @@ the same `BACKUP_REPO`** — a live canonical copy and a per-month archive:
    `getSubmittedIssues` includes CLOSED tickets in the anonymous
    feed; `FEATURE_WEEKLY_REPORT_BACKUP` now only gates the
    scheduled cron (path 2 below).
-
 2. **Scheduled server fallback.** A time-based trigger
    `weeklyReportJob` runs on a schedule controlled by
    `REPORT_BACKUP_FREQUENCY` and rebuilds the full report using
@@ -763,4 +786,3 @@ numbers, and complaint descriptions. Keep the backup repo private, or
 override `FULL_REPORT_PUBLIC_URL` to point at an authenticated mirror,
 before sharing the pill widely. The monthly archive files inherit the
 same privacy properties (same bytes, same folder).
-
