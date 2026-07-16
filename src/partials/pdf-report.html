@@ -146,6 +146,33 @@
         "LOW":      [37, 99, 235]
     };
 
+    // Canonical severity ordering used for the "worst-first" sort
+    // applied to every section of every rendered PDF (server-side
+    // WeeklyReport uses the mirror of this ranking). Unknown / blank
+    // severities sort to the very end.
+    var SEV_RANK = { "CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3 };
+    function _sevRank(issue) {
+        var s = String(((issue || {}).issue || {}).severity || "").toUpperCase();
+        var r = SEV_RANK[s];
+        return (r == null) ? 999 : r;
+    }
+    // Returns a shallow copy of `data` sorted by severity (worst-first),
+    // then by date reported (newest first). Callers pass live arrays
+    // that back the on-screen grids, so we must not mutate them.
+    function _sortBySeverity(data) {
+        var arr = (data || []).slice();
+        arr.sort(function (a, b) {
+            var ra = _sevRank(a), rb = _sevRank(b);
+            if (ra !== rb) return ra - rb;
+            var ta = new Date(a && a.dateReported).getTime();
+            var tb = new Date(b && b.dateReported).getTime();
+            if (isNaN(ta)) ta = 0;
+            if (isNaN(tb)) tb = 0;
+            return tb - ta;
+        });
+        return arr;
+    }
+
     var _state = {
         opts:    null,    // last open() args
         sources: [],      // working copy of source toggles
@@ -552,7 +579,11 @@
         doc.text(src.label.toUpperCase() + "  (" + src.data.length + ")", 14, bandY + 6);
 
         var head = [activeCols.map(function (c) { return c.label; })];
-        var body = src.data.map(function (issue) {
+        // Every section is rendered worst-first (Critical → High →
+        // Medium → Low → blank). We sort a shallow copy so we don't
+        // mutate the caller's live issue arrays.
+        var sortedData = _sortBySeverity(src.data);
+        var body = sortedData.map(function (issue) {
             return activeCols.map(function (c) {
                 var catEntry = COLUMN_CATALOG.find(function (cc) { return cc.key === c.key; });
                 return catEntry ? String(catEntry.read(issue) || "") : "";

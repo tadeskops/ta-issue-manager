@@ -284,6 +284,34 @@ function weeklyReport_sortDesc_(obj) {
     return keys.map(function (k) { return [k, String(obj[k])]; });
 }
 
+// Canonical severity ordering used everywhere the report needs to
+// present issues "worst-first". Values not in the list (blank / typo)
+// sort to the very end. Sort is stable-ish because we always break
+// ties on report date (newest first).
+const WEEKLY_REPORT_SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+
+function weeklyReport_severityRank_(sev) {
+    const idx = WEEKLY_REPORT_SEVERITY_ORDER.indexOf(String(sev || "").toUpperCase());
+    return idx === -1 ? 999 : idx;
+}
+
+// In-place sort of a slice of issue rows by severity (highest first),
+// then by date reported (newest first). Rows keep every other field
+// so downstream table + photos blocks stay unchanged.
+function weeklyReport_sortBySeverity_(rows) {
+    rows.sort(function (a, b) {
+        const ra = weeklyReport_severityRank_(a.severity);
+        const rb = weeklyReport_severityRank_(b.severity);
+        if (ra !== rb) return ra - rb;
+        const ta = (a.dateReported instanceof Date && !isNaN(a.dateReported.getTime()))
+            ? a.dateReported.getTime() : 0;
+        const tb = (b.dateReported instanceof Date && !isNaN(b.dateReported.getTime()))
+            ? b.dateReported.getTime() : 0;
+        return tb - ta;
+    });
+    return rows;
+}
+
 // ----------------------------------------------------------------------------
 // PDF RENDERER (DocumentApp -> PDF)
 //   Builds the full report only. Anonymised variant retired.
@@ -353,6 +381,12 @@ function weeklyReport_renderPdfBlob_(rows, stats) {
     sections.forEach(function (sec) {
         const slice = rows.filter(function (r) { return r.section === sec; });
         if (!slice.length) return;
+        // Every section — Pending, Active, Closed, Rejected — is
+        // ordered worst-severity first (Critical → High → Medium →
+        // Low → blank/unknown), then newest-first as a tie-breaker.
+        // This matches what operators and residents expect when
+        // scanning the PDF from the top.
+        weeklyReport_sortBySeverity_(slice);
         body.appendParagraph("").setHeading(DocumentApp.ParagraphHeading.NORMAL);
         body.appendParagraph(sec + " issues (" + slice.length + ")")
             .setHeading(DocumentApp.ParagraphHeading.HEADING2);
