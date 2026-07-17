@@ -237,6 +237,79 @@ function clearConfigCache() {
 }
 
 /**
+ * Operator helper — run from the Apps Script editor (Functions → listAccessRoster → Run)
+ * to see EXACTLY who currently has COMMITTEE and BUILDER access.
+ *
+ * Reads directly from the CONFIG sheet (bypasses the 5-min cache) so
+ * edits made moments ago are reflected. Logs a human-readable summary
+ * to Executions and also returns the roster object for programmatic use.
+ *
+ * No truncation — every configured email is listed. Emails are
+ * normalised (trimmed + lowercased) and de-duplicated so the counts
+ * match what getUserRole() would compare against.
+ *
+ * Returns:
+ *   {
+ *     when: ISO-8601 timestamp,
+ *     source: "sheet" | "fallback",
+ *     committeeCount, committee: [...],
+ *     builderCount,   builders: [...],
+ *     attachmentFolderId, sheetId,
+ *     error: string | null
+ *   }
+ */
+function listAccessRoster() {
+    const out = {
+        when: new Date().toISOString(),
+        source: null,
+        committeeCount: 0,
+        committee: [],
+        builderCount: 0,
+        builders: [],
+        attachmentFolderId: "",
+        sheetId: SHEET_ID,
+        error: null
+    };
+    const norm = function (arr) {
+        const seen = {};
+        const list = [];
+        (arr || []).forEach(function (raw) {
+            const s = String(raw || "").trim().toLowerCase();
+            if (!s || seen[s]) return;
+            seen[s] = true;
+            list.push(s);
+        });
+        return list;
+    };
+    let cfg;
+    try {
+        cfg = readConfigFromSheet_();
+        out.source = "sheet";
+    } catch (e) {
+        Logger.log("listAccessRoster: sheet read failed, using fallback defaults: " + e);
+        cfg = fallbackConfig_();
+        out.source = "fallback";
+        out.error = String(e);
+    }
+    out.committee = norm(cfg.committeeEmails);
+    out.builders  = norm(cfg.builderEmails && cfg.builderEmails.length
+                        ? cfg.builderEmails
+                        : [cfg.builderEmail]);
+    out.committeeCount = out.committee.length;
+    out.builderCount   = out.builders.length;
+    out.attachmentFolderId = cfg.attachmentFolderId || "";
+
+    // Human-readable dump so the operator can copy from the Executions log.
+    Logger.log("===== ACCESS ROSTER (source=" + out.source + ", when=" + out.when + ") =====");
+    Logger.log("COMMITTEE (" + out.committeeCount + "):");
+    out.committee.forEach(function (e, i) { Logger.log("  [" + (i + 1) + "] " + e); });
+    Logger.log("BUILDER (" + out.builderCount + "):");
+    out.builders.forEach(function (e, i) { Logger.log("  [" + (i + 1) + "] " + e); });
+    if (out.error) Logger.log("NOTE: fell back to hard-coded defaults because: " + out.error);
+    return out;
+}
+
+/**
  * Installable onEdit trigger. Fires whenever ANY cell in the bound
  * spreadsheet changes. If the edit was on the CONFIG tab we clear the
  * cache immediately, so operator changes to COMMITTEE_EMAILS /
@@ -631,15 +704,16 @@ function diag_whoami_() {
         const fresh = readConfigFromSheet_();
         out.source = "sheet";
         out.committeeCount = fresh.committeeEmails.length;
-        // Only include the first 3 for privacy in logs shared over chat.
-        out.committeeSample = fresh.committeeEmails.slice(0, 3);
+        // Cap the sample at 10 (raised from 3) so a full committee is
+        // visible in the diagnostic without needing to run listAccessRoster.
+        out.committeeSample = fresh.committeeEmails.slice(0, 10);
         out.builderEmail = fresh.builderEmail;
         out.builderCount = fresh.builderEmails ? fresh.builderEmails.length : 1;
     } catch (e) {
         out.source = "fallback";
         const cfg = fallbackConfig_();
         out.committeeCount = cfg.committeeEmails.length;
-        out.committeeSample = cfg.committeeEmails.slice(0, 3);
+        out.committeeSample = cfg.committeeEmails.slice(0, 10);
         out.builderEmail = cfg.builderEmail;
         out.builderCount = cfg.builderEmails ? cfg.builderEmails.length : 1;
         out.error = (out.error ? out.error + " | " : "") + "read: " + e;
