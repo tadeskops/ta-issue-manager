@@ -58,7 +58,7 @@ const DEFAULT_FEATURES = {
     FEATURE_SUBMITTED_PAGE:     true,  // submitted-issues.html accessible
     FEATURE_OPEN_SHEET_LINK:    false, // "Open in Sheets" pill on the public submitted-issues page. OFF by default — opt-in (the link points at the underlying spreadsheet, anyone with the link can view it).
     FEATURE_SHOW_SEVERITY_ON_SUBMITTED: false,  // show severity badge/filter/sort on submitted-issues page
-    FEATURE_COMMITTEE_PHOTO_ATTACH: false,  // committee "Upload Photo" button in detail view + addPhotosToIssue API. OFF by default — opt-in.
+    FEATURE_COMMITTEE_PHOTO_ATTACH: true,   // committee "Upload Photo" button in detail view + addPhotosToIssue API. ON by default — lets committee/admin attach photos to issues submitted without any; uploads land in the same ATTACHMENT_FOLDER_ID Drive folder as resident submissions. Set to false in the CONFIG sheet to disable.
     FEATURE_PDF_REPORT:         true,   // Export Report wizard (committee/builder/submitted views) + getReportPhotoB64 API. ON by default.
     FEATURE_WEEKLY_REPORT_BACKUP: true,  // Weekly PDF committed to GitHub (TA_IAP_Full_Report.pdf with embedded photos) + cross-page "View Full Report" pill. ON by default; operator still needs GITHUB_TOKEN + an installed trigger for the cron itself to run.
     FEATURE_PUBLIC_FULL_REPORT: true,  // Make the public submitted-issues Export Report behave like committee/builder: include closed tickets in getSubmittedIssues AND let anonymous Export commits overwrite TA_IAP_Full_Report.pdf. Requires FEATURE_PDF_REPORT + FEATURE_WEEKLY_REPORT_BACKUP. Turn OFF if anonymous abuse is observed (commitFullReportPdf still has size cap + PDF magic check).

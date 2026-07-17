@@ -782,22 +782,46 @@ function addPhotosToIssue(ticketId, sheetName, photos, userEmail) {
         }
 
         const sn = String(sheetName || SHEETS.PENDING_REVIEW);
-        let photoColIdx;
-        if (sn === SHEETS.PENDING_REVIEW)      photoColIdx = PENDING_COL.PHOTO;
-        else if (sn === SHEETS.LIVE_ISSUES)    photoColIdx = LIVE_COL.PHOTO;
-        else if (sn === SHEETS.CLOSED_ISSUES)  photoColIdx = LIVE_COL.PHOTO;
-        else return { success: false, data: null, error: "Unsupported sheet: " + sn };
+        // Sheets that use the PENDING_COL layout (17 cols, TICKET_ID at 0,
+        // PHOTO at 8). Committee dashboard "Pending" tab is a UNION of
+        // PENDING_REVIEW (state=PENDING_APPROVAL) and ARCHIVES_ISSUES
+        // (state=REJECTED) rows, but the client only knows the tab name and
+        // sends sheetName="PENDING_REVIEW" for both. We therefore search
+        // the alternate sheet(s) when the ticket isn't on the primary one,
+        // so committee/admin can attach a photo to a rejected ticket too.
+        let candidates;
+        let photoColIdx, ticketColIdx;
+        if (sn === SHEETS.PENDING_REVIEW || sn === SHEETS.ARCHIVES_ISSUES) {
+            candidates = [SHEETS.PENDING_REVIEW, SHEETS.ARCHIVES_ISSUES];
+            photoColIdx  = PENDING_COL.PHOTO;
+            ticketColIdx = PENDING_COL.TICKET_ID;
+        } else if (sn === SHEETS.LIVE_ISSUES || sn === SHEETS.CLOSED_ISSUES) {
+            candidates = [sn];
+            photoColIdx  = LIVE_COL.PHOTO;
+            ticketColIdx = LIVE_COL.TICKET_ID;
+        } else {
+            return { success: false, data: null, error: "Unsupported sheet: " + sn };
+        }
 
-        const sheet = getSheet(sn);
-        const data = sheet.getDataRange().getValues();
-        const ticketColIdx = (sn === SHEETS.PENDING_REVIEW) ? PENDING_COL.TICKET_ID : LIVE_COL.TICKET_ID;
-
+        let sheet = null;
+        let data  = null;
+        let resolvedSheet = "";
         let rowIndex = -1;
-        for (let i = 1; i < data.length; i++) {
-            if (String(data[i][ticketColIdx]) === String(ticketId)) { rowIndex = i; break; }
+        for (let s = 0; s < candidates.length && rowIndex === -1; s++) {
+            const trySheet = getSheet(candidates[s]);
+            const tryData  = trySheet.getDataRange().getValues();
+            for (let i = 1; i < tryData.length; i++) {
+                if (String(tryData[i][ticketColIdx]).trim() === String(ticketId).trim()) {
+                    sheet         = trySheet;
+                    data          = tryData;
+                    resolvedSheet = candidates[s];
+                    rowIndex      = i;
+                    break;
+                }
+            }
         }
         if (rowIndex === -1) {
-            return { success: false, data: null, error: "Ticket not found on " + sn + ": " + ticketId };
+            return { success: false, data: null, error: "Ticket not found on " + candidates.join("/") + ": " + ticketId };
         }
 
         const newLinks = uploadSubmissionPhotos_(photos, userEmail || "");
@@ -808,7 +832,7 @@ function addPhotosToIssue(ticketId, sheetName, photos, userEmail) {
 
         // Sheet rows are 1-based; data array is 0-based.
         sheet.getRange(rowIndex + 1, photoColIdx + 1).setValue(cellValue);
-        Logger.log("addPhotosToIssue: " + ticketId + " on " + sn + " (+" + newLinks.length + " photos by " + (userEmail || "?") + ")");
+        Logger.log("addPhotosToIssue: " + ticketId + " on " + resolvedSheet + " (+" + newLinks.length + " photos by " + (userEmail || "?") + ")");
 
         return {
             success: true,
