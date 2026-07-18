@@ -6,11 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <meta name="robots" content="noindex">
-    <!-- Single source of truth for the live web app URL. Update only here. -->
+    <!--
+      Single source of truth for the live web app URL. Update only here.
+      Points at the PUBLIC (USER_DEPLOYING / ANYONE_ANONYMOUS) deployment
+      so residents landing on this GitHub Pages URL can submit issues
+      without being forced through a Google sign-in gate. Signed-in
+      committee / builder users are auto-routed to their dashboard by
+      src/pages/index.html once loaded. Canonical URLs for both
+      deployments live in docs/deployments.md.
+    -->
     <meta http-equiv="refresh"
-          content="0; url=https://script.google.com/macros/s/AKfycbzWfDC5iq2RXoL5qtt4rQHwOrdj4nWGKNzytdByH67Lkk4QNetfYdrM3nXuuUj8rEQm/exec">
+          content="0; url=https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec">
     <link rel="canonical"
-          href="https://script.google.com/macros/s/AKfycbzWfDC5iq2RXoL5qtt4rQHwOrdj4nWGKNzytdByH67Lkk4QNetfYdrM3nXuuUj8rEQm/exec">
+          href="https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec">
     <style>
         html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1220;color:#e2e8f0;display:grid;place-items:center;text-align:center}
         a{color:#d4af37;text-decoration:none;border-bottom:1px solid currentColor}
@@ -23,13 +31,13 @@
     <div class="card">
         <h1>Opening the Issue Addressal Portal…</h1>
         <p>If you are not redirected automatically,
-            <a href="https://script.google.com/macros/s/AKfycbzWfDC5iq2RXoL5qtt4rQHwOrdj4nWGKNzytdByH67Lkk4QNetfYdrM3nXuuUj8rEQm/exec">click
+            <a href="https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec">click
                 here to open the portal</a>.
         </p>
     </div>
     <script>
         // JS fallback for clients where meta-refresh is blocked.
-        location.replace("https://script.google.com/macros/s/AKfycbzWfDC5iq2RXoL5qtt4rQHwOrdj4nWGKNzytdByH67Lkk4QNetfYdrM3nXuuUj8rEQm/exec");
+        location.replace("https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec");
     </script>
 </body>
 </html>
