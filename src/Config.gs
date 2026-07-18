@@ -79,8 +79,19 @@ const DEFAULT_TUNABLES = {
     CONFIG_CACHE_TTL_SECONDS:  300,        // cache TTL (also informational)
     DEFAULT_THEME:             "light",     // high (original dark) | light | medium
     DEFAULT_FONT_SCALE:        "xl",        // md (16px) | lg (17.5px, ~+9%) | xl (19px, ~+19%) — applied to <html data-fontsize>; user can override via the on-page A/A/A switcher (persisted to localStorage)
-    TECH_WEBAPP_URL:           "",           // separate deployment URL that requires Google sign-in (committee/builder). Empty = same URL.
-    PUBLIC_WEBAPP_URL:         "",           // public (anonymous) deployment URL — used as the landing page after sign-out. Empty = current URL.
+    // Deployment URLs — canonical values are baked in here so a stale
+    // CONFIG sheet row cannot silently point committee members at a
+    // frozen deployment that CI no longer updates. To rotate these you
+    // must (a) update the value below, (b) update
+    // secrets.DEPLOYMENT_ID_SECURE / vars.WEBAPP_URL_SECURE in GitHub
+    // Actions if the SECURE URL changed, and (c) update
+    // docs/deployments.md. Blank cells in the CONFIG sheet inherit
+    // these defaults; non-blank cells still override for local/testing
+    // (see readConfigFromSheet_). Run alignWebappUrls() once from the
+    // Apps Script editor to force the sheet back to these defaults if
+    // it has drifted.
+    TECH_WEBAPP_URL:           "https://script.google.com/macros/s/AKfycbzWfDC5iq2RXoL5qtt4rQHwOrdj4nWGKNzytdByH67Lkk4QNetfYdrM3nXuuUj8rEQm/exec",
+    PUBLIC_WEBAPP_URL:         "https://script.google.com/macros/s/AKfycbwyrWVDKsSiXpTvBMlEj470MeH80DHGTGD44aYf0chVegZeEqEoZWmN_QSUAEHSG2Ib/exec",
     SUBMITTED_INCLUDE_REJECTED: "false",     // read-only "Submitted Issues" view: include rejected (archived) rows. Default off → public sees only pending + live.
     FULL_REPORT_PUBLIC_URL:    "",           // Raw URL to TA_IAP_Full_Report.pdf (full content incl. closed+rejected). Every page shows a small "View Full Report" pill when this URL resolves. When empty, the server auto-derives it from BACKUP_REPO + BACKUP_BRANCH so the pill works out-of-the-box. Distribute the URL only to authorised personnel — the file contains resident names and flat numbers. Recommended: https://raw.githubusercontent.com/tadeskops/ta-issue-manager/main/backups/TA_IAP_Full_Report.pdf
     REPORT_BACKUP_FREQUENCY:   "3x-daily"   // Trigger frequency for BOTH the XLSX sheet backup (weeklyBackupJob) and the PDF report job (weeklyReportJob). Accepted values: "3x-daily" (default — every 8 hours via .everyHours(8); fires roughly 3 times per 24 h, no fixed wall-clock hour because Apps Script .everyHours can't be pinned to a specific hour-of-day), "daily" (every day at the legacy ~02:00/~03:00 slot via .everyDays(1).atHour(...)), "weekly" (Mondays only at the legacy slot). Any other value (typo, blank) is treated as "3x-daily". Apps Script time-based triggers are independent objects — editing this tunable does not move an already-installed trigger; re-run installWeeklyBackupTrigger + installWeeklyReportTrigger after changing this value so the existing triggers are recreated with the new cadence.
@@ -234,6 +245,72 @@ function getUserRole(email) {
 function clearConfigCache() {
     CacheService.getScriptCache().remove(CONFIG_CACHE_KEY);
     Logger.log("Config cache cleared.");
+}
+
+/**
+ * Operator helper — run ONCE from the Apps Script editor (Functions →
+ * alignWebappUrls → Run) to force the CONFIG sheet's TECH_WEBAPP_URL and
+ * PUBLIC_WEBAPP_URL cells back to the canonical values baked into
+ * DEFAULT_TUNABLES above. Use when someone has manually cut a new
+ * deployment and pointed CONFIG at its URL — this causes committee /
+ * builder members to visit a deployment CI never updates, so they see
+ * stale code (e.g. missing features). This helper realigns.
+ *
+ * After running:
+ *   - CONFIG.TECH_WEBAPP_URL     → DEFAULT_TUNABLES.TECH_WEBAPP_URL
+ *   - CONFIG.PUBLIC_WEBAPP_URL   → DEFAULT_TUNABLES.PUBLIC_WEBAPP_URL
+ *   - config cache is cleared, so the next getClientConfig() picks up
+ *     the new values immediately (no 5-min wait).
+ *
+ * Any deployment previously referenced by CONFIG (but NOT by CI)
+ * should be archived via Deploy → Manage deployments to prevent
+ * future drift.
+ *
+ * Returns { changed: [{key, before, after}], skipped: [{key, reason}] }.
+ */
+function alignWebappUrls() {
+    const KEYS = ["TECH_WEBAPP_URL", "PUBLIC_WEBAPP_URL"];
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(CONFIG_SHEET_NAME);
+    if (!sheet) {
+        Logger.log("alignWebappUrls: CONFIG sheet not found — run setupConfigSheet() first.");
+        return { changed: [], skipped: KEYS.map(k => ({ key: k, reason: "CONFIG sheet missing" })) };
+    }
+    const values = sheet.getDataRange().getValues();
+    const changed = [];
+    const skipped = [];
+    for (let ki = 0; ki < KEYS.length; ki++) {
+        const key = KEYS[ki];
+        const want = DEFAULT_TUNABLES[key] || "";
+        if (!want) {
+            skipped.push({ key: key, reason: "DEFAULT_TUNABLES[" + key + "] is empty — nothing to align to" });
+            continue;
+        }
+        let rowIx = -1;
+        for (let i = 1; i < values.length; i++) {
+            if (String(values[i][0] || "").trim().toUpperCase() === key) { rowIx = i; break; }
+        }
+        if (rowIx === -1) {
+            // Append a fresh row at the end of the sheet.
+            sheet.appendRow([key, want, "Deployment URL (auto-aligned to code default). See DEFAULT_TUNABLES in Config.gs."]);
+            changed.push({ key: key, before: "(missing)", after: want });
+            Logger.log("alignWebappUrls: appended " + key + " = " + want);
+            continue;
+        }
+        const before = String(values[rowIx][1] || "").trim();
+        if (before === want) {
+            skipped.push({ key: key, reason: "already aligned" });
+            Logger.log("alignWebappUrls: " + key + " already aligned.");
+            continue;
+        }
+        // Row indices in getValues() are 0-based; sheet rows are 1-based.
+        sheet.getRange(rowIx + 1, 2).setValue(want);
+        changed.push({ key: key, before: before, after: want });
+        Logger.log("alignWebappUrls: " + key + "  " + before + "  =>  " + want);
+    }
+    clearConfigCache();
+    Logger.log("alignWebappUrls: done. changed=" + changed.length + " skipped=" + skipped.length);
+    return { changed: changed, skipped: skipped };
 }
 
 /**
