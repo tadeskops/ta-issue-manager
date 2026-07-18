@@ -1888,7 +1888,11 @@
                 filtersAppliedSummary: filterNote,
                 sources: [
                     { key: 'pending',  label: 'Pending Approval', color: [59, 130, 246],  data: pendingOnly },
-                    { key: 'rejected', label: 'Rejected',         color: [148, 163, 184], data: rejected },
+                    // Rejected is opt-in — most operators publish a report
+                    // of live/active work, not of previously-rejected
+                    // submissions. Keeping it unchecked by default also
+                    // makes it obvious that the checkbox is authoritative.
+                    { key: 'rejected', label: 'Rejected',         color: [148, 163, 184], data: rejected, enabled: false },
                     { key: 'active',   label: 'Active',           color: [234, 179, 8],   data: activeIssues },
                     { key: 'closed',   label: 'Closed',           color: [16, 185, 129],  data: closedIssues }
                 ]

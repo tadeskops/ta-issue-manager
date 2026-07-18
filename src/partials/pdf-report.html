@@ -294,12 +294,20 @@
         }
         _state.opts = opts || {};
         _state.sources = (opts.sources || []).map(function (s) {
+            var hasData = Array.isArray(s.data) ? s.data.length > 0 : false;
+            // Caller can force a source off by default (e.g. Rejected on the
+            // committee dashboard) by passing `enabled: false`. Otherwise a
+            // source with data starts on, a source with no data starts off.
+            var enabled;
+            if (s.enabled === false) enabled = false;
+            else if (s.enabled === true) enabled = hasData;
+            else enabled = hasData;
             return {
                 key:     s.key,
                 label:   s.label,
                 color:   s.color || [71, 85, 105],
                 data:    Array.isArray(s.data) ? s.data : [],
-                enabled: s.enabled !== false && (Array.isArray(s.data) ? s.data.length : 0) > 0
+                enabled: enabled
             };
         });
         // Per-view column scoping. `columnKeys` restricts which catalog
@@ -513,6 +521,19 @@
         if (typeof window.jspdf === "undefined" || !window.jspdf.jsPDF) {
             alert("PDF library failed to load. Check your internet connection and try again.");
             return;
+        }
+        // Sync _state.sources[].enabled from the live DOM before filtering.
+        // Belt-and-braces: the change handler on each checkbox already
+        // does this, but reading the DOM here means "what the user sees
+        // ticked" is authoritative regardless of any missed change
+        // event (e.g. if the wizard body gets re-rendered by a future
+        // feature).
+        var body = document.getElementById("reportWizardBody");
+        if (body) {
+            body.querySelectorAll("[data-rep-src]").forEach(function (el) {
+                var idx = +el.getAttribute("data-rep-src");
+                if (_state.sources[idx]) _state.sources[idx].enabled = !!el.checked;
+            });
         }
         var enabled = _state.sources.filter(function (s) { return s.enabled && s.data.length > 0; });
         if (enabled.length === 0) {
