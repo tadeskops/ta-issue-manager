@@ -211,6 +211,8 @@
                             <option value="30">Last 30 Days</option>
                             <option value="90">Last 90 Days</option>
                         </select>
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold ml-2"><i class="fas fa-arrow-down-wide-short mr-1 gold-accent"></i>Sort</label>
+                        <select id="pendingSort" onchange="setPendingSort(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur" title="Sort order for this list"></select>
                     </div>
                 </div>
                 
@@ -243,6 +245,8 @@
                             <option value="30">Last 30 Days</option>
                             <option value="90">Last 90 Days</option>
                         </select>
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold ml-2"><i class="fas fa-arrow-down-wide-short mr-1 gold-accent"></i>Sort</label>
+                        <select id="activeSort" onchange="setActiveSort(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur" title="Sort order for this list"></select>
                     </div>
                 </div>
 
@@ -268,6 +272,8 @@
                             <option value="30">Last 30 Days</option>
                             <option value="90">Last 90 Days</option>
                         </select>
+                        <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold ml-2"><i class="fas fa-arrow-down-wide-short mr-1 gold-accent"></i>Sort</label>
+                        <select id="closedSort" onchange="setClosedSort(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur" title="Sort order for this list"></select>
                     </div>
                 </div>
 
@@ -560,6 +566,55 @@
         let pendingDateFilter = 'ALL'; // ALL | 7 | 30 | 90 (days)
         let activeDateFilter  = 'ALL';
         let closedDateFilter  = 'ALL';
+
+        // Grid sort order — three tabs each have their own dropdown but
+        // share the same option catalog (see pdf-report.html SORT_ORDER
+        // and _sortIssuesByChoice) so the on-screen ordering matches the
+        // exported PDF when both use their defaults. Default is severity
+        // worst-first (Critical → High → Medium → Low → blank).
+        let pendingSort = 'severity-desc';
+        let activeSort  = 'severity-desc';
+        let closedSort  = 'severity-desc';
+
+        // Populate a Sort dropdown from the shared SORT_ORDER catalog
+        // exposed by pdf-report.html. Falls back to a minimal severity
+        // toggle if the report partial hasn't loaded yet (should be
+        // rare — the partial is included in Router-rendered pages).
+        function _populateSortSelect(id, current) {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const opts = (window.IRP_REPORT && Array.isArray(window.IRP_REPORT.SORT_ORDER))
+                ? window.IRP_REPORT.SORT_ORDER
+                : [
+                    { key: 'severity-desc', label: 'Severity: Critical → Low (default)' },
+                    { key: 'severity-asc',  label: 'Severity: Low → Critical' }
+                  ];
+            sel.innerHTML = opts.map(o =>
+                '<option value="' + o.key + '"' + (o.key === current ? ' selected' : '') + '>' + o.label + '</option>'
+            ).join('');
+        }
+
+        function setPendingSort(v) { pendingSort = String(v || 'severity-desc'); renderPending(); }
+        function setActiveSort(v)  { activeSort  = String(v || 'severity-desc'); renderActive(); }
+        function setClosedSort(v)  { closedSort  = String(v || 'severity-desc'); renderClosed(); }
+
+        // Sort a shallow copy of `list` according to the shared catalog
+        // in pdf-report.html. Kept as a thin wrapper so the fallback
+        // path (partial missing) is contained here rather than repeated
+        // inside every render*() function.
+        function _sortIssues(list, key) {
+            if (window.IRP_REPORT && typeof window.IRP_REPORT.sortIssuesByChoice === 'function') {
+                return window.IRP_REPORT.sortIssuesByChoice(list, key);
+            }
+            const RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+            const rank = i => {
+                const r = RANK[String(((i || {}).issue || {}).severity || '').toUpperCase()];
+                return r == null ? 999 : r;
+            };
+            const arr = (list || []).slice();
+            arr.sort((a, b) => (key === 'severity-asc' ? rank(b) - rank(a) : rank(a) - rank(b)));
+            return arr;
+        }
 
         // Returns true when the issue's dateReported falls inside the chosen
         // window. range is a string: 'ALL' (no filter) or a day-count like '7'.
@@ -1185,11 +1240,12 @@
 
         function renderPending() {
             const grid = document.getElementById('pendingGrid');
-            const filtered = pendingIssues.filter(i => {
+            const filteredRaw = pendingIssues.filter(i => {
                 const st = (i.state || 'PENDING_APPROVAL').toUpperCase();
                 if (pendingFilter !== 'ALL' && st !== pendingFilter) return false;
                 return passesDateFilter(i, pendingDateFilter);
             });
+            const filtered = _sortIssues(filteredRaw, pendingSort);
             if (!filtered || filtered.length === 0) {
                 const msg = pendingFilter === 'REJECTED' ? 'No rejected issues' :
                             pendingFilter === 'ALL'      ? 'No issues' :
@@ -1277,7 +1333,7 @@
             const grid = document.getElementById('activeGrid');
             const nowMs = Date.now();
             const sevOf = i => String(i.issue.severity || '').toUpperCase();
-            const filtered = activeIssues.filter(i => {
+            const filteredRaw = activeIssues.filter(i => {
                 if (!passesDateFilter(i, activeDateFilter)) return false;
                 if (!activeFilter) return true;
                 if (activeFilter === 'CRITICAL') return sevOf(i) === 'CRITICAL';
@@ -1288,6 +1344,7 @@
                 }
                 return true;
             });
+            const filtered = _sortIssues(filteredRaw, activeSort);
             if (!filtered || filtered.length === 0) {
                 grid.innerHTML = '<div class="col-span-full p-4 text-center text-slate-500">No active issues</div>';
                 return;
@@ -1327,7 +1384,8 @@
 
         function renderClosed() {
             const grid = document.getElementById('closedGrid');
-            const filtered = (closedIssues || []).filter(i => passesDateFilter(i, closedDateFilter));
+            const filteredRaw = (closedIssues || []).filter(i => passesDateFilter(i, closedDateFilter));
+            const filtered = _sortIssues(filteredRaw, closedSort);
             if (!filtered || filtered.length === 0) {
                 grid.innerHTML = '<div class="col-span-full p-4 text-center text-slate-500">No closed issues</div>';
                 return;
@@ -1862,6 +1920,9 @@
         }
 
         // Initial load
+        _populateSortSelect('pendingSort', pendingSort);
+        _populateSortSelect('activeSort',  activeSort);
+        _populateSortSelect('closedSort',  closedSort);
         loadData();
         autoRefreshInterval = setInterval(() => loadData({ silent: true }), 30000);
     </script>
