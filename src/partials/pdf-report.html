@@ -567,7 +567,13 @@
             var landscape = totalWidth > 200 || activeCols.length > 7;
             var doc = new window.jspdf.jsPDF({ orientation: landscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
 
-            var titleText = (document.getElementById("reportTitleInput") || {}).value || "Issues Report";
+            // Fall back to the caller-provided default title (e.g.
+            // "Committee Issues Report") when the operator clears the
+            // Title input, so an empty box never produces a bland
+            // "Issues Report" file when a better default is on offer.
+            var defaultTitle = (_state.opts && _state.opts.title) || "Issues Report";
+            var rawTitle = ((document.getElementById("reportTitleInput") || {}).value || "").trim();
+            var titleText = rawTitle || defaultTitle;
 
             var headerBottomY = _drawTitleHeader(doc, titleText, enabled);
             _progress("Header ready", 15);
