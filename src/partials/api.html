@@ -5,6 +5,67 @@
 window.IRP_WEBAPP_URL = "<?= (function(){ try { return getWebAppUrl() || ''; } catch(e) { return ''; } })() ?>";
 </script>
 <script>
+// ---------------------------------------------------------------------
+// NetworkProgress: ambient top-of-viewport activity indicator.
+// Thin 3px gold bar with an indeterminate slide, shown while at least
+// one API.call is in flight. Reference-counted so overlapping requests
+// keep it visible until the last one settles. API.call push/pops
+// around every request, so no per-page wiring is needed. Pattern
+// borrowed from ta-society-helpdesk's UI.NetworkProgress (docs/assets/
+// js/ui.js). Exposed as window.IRP_NET_PROGRESS for any long non-API
+// operation (PDF renders, GIS popups, etc.) that wants to bracket a
+// visible "busy" state.
+// ---------------------------------------------------------------------
+window.IRP_NET_PROGRESS = (function () {
+    let bar, counter = 0, hideTimer, cssInjected = false;
+    function injectCss() {
+        if (cssInjected) return;
+        cssInjected = true;
+        const s = document.createElement('style');
+        s.setAttribute('data-irp-topbar-css', '1');
+        s.textContent =
+            '.irp-topbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:99999;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .18s ease-out;background:transparent;}' +
+            '.irp-topbar.is-active{opacity:1;}' +
+            '.irp-topbar-inner{position:absolute;top:0;bottom:0;width:36%;background:linear-gradient(90deg,rgba(212,175,55,0),rgba(212,175,55,.85) 45%,rgba(212,175,55,.95) 55%,rgba(212,175,55,0));border-radius:2px;animation:irpTopbarSlide 1.15s cubic-bezier(.4,0,.2,1) infinite;}' +
+            '@keyframes irpTopbarSlide{0%{transform:translateX(-100%);}100%{transform:translateX(280%);}}' +
+            '@media (prefers-reduced-motion:reduce){.irp-topbar-inner{animation-duration:2.4s;}}';
+        document.head.appendChild(s);
+    }
+    function ensure() {
+        if (bar) return;
+        injectCss();
+        bar = document.createElement('div');
+        bar.className = 'irp-topbar';
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-hidden', 'true');
+        bar.setAttribute('aria-label', 'Working');
+        const inner = document.createElement('div');
+        inner.className = 'irp-topbar-inner';
+        bar.appendChild(inner);
+        (document.body || document.documentElement).appendChild(bar);
+    }
+    function show() {
+        ensure();
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        bar.classList.add('is-active');
+    }
+    function hide() {
+        if (!bar) return;
+        // Small trailing delay so rapid bursts (e.g. loadData + a follow-up
+        // getClientConfig) don't visibly flicker the bar off/on.
+        hideTimer = setTimeout(() => {
+            if (bar && counter === 0) bar.classList.remove('is-active');
+            hideTimer = null;
+        }, 140);
+    }
+    return {
+        push() { counter += 1; if (counter === 1) show(); },
+        pop()  { counter = Math.max(0, counter - 1); if (counter === 0) hide(); },
+        isBusy() { return counter > 0; }
+    };
+})();
+</script>
+<script>
 const API = {
     // In production the client uses `google.script.run` (see USES_APPS_SCRIPT
     // below), so ENDPOINT is only exercised in non-Apps-Script dev mode.
@@ -47,24 +108,32 @@ const API = {
 
     async call(action, data = {}) {
         const payload = data || {};
+        // Ambient top-bar: bump the ref-count around every request so any
+        // page automatically shows a "working" indicator without wiring.
+        // The finally-block guarantees pop() runs even on failure.
+        try { window.IRP_NET_PROGRESS && window.IRP_NET_PROGRESS.push(); } catch (_e) { /* non-fatal */ }
         let result;
-        if (this.USES_APPS_SCRIPT) {
-            result = await new Promise((resolve, reject) => {
-                google.script.run
-                    .withSuccessHandler(resolve)
-                    .withFailureHandler(err => reject(new Error(err && err.message ? err.message : String(err))))
-                    .api_call(action, payload);
-            });
-        } else {
-            const body = Object.assign({ action: action }, payload);
-            const response = await fetch(this.ENDPOINT, {
-                method: "POST",
-                mode: "cors",
-                headers: { "Content-Type": "text/plain;charset=utf-8" },
-                body: JSON.stringify(body)
-            });
-            if (!response.ok) throw new Error("HTTP " + response.status);
-            result = await response.json();
+        try {
+            if (this.USES_APPS_SCRIPT) {
+                result = await new Promise((resolve, reject) => {
+                    google.script.run
+                        .withSuccessHandler(resolve)
+                        .withFailureHandler(err => reject(new Error(err && err.message ? err.message : String(err))))
+                        .api_call(action, payload);
+                });
+            } else {
+                const body = Object.assign({ action: action }, payload);
+                const response = await fetch(this.ENDPOINT, {
+                    method: "POST",
+                    mode: "cors",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(body)
+                });
+                if (!response.ok) throw new Error("HTTP " + response.status);
+                result = await response.json();
+            }
+        } finally {
+            try { window.IRP_NET_PROGRESS && window.IRP_NET_PROGRESS.pop(); } catch (_e) { /* non-fatal */ }
         }
         if (!result || result.success === false) {
             const msg = (result && result.error) || "Unknown API error";
