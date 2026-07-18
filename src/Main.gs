@@ -846,6 +846,63 @@ function addPhotosToIssue(ticketId, sheetName, photos, userEmail) {
 }
 
 /**
+ * Committee-only: update the free-text DESCRIPTION cell of a ticket so
+ * admins can elaborate/clarify the reporter's original text before (or
+ * after) approval. Trims + caps at 2000 chars. Non-empty required.
+ *
+ * Supported sheets:
+ *   - PENDING_REVIEW and ARCHIVES_ISSUES share the PENDING_COL layout,
+ *     so passing either sheet name searches both (mirrors the pattern
+ *     used by addPhotosToIssue).
+ *   - LIVE_ISSUES / CLOSED_ISSUES use the LIVE_COL layout.
+ *
+ * Returns { success, data: { ticketId, sheet, description }, error }.
+ */
+function updateIssueDescription(ticketId, description, sheetName, userEmail) {
+    try {
+        if (!ticketId) return { success: false, data: null, error: "ticketId is required" };
+        const clean = String(description == null ? "" : description).trim();
+        if (!clean) return { success: false, data: null, error: "Description cannot be empty" };
+        if (clean.length > 2000) return { success: false, data: null, error: "Description exceeds 2000-character limit (" + clean.length + ")" };
+
+        const sn = String(sheetName || SHEETS.PENDING_REVIEW);
+        let candidates, descColIdx, ticketColIdx;
+        if (sn === SHEETS.PENDING_REVIEW || sn === SHEETS.ARCHIVES_ISSUES) {
+            candidates   = [SHEETS.PENDING_REVIEW, SHEETS.ARCHIVES_ISSUES];
+            descColIdx   = PENDING_COL.DESCRIPTION;
+            ticketColIdx = PENDING_COL.TICKET_ID;
+        } else if (sn === SHEETS.LIVE_ISSUES || sn === SHEETS.CLOSED_ISSUES) {
+            candidates   = [sn];
+            descColIdx   = LIVE_COL.DESCRIPTION;
+            ticketColIdx = LIVE_COL.TICKET_ID;
+        } else {
+            return { success: false, data: null, error: "Unsupported sheet: " + sn };
+        }
+
+        for (let s = 0; s < candidates.length; s++) {
+            const trySheet = getSheet(candidates[s]);
+            const tryData  = trySheet.getDataRange().getValues();
+            for (let i = 1; i < tryData.length; i++) {
+                if (String(tryData[i][ticketColIdx]).trim() === String(ticketId).trim()) {
+                    trySheet.getRange(i + 1, descColIdx + 1).setValue(clean);
+                    Logger.log("updateIssueDescription: " + ticketId + " on " + candidates[s] +
+                               " updated by " + (userEmail || "?") + " (" + clean.length + " chars)");
+                    return {
+                        success: true,
+                        data: { ticketId: ticketId, sheet: candidates[s], description: clean },
+                        error: null
+                    };
+                }
+            }
+        }
+        return { success: false, data: null, error: "Ticket not found on " + candidates.join("/") + ": " + ticketId };
+    } catch (error) {
+        Logger.log("updateIssueDescription error: " + error);
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
+/**
  * Apply a list of pending committee decisions in a single call, so the
  * committee dashboard's "Draft Mode" can stage many approve/reject/delete
  * actions on the Pending tab and flush them together.

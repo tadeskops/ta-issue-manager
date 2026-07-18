@@ -384,6 +384,7 @@ function api_call(action, payload) {
             case "syncFormResponses":        result = syncFormResponses(); break;
             case "submitIssue":              result = submitIssue(payload, email); break;
             case "addPhotosToIssue":         result = addPhotosToIssue(payload.ticketId, payload.sheet, payload.photos, email); break;
+            case "updateIssueDescription":   result = updateIssueDescription(payload.ticketId, payload.description, payload.sheet, email); break;
             case "commitBatch":              result = commitBatch(payload.items || [], email); break;
             case "getReportPhotoB64":        result = getReportPhotoB64(payload.fileId || payload.url || "", payload.maxW); break;
             case "commitFullReportPdf":      result = commitFullReportPdf(payload.b64 || "", payload.source || ""); break;
@@ -415,7 +416,8 @@ function isActionAllowed_(action, role) {
     const COMMITTEE_ONLY = [
         "approveIssue", "rejectIssue", "deleteIssue",
         "generateTicketId", "approveIssueWithTicketId",
-        "syncFormResponses", "addPhotosToIssue", "commitBatch"
+        "syncFormResponses", "addPhotosToIssue", "commitBatch",
+        "updateIssueDescription"
     ];
     const BUILDER_ALLOWED = [
         "getLiveIssues", "updateBuilderStatus", "closeIssue", "reopenIssue",

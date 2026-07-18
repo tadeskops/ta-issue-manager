@@ -745,6 +745,110 @@
             renderBatchBar();
         }
 
+        // ================================================================
+        // Description edit-in-place
+        // ----------------------------------------------------------------
+        // Committee/admin can elaborate the resident's original description
+        // for clarity before approval. Edit button lives next to the
+        // "Description" label in the expanded body of any Pending card
+        // (including staged and rejected — the edit is orthogonal to the
+        // approve/reject decision). Saves go straight to the sheet via
+        // API.updateIssueDescription; no draft-mode buffering.
+        //
+        // DOM safety: initial read-only render still uses `${desc}` for
+        // parity with existing UI, but the edit textarea uses `.value =`
+        // and cancel/save resets use textContent-driven DOM replacement,
+        // so the edit path itself never inserts unescaped user text.
+        // ================================================================
+        const DESC_MAX = 2000;
+
+        function _findPendingIssue(ticketId) {
+            return (pendingIssues || []).find(i => String(i.ticketId) === String(ticketId));
+        }
+
+        function _renderDescReadOnly(box, text) {
+            const p = document.createElement('p');
+            p.className = 'text-slate-300 text-sm leading-relaxed bg-slate-800/30 rounded-lg p-3 border border-slate-700/50 whitespace-pre-wrap';
+            p.textContent = text || 'No description provided';
+            box.replaceChildren(p);
+        }
+
+        function beginEditDescription(ticketId) {
+            const issue = _findPendingIssue(ticketId);
+            if (!issue) { showToast('Ticket not found — reload', 'error'); return; }
+            const safeId = String(ticketId).replace(/[^A-Za-z0-9_-]/g, '_');
+            const box = document.getElementById('descBox-' + safeId);
+            if (!box) return;
+            const current = issue.issue.description || '';
+            box.innerHTML = `
+                <textarea id="descEdit-${safeId}" rows="4" maxlength="${DESC_MAX}"
+                          class="w-full bg-slate-800/60 border border-amber-500/50 rounded-lg p-3 text-slate-100 text-sm leading-relaxed focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 resize-y"
+                          placeholder="Elaborate the issue for clarity..."></textarea>
+                <div class="flex items-center justify-between mt-2 gap-2 flex-wrap">
+                    <span id="descEditCount-${safeId}" class="text-[10px] text-slate-500"></span>
+                    <div class="flex items-center gap-2">
+                        <button onclick="event.stopPropagation(); cancelEditDescription('${ticketId}')"
+                                class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-600 hover:bg-slate-500 text-white transition-colors">Cancel</button>
+                        <button id="descSaveBtn-${safeId}" onclick="event.stopPropagation(); saveDescriptionEdit('${ticketId}')"
+                                class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow">
+                            <i class="fas fa-save mr-1"></i>Save
+                        </button>
+                    </div>
+                </div>`;
+            const ta = document.getElementById('descEdit-' + safeId);
+            ta.value = current;                     // safe: property assignment, no HTML parse
+            ta.focus();
+            try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (_e) {}
+            const counter = document.getElementById('descEditCount-' + safeId);
+            const updateCounter = () => {
+                counter.textContent = ta.value.length + ' / ' + DESC_MAX;
+                counter.className = 'text-[10px] ' + (ta.value.length > DESC_MAX ? 'text-red-400 font-bold' : 'text-slate-500');
+            };
+            ta.addEventListener('input', updateCounter);
+            updateCounter();
+        }
+
+        function cancelEditDescription(ticketId) {
+            const issue = _findPendingIssue(ticketId);
+            if (!issue) return;
+            const safeId = String(ticketId).replace(/[^A-Za-z0-9_-]/g, '_');
+            const box = document.getElementById('descBox-' + safeId);
+            if (!box) return;
+            _renderDescReadOnly(box, issue.issue.description || '');
+        }
+
+        async function saveDescriptionEdit(ticketId) {
+            const safeId = String(ticketId).replace(/[^A-Za-z0-9_-]/g, '_');
+            const ta  = document.getElementById('descEdit-' + safeId);
+            const btn = document.getElementById('descSaveBtn-' + safeId);
+            const box = document.getElementById('descBox-' + safeId);
+            if (!ta || !btn || !box) return;
+            const next = (ta.value || '').trim();
+            if (!next) { showToast('Description cannot be empty', 'error'); ta.focus(); return; }
+            if (next.length > DESC_MAX) { showToast('Description exceeds ' + DESC_MAX + '-char limit', 'error'); return; }
+            const issue = _findPendingIssue(ticketId);
+            if (!issue) { showToast('Ticket not found — reload', 'error'); return; }
+            if (next === String(issue.issue.description || '').trim()) {
+                cancelEditDescription(ticketId);
+                return;
+            }
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Saving...';
+            try {
+                // Server searches PENDING_REVIEW and ARCHIVES_ISSUES for us,
+                // so PENDING_REVIEW as the entry sheet works for both
+                // pending-approval and rejected rows.
+                await API.updateIssueDescription(ticketId, next, 'PENDING_REVIEW');
+                issue.issue.description = next;
+                _renderDescReadOnly(box, next);
+                showToast('Description updated', 'success');
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save mr-1"></i>Save';
+                showToast('Failed to update: ' + ((e && e.message) || e || 'unknown error'), 'error');
+            }
+        }
+
         // Mock data for local testing
         const mockPendingIssues = [
             {
@@ -1018,10 +1122,18 @@
                     <div class="issue-content-${safeId} max-h-0 overflow-hidden transition-all duration-300 ease-in-out border-t-0">
                         <div class="p-4 space-y-3 bg-slate-900/30 border-t gold-border">
                             <div>
-                                <p class="text-[10px] text-slate-400 uppercase tracking-wider gold-accent mb-1.5">
-                                    <i class="fas fa-align-left mr-1"></i>Description
+                                <p class="text-[10px] text-slate-400 uppercase tracking-wider gold-accent mb-1.5 flex items-center">
+                                    <span><i class="fas fa-align-left mr-1"></i>Description</span>
+                                    ${opts.section === 'pending' ? `
+                                    <button onclick="event.stopPropagation(); beginEditDescription('${ticketId}')"
+                                            title="Edit / elaborate the description"
+                                            class="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-700/50 hover:bg-amber-600/40 text-amber-300 border border-slate-600/50 hover:border-amber-400/60 transition-colors">
+                                        <i class="fas fa-pen"></i>Edit
+                                    </button>` : ''}
                                 </p>
-                                <p class="text-slate-300 text-sm leading-relaxed bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">${desc}</p>
+                                <div id="descBox-${safeId}">
+                                    <p class="text-slate-300 text-sm leading-relaxed bg-slate-800/30 rounded-lg p-3 border border-slate-700/50 whitespace-pre-wrap">${desc}</p>
+                                </div>
                             </div>
                             ${photosBlock}
                             ${hasExtras ? `

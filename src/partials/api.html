@@ -94,6 +94,7 @@ const API = {
     syncFormResponses()       { return this.call("syncFormResponses"); },
     submitIssue(payload)      { return this.call("submitIssue", payload || {}); },
     addPhotosToIssue(ticketId, sheet, photos) { return this.call("addPhotosToIssue", { ticketId, sheet, photos }); },
+    updateIssueDescription(ticketId, description, sheet) { return this.call("updateIssueDescription", { ticketId, description, sheet: sheet || "PENDING_REVIEW" }); },
     commitBatch(items)        { return this.call("commitBatch", { items: items || [] }); },
     getReportPhotoB64(fileIdOrUrl, maxW)      { return this.call("getReportPhotoB64", { fileId: fileIdOrUrl, maxW: maxW || 1200 }); },
     getCategoryMaster()       { return this.call("getCategoryMaster"); },
