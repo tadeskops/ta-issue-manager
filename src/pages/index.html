@@ -232,25 +232,26 @@
             if (switchBtn) switchBtn.classList.remove('hidden');
             if (u.role === 'COMMITTEE') {
                 statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Technical Committee)';
-                // Committee accounts can also open the Builder view (the
-                // builder page's Router.gs entry accepts both COMMITTEE
-                // and BUILDER). Surface a dropdown so committee members
-                // can pick which workspace to open; Committee is default.
-                if (choiceSel && choiceWrap) {
-                    choiceSel.innerHTML =
-                        '<option value="committee">Committee Dashboard (default)</option>' +
-                        '<option value="builder">Builder Dashboard</option>';
-                    choiceSel.value = 'committee';
-                    choiceWrap.classList.remove('hidden');
-                }
+                // Builder Dashboard is temporarily disabled from the
+                // launcher (2026-07-19) while its data/auth path is
+                // being fixed. Keep only the Committee CTA so committee
+                // members don't accidentally land on the broken page.
+                // Re-enable by restoring the dropdown block from git.
+                if (choiceWrap) choiceWrap.classList.add('hidden');
                 label.textContent = 'Open Committee Dashboard';
                 btn.classList.remove('hidden');
             } else if (u.role === 'BUILDER') {
-                statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Builder)';
-                // Builders only see their own workspace — no dropdown.
+                // Builder Dashboard is temporarily disabled — surface a
+                // clear notice instead of a CTA that leads to a broken
+                // page. Committee is not offered as a fallback because
+                // BUILDER accounts don't have committee-scope access.
+                statusEl.innerHTML = '<i class="fas fa-exclamation-triangle text-amber-400 mr-2"></i>' +
+                    'Signed in as <b>' + u.email + '</b> (Builder). ' +
+                    'The Builder Dashboard is <b>temporarily unavailable</b> while we fix an issue. ' +
+                    'Please check back shortly or contact the committee.';
                 if (choiceWrap) choiceWrap.classList.add('hidden');
-                label.textContent = 'Open Builder Dashboard';
-                btn.classList.remove('hidden');
+                // Deliberately do NOT reveal #primaryAction — no
+                // clickable path into the broken dashboard.
             } else if (u.role === 'RESIDENT') {
                 statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Resident)';
                 const cc = window.IRP_CLIENT_CONFIG || {};
@@ -306,7 +307,13 @@
             // Not signed in. This is the public (anonymous) deployment.
             // If the visitor was trying to open a protected page, auto-redirect
             // them to the secure deployment URL so Google can sign them in.
-            const want = (window.IRP_REQUESTED_PAGE || '').replace(/[^a-z]/gi, '');
+            let want = (window.IRP_REQUESTED_PAGE || '').replace(/[^a-z]/gi, '');
+            // Builder Dashboard is temporarily disabled (2026-07-19) —
+            // don't auto-redirect ?page=builder visitors into a sign-in
+            // flow that lands on a broken page. Fall through to the
+            // launcher so applyAuthenticatedUser() can show the
+            // "temporarily unavailable" notice after they sign in.
+            if (want === 'builder') want = '';
             const secure = secureUrl(want);
             if (want && secure) {
                 statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-2 text-amber-400"></i>Redirecting to secure sign-in…';
