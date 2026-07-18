@@ -286,28 +286,6 @@
         </div>
     </div>
 
-    <!-- Modal: Delete Issue -->
-    <div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-md border border-slate-700">
-            <div class="mb-4 text-center">
-                <i class="fas fa-exclamation-triangle text-5xl text-red-400 mb-2"></i>
-                <h2 class="text-2xl font-bold text-red-400">Delete Issue?</h2>
-            </div>
-            <div id="deleteModalDetails" class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-lg mb-4 space-y-2 text-sm text-slate-200">
-                <!-- Details populated by JS -->
-            </div>
-            <p class="text-slate-400 mb-4 text-center text-sm">This action cannot be undone. The issue and all associated data will be permanently deleted.</p>
-            <div class="flex gap-3">
-                <button onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-lg font-bold transition-colors">
-                    <i class="fas fa-trash mr-2"></i>Delete Issue
-                </button>
-                <button onclick="closeModal('deleteModal')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-100 py-2.5 rounded-lg font-bold transition-colors border border-slate-600">
-                    Cancel
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded shadow-lg text-white font-bold hidden z-50"></div>
 
@@ -863,8 +841,8 @@
 
                 const updateBtn = staged
                     ? `<button onclick="undoStagedBuilder('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition-colors shadow" title="Remove this update from the draft buffer"><i class="fas fa-rotate-left"></i><span>Undo Staged</span></button>`
-                    : `<button onclick="selectBuilderRow('${ticketId}');openStatusModal('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow"><i class="fas fa-edit"></i><span>Update Status</span></button>`;
-                const viewBtn   = `<button onclick="selectBuilderRow('${ticketId}');openDetailsModal('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow"><i class="fas fa-eye"></i><span>View Details</span></button>`;
+                    : `<button onclick="openStatusModal('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow"><i class="fas fa-edit"></i><span>Update Status</span></button>`;
+                const viewBtn   = `<button onclick="openDetailsModal('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow"><i class="fas fa-eye"></i><span>View Details</span></button>`;
 
                 // Staged preview block, shown only when Draft Mode
                 // captured pending changes for this ticket. Renders
@@ -1082,19 +1060,6 @@
             }
         }
 
-        function selectBuilderRow(ticketId) {
-            // Clear previous selection
-            document.querySelectorAll('.issue-row').forEach(row => {
-                row.style.borderLeft = '3px solid transparent';
-            });
-            
-            // Apply selection to clicked row (border only)
-            const selectedRow = document.getElementById(`row-${ticketId}`);
-            if (selectedRow) {
-                selectedRow.style.borderLeft = '3px solid rgb(37, 99, 235)';
-            }
-        }
-
         function openDetailsModal(ticketId) {
             const issue = allIssues.find(i => i.ticketId === ticketId);
             
@@ -1214,34 +1179,6 @@
             const lb = document.getElementById('photoLightbox');
             if (lb && !lb.classList.contains('hidden')) closePhotoLightbox();
         });
-
-        function openDeleteModal(ticketId, ticketDisplay) {
-            const issue = allIssues.find(i => i.ticketId === ticketId);
-            currentTicketId = ticketId;
-
-            document.getElementById('deleteModalDetails').innerHTML = `
-                <p><strong class="text-slate-400">Ticket ID:</strong> <span class="text-amber-300 font-mono font-bold">${ticketDisplay}</span></p>
-                <p><strong class="text-slate-400">Resident:</strong> ${issue.resident.name}</p>
-                <p><strong class="text-slate-400">Location:</strong> ${issue.location.tower}/${issue.location.flat}</p>
-                <p><strong class="text-slate-400">Category:</strong> ${issue.issue.category}</p>
-            `;
-
-            document.getElementById('deleteModal').classList.remove('hidden');
-        }
-
-        async function confirmDelete() {
-            try {
-                await API.call('deleteIssue', {
-                    ticketId: currentTicketId,
-                    sheet: 'LIVE_ISSUES'
-                });
-                closeModal('deleteModal');
-                showToast('✓ Issue deleted successfully!', 'success');
-                loadData({ silent: true });
-            } catch (error) {
-                showToast('✕ Error: ' + error.message, 'error');
-            }
-        }
 
         function filterByStatus(status) {
             builderStatusFilter = String(status || '').toUpperCase();

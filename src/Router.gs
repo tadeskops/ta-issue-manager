@@ -420,10 +420,14 @@ function isActionAllowed_(action, role) {
         "updateIssueDescription"
     ];
     const BUILDER_ALLOWED = [
-        "getLiveIssues", "updateBuilderStatus", "closeIssue", "reopenIssue",
+        "getLiveIssues", "getClosedIssues",
+        "updateBuilderStatus", "closeIssue", "reopenIssue",
         "getFormResponses", "getIssuesWithStatus", "getSubmittedIssues",
         "validateUserAccess", "getDashboardMetrics", "getClientConfig",
         "getReportPhotoB64", "commitFullReportPdf",
+        // Builder may submit issues via the in-portal form (matches
+        // requirement.md §7 — submitIssue is granted to all roles).
+        "submitIssue",
         // Builders may commit batches too, but the server-side
         // commitBatch() enforces that non-COMMITTEE roles can only
         // dispatch op="update_status" (per-item role gate).
