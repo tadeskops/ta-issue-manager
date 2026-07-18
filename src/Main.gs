@@ -845,6 +845,88 @@ function addPhotosToIssue(ticketId, sheetName, photos, userEmail) {
     }
 }
 
+/**
+ * Apply a list of pending committee decisions in a single call, so the
+ * committee dashboard's "Draft Mode" can stage many approve/reject/delete
+ * actions on the Pending tab and flush them together.
+ *
+ * The whole batch runs inside one ScriptLock so no other admin (or the
+ * daily sync) can interleave writes mid-flush. Individual items are still
+ * best-effort: a failed item does not abort the batch — its error is
+ * returned in the per-item result so the client can keep only the failed
+ * entries in its local buffer for retry.
+ *
+ * payload shape (server-side):
+ *   items: [
+ *     { op: "approve", ticketId, severity },
+ *     { op: "reject",  ticketId, reason   },
+ *     { op: "delete",  ticketId, sheet    }
+ *   ]
+ *
+ * Returns:
+ *   { success, data: { results: [{ticketId, op, success, error, data}], okCount, failCount }, error }
+ */
+function commitBatch(items, userEmail) {
+    try {
+        if (!Array.isArray(items) || items.length === 0) {
+            return { success: false, data: null, error: "No items in batch" };
+        }
+        // Hard cap so a stuck client can't lock the script for minutes.
+        // Each approve/reject is O(rows) sheet scan; 200 items is roughly
+        // a few seconds of Sheets I/O — well under the 6-min quota.
+        if (items.length > 200) {
+            return { success: false, data: null, error: "Batch too large (max 200 items)" };
+        }
+
+        const lock = LockService.getScriptLock();
+        lock.waitLock(20000);
+        const results = [];
+        try {
+            for (let i = 0; i < items.length; i++) {
+                const it = items[i] || {};
+                const op = String(it.op || "").toLowerCase();
+                const ticketId = it.ticketId;
+                let out;
+                try {
+                    if (!ticketId) {
+                        out = { success: false, error: "Missing ticketId" };
+                    } else if (op === "approve") {
+                        out = approveIssue(ticketId, userEmail || "", it.severity);
+                    } else if (op === "reject") {
+                        out = rejectIssue(ticketId, it.reason || "", userEmail || "");
+                    } else if (op === "delete") {
+                        out = deleteIssue(ticketId, it.sheet || SHEETS.PENDING_REVIEW);
+                    } else {
+                        out = { success: false, error: "Unsupported op: " + op };
+                    }
+                } catch (e) {
+                    out = { success: false, error: String(e) };
+                }
+                results.push({
+                    ticketId: ticketId,
+                    op: op,
+                    success: !!(out && out.success),
+                    error: (out && out.error) || null,
+                    data: (out && out.data) || null
+                });
+            }
+        } finally {
+            try { lock.releaseLock(); } catch (e) { /* noop */ }
+        }
+
+        const okCount = results.reduce(function (a, r) { return a + (r.success ? 1 : 0); }, 0);
+        Logger.log("commitBatch: " + okCount + "/" + results.length + " ok by " + (userEmail || "?"));
+        return {
+            success: true,
+            data: { results: results, okCount: okCount, failCount: results.length - okCount },
+            error: null
+        };
+    } catch (error) {
+        Logger.log("commitBatch error: " + error);
+        return { success: false, data: null, error: error.toString() };
+    }
+}
+
 // Get Form Responses (Direct from Google Sheet). Uses FORM_COL indices
 // (not header text) so the API contract is stable even if the bound form
 // changes question wording.

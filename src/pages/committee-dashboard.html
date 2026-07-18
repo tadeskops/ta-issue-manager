@@ -186,9 +186,16 @@
                 <div class="mb-6">
                     <div class="flex justify-between items-center gap-3 mb-3">
                         <h3 class="text-lg font-bold text-slate-100"><i class="fas fa-hourglass-end mr-3 gold-accent"></i>Issues Awaiting Approval</h3>
-                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold text-sm transition-all border border-amber-400/30 whitespace-nowrap">
-                            <i class="fas fa-sync-alt mr-2"></i>Refresh
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button id="draftModeToggle" type="button" onclick="toggleDraftMode()"
+                                title="When ON, Approve/Reject/Delete on this tab are staged locally and flushed together via the Save Changes bar."
+                                class="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-all whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 text-slate-200 border-slate-500/40">
+                                <i class="fas fa-toggle-off mr-1.5"></i><span id="draftModeLabel">Draft Mode</span>
+                            </button>
+                            <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold text-sm transition-all border border-amber-400/30 whitespace-nowrap">
+                                <i class="fas fa-sync-alt mr-2"></i>Refresh
+                            </button>
+                        </div>
                     </div>
                     <div class="flex flex-wrap gap-2 items-center">
                         <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold"><i class="fas fa-filter mr-1 gold-accent"></i>Status</label>
@@ -424,6 +431,30 @@
     <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-bold hidden z-50"></div>
 
+    <!--
+      Draft Mode floating action bar (hidden by default). Appears only when
+      Draft Mode is ON *and* the buffer has staged changes. Positioned to
+      the left of the toast so the two never overlap.
+    -->
+    <div id="batchBar" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden z-40
+                              bg-slate-900/95 backdrop-blur border border-amber-500/60
+                              rounded-xl shadow-2xl px-4 py-3 flex items-center gap-4">
+        <div class="flex items-center gap-2 text-sm">
+            <i class="fas fa-layer-group text-amber-400"></i>
+            <span class="text-slate-200"><span id="batchCount" class="font-bold text-amber-300">0</span> unsaved change<span id="batchPlural">s</span></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="batchDiscardBtn" type="button" onclick="discardBatch()"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-500/50 transition-all">
+                <i class="fas fa-undo mr-1"></i>Discard
+            </button>
+            <button id="batchSaveBtn" type="button" onclick="saveBatch()"
+                class="px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white border border-emerald-400/40 transition-all">
+                <i class="fas fa-save mr-1"></i>Save Changes
+            </button>
+        </div>
+    </div>
+
     <?!= include('src/partials/api') ?>
     <?!= include('src/partials/pdf-report') ?>
     <script>
@@ -498,6 +529,21 @@
                 const slaNote = document.querySelector('#approveModal p.mt-2.text-xs.text-slate-400');
                 if (slaNote && /SLA/i.test(slaNote.textContent || '')) slaNote.remove();
             }
+            // Bootstrap Draft Mode buffer. Must happen AFTER window.IRP_USER
+            // is set because the localStorage key is namespaced by email —
+            // otherwise buffers from two committee members on the same
+            // browser would collide.
+            try {
+                PendingBatch.init();
+                renderDraftToggle();
+                renderBatchBar();
+                // If loadData raced ahead of us and already rendered the
+                // Pending grid, re-render so staged rows pick up their
+                // preview pills.
+                if (pendingIssues && pendingIssues.length) renderPending();
+            } catch (e) {
+                console.warn('PendingBatch bootstrap failed:', e && e.message);
+            }
         })();
 
         function __slaOn() {
@@ -532,6 +578,168 @@
         let autoRefreshEnabled = true;
         let autoRefreshInterval = null;
         let showSLABreaches = false; // Configuration: default hidden
+
+        // ================================================================
+        // PendingBatch — buffer for committee Pending-tab decisions.
+        //
+        // When Draft Mode is ON, Approve/Reject/Delete on the Pending tab
+        // are captured here instead of hitting the server. The bar at the
+        // bottom of the screen shows the count and lets the user flush the
+        // whole batch (via API.commitBatch) or discard it. Contents survive
+        // page refresh via localStorage keyed by the signed-in user, so a
+        // committee member can review 100+ tickets over multiple sittings.
+        //
+        // Data model (per staged item):
+        //   { op: 'approve'|'reject'|'delete', ticketId, severity?, reason?, sheet?, stagedAt }
+        //
+        // Conflict rule: last write wins. Staging op=X on a ticket that
+        // already has op=Y replaces the earlier decision, matching current
+        // single-shot behavior.
+        // ================================================================
+        const PendingBatch = (() => {
+            const KEY_PREFIX = 'IRP_COMMITTEE_BATCH_v1:';
+            let enabled = false;
+            let store = new Map(); // ticketId -> item
+
+            function _key() {
+                const email = (window.IRP_USER && window.IRP_USER.email) || 'anon';
+                return KEY_PREFIX + String(email).toLowerCase();
+            }
+            function _persist() {
+                try {
+                    const payload = { enabled: enabled, items: Array.from(store.values()) };
+                    localStorage.setItem(_key(), JSON.stringify(payload));
+                } catch (e) { /* quota / private mode — non-fatal */ }
+            }
+            function _restore() {
+                try {
+                    const raw = localStorage.getItem(_key());
+                    if (!raw) return;
+                    const parsed = JSON.parse(raw) || {};
+                    enabled = !!parsed.enabled;
+                    store = new Map();
+                    (parsed.items || []).forEach(it => {
+                        if (it && it.ticketId && it.op) store.set(it.ticketId, it);
+                    });
+                } catch (e) { /* corrupt localStorage — ignore */ }
+            }
+
+            return {
+                init()             { _restore(); },
+                isEnabled()        { return enabled; },
+                setEnabled(v)      { enabled = !!v; _persist(); },
+                stage(item) {
+                    if (!item || !item.ticketId || !item.op) return;
+                    item.stagedAt = Date.now();
+                    store.set(item.ticketId, item);
+                    _persist();
+                },
+                unstage(ticketId)  { const had = store.delete(ticketId); if (had) _persist(); return had; },
+                get(ticketId)      { return store.get(ticketId) || null; },
+                has(ticketId)      { return store.has(ticketId); },
+                list()             { return Array.from(store.values()); },
+                count()            { return store.size; },
+                clear()            { store.clear(); _persist(); },
+                keepOnly(ticketIds) {
+                    const keep = new Set(ticketIds || []);
+                    Array.from(store.keys()).forEach(k => { if (!keep.has(k)) store.delete(k); });
+                    _persist();
+                }
+            };
+        })();
+
+        // Toggle Draft Mode from the header pill. When turning OFF while
+        // items are buffered, we do NOT auto-flush or discard — the buffer
+        // sticks around and the Save/Discard bar stays visible so the user
+        // makes an explicit choice. When turning ON we just show the bar.
+        function toggleDraftMode() {
+            const next = !PendingBatch.isEnabled();
+            PendingBatch.setEnabled(next);
+            renderDraftToggle();
+            renderPending();
+            renderBatchBar();
+            if (next) {
+                showToast('📝 Draft Mode ON — decisions are staged until you Save', 'success');
+            } else if (PendingBatch.count() === 0) {
+                showToast('Draft Mode OFF — decisions save immediately', 'success');
+            } else {
+                showToast('Draft Mode OFF — ' + PendingBatch.count() + ' staged change(s) still pending. Save or Discard to clear.', 'error');
+            }
+        }
+
+        function renderDraftToggle() {
+            const btn = document.getElementById('draftModeToggle');
+            const label = document.getElementById('draftModeLabel');
+            if (!btn || !label) return;
+            const on = PendingBatch.isEnabled();
+            label.textContent = on ? 'Draft Mode: ON' : 'Draft Mode';
+            btn.className = 'px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-all whitespace-nowrap ' + (on
+                ? 'bg-amber-600/30 hover:bg-amber-600/40 text-amber-100 border-amber-400/60 shadow-inner'
+                : 'bg-slate-700/40 hover:bg-slate-700/60 text-slate-200 border-slate-500/40');
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = 'fas ' + (on ? 'fa-toggle-on' : 'fa-toggle-off') + ' mr-1.5';
+        }
+
+        function renderBatchBar() {
+            const bar = document.getElementById('batchBar');
+            if (!bar) return;
+            const n = PendingBatch.count();
+            if (n === 0) { bar.classList.add('hidden'); return; }
+            bar.classList.remove('hidden');
+            const c = document.getElementById('batchCount');
+            const p = document.getElementById('batchPlural');
+            if (c) c.textContent = String(n);
+            if (p) p.style.display = (n === 1) ? 'none' : '';
+        }
+
+        async function saveBatch() {
+            const items = PendingBatch.list();
+            if (!items.length) return;
+            const saveBtn = document.getElementById('batchSaveBtn');
+            const discardBtn = document.getElementById('batchDiscardBtn');
+            if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Saving...'; }
+            if (discardBtn) discardBtn.disabled = true;
+            try {
+                const res = await API.commitBatch(items);
+                const data = (res && res.data) || {};
+                const results = data.results || [];
+                const okCount = data.okCount || 0;
+                const failCount = data.failCount || 0;
+                // Keep failed items in the buffer so the user can retry
+                // without re-staging them. Successful ones vanish.
+                const failedIds = results.filter(r => !r.success).map(r => r.ticketId);
+                PendingBatch.keepOnly(failedIds);
+                if (failCount === 0) {
+                    showToast('✓ ' + okCount + ' change' + (okCount === 1 ? '' : 's') + ' saved', 'success');
+                } else {
+                    const firstErr = (results.find(r => !r.success) || {}).error || 'unknown error';
+                    showToast('⚠ ' + okCount + ' saved, ' + failCount + ' failed (' + firstErr + ')', 'error');
+                }
+                await loadData();
+            } catch (err) {
+                showToast('✗ Save failed: ' + (err.message || err), 'error');
+            } finally {
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save mr-1"></i>Save Changes'; }
+                if (discardBtn) discardBtn.disabled = false;
+                renderBatchBar();
+            }
+        }
+
+        function discardBatch() {
+            const n = PendingBatch.count();
+            if (n === 0) return;
+            if (!confirm('Discard ' + n + ' staged change' + (n === 1 ? '' : 's') + '? This cannot be undone.')) return;
+            PendingBatch.clear();
+            renderPending();
+            renderBatchBar();
+            showToast('Discarded ' + n + ' staged change(s)', 'success');
+        }
+
+        function undoStaged(ticketId) {
+            if (!PendingBatch.unstage(ticketId)) return;
+            renderPending();
+            renderBatchBar();
+        }
 
         // Mock data for local testing
         const mockPendingIssues = [
@@ -695,6 +903,10 @@
                 }
                 showToast('Could not load issues: ' + msg + hint, 'error');
             }
+            // Always refresh the batch bar after a load — the count is
+            // driven by localStorage, not by fetched data, so it must
+            // survive a failed load too.
+            try { renderBatchBar(); } catch (e) { /* noop */ }
         }
 
         // Expand / collapse the body of a card by ticket id. Bound to the
@@ -841,27 +1053,54 @@
             }
 
             grid.innerHTML = filtered.map(issue => {
+                const staged = PendingBatch.get(issue.ticketId);
                 const isRejected = (issue.state || '').toUpperCase() === 'REJECTED';
-                const statePill = isRejected
-                    ? '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-red-900/60 text-red-200 border border-red-700/50 whitespace-nowrap uppercase tracking-wider">Rejected</span>'
-                    : '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-amber-900/60 text-amber-200 border border-amber-700/50 whitespace-nowrap uppercase tracking-wider">Pending</span>';
+                let statePill;
+                if (staged) {
+                    // Preview pill reflects the pending decision so the user
+                    // can eyeball the whole buffer before flushing.
+                    const stagedMeta = {
+                        approve: { label: 'Will Approve' + (staged.severity ? ' (' + staged.severity + ')' : ''),
+                                   cls:   'bg-emerald-900/70 text-emerald-100 border-emerald-500/60' },
+                        reject:  { label: 'Will Reject',
+                                   cls:   'bg-orange-900/70 text-orange-100 border-orange-500/60' },
+                        delete:  { label: 'Will Delete',
+                                   cls:   'bg-red-900/70 text-red-100 border-red-500/60' }
+                    }[staged.op] || { label: 'Staged', cls: 'bg-slate-800 text-slate-200 border-slate-500/60' };
+                    statePill = '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold border whitespace-nowrap uppercase tracking-wider ' + stagedMeta.cls + '"><i class="fas fa-clock mr-1"></i>' + stagedMeta.label + '</span>';
+                } else {
+                    statePill = isRejected
+                        ? '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-red-900/60 text-red-200 border border-red-700/50 whitespace-nowrap uppercase tracking-wider">Rejected</span>'
+                        : '<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-amber-900/60 text-amber-200 border border-amber-700/50 whitespace-nowrap uppercase tracking-wider">Pending</span>';
+                }
                 const btn = (cls, icon, label, handler) =>
                     `<button onclick="${handler}" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold ${cls} text-white transition-colors shadow"><i class="fas ${icon}"></i><span>${label}</span></button>`;
-                const actions = isRejected
-                    ? `
+                let actions;
+                if (staged) {
+                    // When staged, only View + Undo remain. Approve/Reject/Delete
+                    // would overwrite the pending decision, which is confusing
+                    // — force the user through Undo first for clarity.
+                    actions = `
+                        ${btn('bg-cyan-600 hover:bg-cyan-500', 'fa-eye',      'View', `openDetailedView('${issue.ticketId}', 'pending')`)}
+                        ${btn('bg-amber-600 hover:bg-amber-500', 'fa-rotate-left', 'Undo', `undoStaged('${issue.ticketId}')`)}
+                    `;
+                } else if (isRejected) {
+                    actions = `
                         ${btn('bg-cyan-600 hover:bg-cyan-500', 'fa-eye',   'View',   `openDetailedView('${issue.ticketId}', 'pending')`)}
                         ${btn('bg-red-600 hover:bg-red-500',   'fa-trash', 'Delete', `openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')`)}
-                    `
-                    : `
+                    `;
+                } else {
+                    actions = `
                         ${btn('bg-emerald-600 hover:bg-emerald-500', 'fa-check', 'Approve', `openApproveModal('${issue.ticketId}')`)}
                         ${btn('bg-orange-600 hover:bg-orange-500',   'fa-times', 'Reject',  `openRejectModal('${issue.ticketId}')`)}
                         ${btn('bg-cyan-600 hover:bg-cyan-500',       'fa-eye',   'View',    `openDetailedView('${issue.ticketId}', 'pending')`)}
                         ${btn('bg-red-600 hover:bg-red-500',         'fa-trash', 'Delete',  `openDeleteModal('${issue.ticketId}', '${issue.ticketId}', 'PENDING_REVIEW')`)}
                     `;
+                }
                 return _renderIssueCard(issue, {
                     section:     'pending',
-                    cardClass:   isRejected ? 'opacity-80' : '',
-                    borderClass: isRejected ? 'border-red-900/50' : 'border-slate-700 hover:border-amber-500/50',
+                    cardClass:   staged ? 'ring-2 ring-amber-400/40 bg-amber-950/10' : (isRejected ? 'opacity-80' : ''),
+                    borderClass: staged ? 'border-amber-500/60' : (isRejected ? 'border-red-900/50' : 'border-slate-700 hover:border-amber-500/50'),
                     statePill:   statePill,
                     actions:     actions
                 });
@@ -1014,6 +1253,17 @@
         async function confirmApprove() {
             const severity = document.getElementById('approveSeverity').value;
             if (!severity) { showToast('✗ Please select a severity', 'error'); return; }
+            // Draft Mode: stage in local buffer instead of hitting the API.
+            // Only Pending-tab decisions batch — approve is Pending-only so
+            // no tab check needed here.
+            if (PendingBatch.isEnabled()) {
+                PendingBatch.stage({ op: 'approve', ticketId: currentTicketId, severity: severity });
+                closeModal('approveModal');
+                renderPending();
+                renderBatchBar();
+                showToast('📝 Staged approve (' + severity + ') — ' + PendingBatch.count() + ' unsaved', 'success');
+                return;
+            }
             try {
                 const res = await API.call('approveIssue', {
                     ticketId: currentTicketId,
@@ -1047,6 +1297,14 @@
                 return;
             }
 
+            if (PendingBatch.isEnabled()) {
+                PendingBatch.stage({ op: 'reject', ticketId: currentTicketId, reason: reason });
+                closeModal('rejectModal');
+                renderPending();
+                renderBatchBar();
+                showToast('📝 Staged reject — ' + PendingBatch.count() + ' unsaved', 'success');
+                return;
+            }
             try {
                 await API.rejectIssue(currentTicketId, reason);
                 closeModal('rejectModal');
@@ -1356,6 +1614,17 @@
         }
 
         async function confirmDelete() {
+            // Only Pending-tab deletes participate in Draft Mode. Active/Closed
+            // deletes stay immediate to avoid cross-tab confusion (the batch
+            // bar lives with the Pending workflow).
+            if (PendingBatch.isEnabled() && currentSheet === 'PENDING_REVIEW') {
+                PendingBatch.stage({ op: 'delete', ticketId: currentTicketId, sheet: currentSheet });
+                closeModal('deleteModal');
+                renderPending();
+                renderBatchBar();
+                showToast('📝 Staged delete — ' + PendingBatch.count() + ' unsaved', 'success');
+                return;
+            }
             try {
                 await API.call('deleteIssue', {
                     ticketId: currentTicketId,
