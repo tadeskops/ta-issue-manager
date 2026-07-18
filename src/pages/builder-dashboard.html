@@ -47,12 +47,6 @@
             border-color: rgba(212, 175, 55, 0.6);
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.15);
         }
-
-        /* Card hover glow — orange accent on the active issue cards. */
-        #issuesGrid .issue-row:hover {
-            border-left: 3px solid rgb(217, 119, 6) !important;
-            box-shadow: 0 0 15px rgba(217, 119, 6, 0.6), inset 0 0 10px rgba(217, 119, 6, 0.2) !important;
-        }
     </style>
     <?!= include('src/partials/theme') ?>
 </head>
@@ -205,46 +199,46 @@
     </div>
 
     <!-- Modal: Update Issue Status -->
-    <div id="statusModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-700">
-            <h2 class="text-2xl font-bold mb-6 text-orange-500 flex items-center gap-2">📝 Update Issue Status</h2>
-            
-            <div id="statusModalDetails" class="bg-slate-700/30 p-4 rounded-lg mb-6 space-y-2 text-sm border border-slate-700">
+    <div id="statusModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-orange-500/30 rounded-xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-6 text-orange-300"><i class="fas fa-edit mr-3"></i>Update Issue Status</h2>
+
+            <div id="statusModalDetails" class="bg-slate-700/40 border border-orange-500/20 rounded-lg p-5 mb-6 space-y-3 text-sm text-slate-300">
                 <!-- Details populated by JS -->
             </div>
 
             <div class="mb-6">
-                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Current Status</label>
-                <div id="currentStatusDisplay" class="bg-blue-500/20 p-3 rounded-lg text-blue-300 font-bold border border-blue-500/30 text-center"></div>
+                <label class="block text-sm font-semibold text-amber-300 mb-2">Current Status</label>
+                <div id="currentStatusDisplay" class="bg-slate-800/70 border border-amber-500/30 rounded-lg p-3 text-amber-200 font-bold text-center"></div>
             </div>
 
             <div class="mb-6">
-                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Update Status To</label>
-                <select id="newStatus" class="w-full bg-slate-700/50 border border-slate-600 text-white p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-500 transition cursor-pointer">
-                    <option value="" class="bg-slate-800 text-slate-400">-- Select New Status --</option>
-                    <option value="IN_PROGRESS" class="bg-slate-800 text-white">🟡 IN PROGRESS</option>
-                    <option value="WORK_COMPLETED" class="bg-slate-800 text-white">✅ WORK COMPLETED</option>
+                <label for="newStatus" class="block text-sm font-semibold text-amber-300 mb-2">Update Status To <span class="text-red-400">*</span></label>
+                <select id="newStatus" class="w-full px-4 py-3 rounded-lg bg-slate-800/70 border border-amber-500/30 text-slate-100 focus:outline-none focus:border-amber-400">
+                    <option value="">— Select new status —</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="WORK_COMPLETED">Work Completed</option>
                 </select>
             </div>
 
             <div class="mb-6">
-                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Assigned Vendor (optional)</label>
-                <input type="text" id="vendorName" placeholder="Enter vendor name or contractor company" 
-                    class="w-full bg-slate-700/50 border border-slate-600 text-white placeholder-slate-500 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-500 transition">
+                <label for="vendorName" class="block text-sm font-semibold text-amber-300 mb-2">Assigned Vendor (optional)</label>
+                <input type="text" id="vendorName" placeholder="Enter vendor name or contractor company"
+                    class="w-full px-4 py-3 rounded-lg bg-slate-800/70 border border-amber-500/30 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400">
             </div>
 
             <div class="mb-6">
-                <label class="block text-xs font-bold mb-2 uppercase tracking-wide text-slate-300">Work Comment / Update</label>
-                <textarea id="workComment" placeholder="Describe what has been done or needs to be done..." 
-                    class="w-full bg-slate-700/50 border border-slate-600 text-white placeholder-slate-500 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 hover:border-slate-500 transition" rows="4"></textarea>
-                <p class="text-xs text-slate-400 mt-2"><span id="charCount">0</span> / 500 characters</p>
+                <label for="workComment" class="block text-sm font-semibold text-amber-300 mb-2">Work Comment / Update <span class="text-red-400">*</span></label>
+                <textarea id="workComment" placeholder="Describe what has been done or needs to be done..."
+                    class="w-full border border-slate-500/50 bg-slate-700/30 text-slate-100 rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-orange-500 backdrop-blur text-sm" rows="4"></textarea>
+                <p class="mt-2 text-xs text-slate-400"><span id="charCount">0</span> / 500 characters</p>
             </div>
 
-            <div class="flex gap-3">
-                <button onclick="confirmStatusUpdate()" class="flex-1 bg-gradient-to-r from-orange-600 to-orange-500 text-white py-3 rounded-lg hover:from-orange-700 hover:to-orange-600 font-bold transition shadow-lg">
-                    Update Status
+            <div class="flex gap-4">
+                <button onclick="confirmStatusUpdate()" class="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white font-bold transition-all border border-orange-400/30 shadow-lg">
+                    <i class="fas fa-check mr-2"></i>Update Status
                 </button>
-                <button onclick="closeModal('statusModal')" class="flex-1 bg-slate-700 text-slate-100 py-3 rounded-lg hover:bg-slate-600 font-bold transition border border-slate-600">
+                <button onclick="closeModal('statusModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
                     Cancel
                 </button>
             </div>
@@ -269,17 +263,19 @@
     </div>
 
     <!-- Modal: View Issue Details -->
-    <div id="detailsModal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-700">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl sm:text-2xl font-bold text-amber-300 flex items-center gap-2"><i class="fas fa-file-lines"></i>Issue Details</h2>
-                <button onclick="closeModal('detailsModal')" class="text-slate-400 hover:text-white text-2xl leading-none" aria-label="Close">&times;</button>
+    <div id="detailsModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="premium-card border border-amber-500/30 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex justify-between items-center p-6 border-b border-amber-500/20">
+                <h2 class="text-2xl font-bold gold-accent"><i class="fas fa-ticket-alt mr-2"></i>Issue Details</h2>
+                <button onclick="closeModal('detailsModal')" class="text-slate-400 hover:text-slate-200 text-2xl transition-colors" aria-label="Close">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div id="detailsContent" class="space-y-4 text-slate-200">
+            <div id="detailsContent" class="flex-1 overflow-y-auto p-6 space-y-5">
                 <!-- Details populated by JS -->
             </div>
-            <div class="mt-6">
-                <button onclick="closeModal('detailsModal')" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-100 py-2.5 rounded-lg font-bold transition border border-slate-600">
+            <div class="flex gap-4 p-6 border-t border-amber-500/20 bg-slate-800/50">
+                <button onclick="closeModal('detailsModal')" class="flex-1 px-4 py-3 rounded-lg bg-slate-700/50 hover:bg-slate-600/70 text-slate-100 font-bold transition-all border border-slate-500/30">
                     Close
                 </button>
             </div>
@@ -1039,77 +1035,121 @@
 
         function openDetailsModal(ticketId) {
             const issue = allIssues.find(i => i.ticketId === ticketId);
-            
-            const statusTime = new Date(issue.builder.lastUpdated).toLocaleDateString('en-IN');
+            if (!issue) return;
+
+            const statusTime = issue.builder && issue.builder.lastUpdated
+                ? new Date(issue.builder.lastUpdated).toLocaleDateString('en-IN')
+                : '—';
             const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
+            const slaOn = __slaOn();
+            const breached = slaOn && issue.sla && issue.sla.breached;
+            const statusColor = getStatusColor(issue.builder.status);
 
-            document.getElementById('detailsContent').innerHTML = `
-                <div class="bg-slate-900/60 border border-blue-500/20 p-4 rounded-lg">
-                    <h3 class="font-bold text-base sm:text-lg mb-2 text-blue-300"><i class="fas fa-info-circle mr-2"></i>Issue Information</h3>
-                    <p><strong class="text-slate-400">Ticket ID:</strong> <span class="font-mono text-amber-300 font-bold">${issue.ticketId}</span></p>
-                    <p><strong class="text-slate-400">Category:</strong> ${issue.issue.category}</p>
-                    <p><strong class="text-slate-400">Sub-Category:</strong> ${issue.issue.subcategory || '—'}</p>
-                    <p><strong class="text-slate-400">Severity:</strong> <span style="color: ${getSeverityColor(issue.issue.severity)}" class="font-bold">${issue.issue.severity}</span></p>
-                    <p><strong class="text-slate-400">Description:</strong> ${issue.issue.description}</p>
-                </div>
-
-                <div class="bg-slate-900/60 border border-emerald-500/20 p-4 rounded-lg">
-                    <h3 class="font-bold text-base sm:text-lg mb-2 text-emerald-300"><i class="fas fa-user mr-2"></i>Resident Information</h3>
-                    <p><strong class="text-slate-400">Name:</strong> ${issue.resident.name}</p>
-                    <p><strong class="text-slate-400">Location:</strong> ${issue.location.tower} / ${issue.location.flat}</p>
-                </div>
-
-                <div class="bg-slate-900/60 border border-amber-500/20 p-4 rounded-lg">
-                    <h3 class="font-bold text-base sm:text-lg mb-2 text-amber-300"><i class="fas fa-clock mr-2"></i>Timeline Information</h3>
-                    <p><strong class="text-slate-400">Reported:</strong> ${new Date(issue.dateReported).toLocaleDateString('en-IN')}</p>
-                    <p><strong class="text-slate-400">Days Open:</strong> ${daysOpen} days</p>
-                    ${__slaOn() ? `
-                    <p><strong class="text-slate-400">SLA Due Date:</strong> ${new Date(issue.sla.dueDate).toLocaleDateString('en-IN')}</p>
-                    <p><strong class="text-slate-400">Days Remaining:</strong> <span class="${issue.sla.breached ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}">${issue.sla.daysRemaining} days</span></p>` : ''}
-                </div>
-
-                <div class="bg-slate-900/60 border border-orange-500/20 p-4 rounded-lg">
-                    <h3 class="font-bold text-base sm:text-lg mb-2 text-orange-300"><i class="fas fa-wrench mr-2"></i>Work Status</h3>
-                    <p><strong class="text-slate-400">Current Status:</strong> <span style="background-color: ${getStatusColor(issue.builder.status)}" class="text-white px-2 py-0.5 rounded font-bold text-xs">${issue.builder.status}</span></p>
-                    <p><strong class="text-slate-400">Last Updated:</strong> ${statusTime}</p>
-                    <p><strong class="text-slate-400">Assigned Vendor:</strong> ${issue.builder.assignedVendor || 'Not assigned'}</p>
-                    <p><strong class="text-slate-400">Latest Comment:</strong> ${issue.builder.comment || 'No comments yet'}</p>
-                </div>
-
-                ${issue.issue.photoLinks && issue.issue.photoLinks.length > 0 ? `
-                <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="font-bold text-lg text-slate-100">
-                            <i class="fas fa-paperclip text-amber-400 mr-1"></i>Attachments (${issue.issue.photoLinks.length})
-                        </h3>
-                        ${(((window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl) || '') ? `
-                            <a href="${(window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl}"
-                               target="_blank" rel="noopener noreferrer"
-                               class="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
-                                <i class="fab fa-google-drive"></i> Open Drive folder
-                            </a>` : ''}
+            // Mirrors committee's openDetailedView layout: flat sections
+            // separated by border-t dividers, uppercase caption labels
+            // above every value, single-column typography for scannability.
+            let detailedContent = `
+                <div class="space-y-5">
+                    <!-- Header: Ticket ID & Severity -->
+                    <div class="flex justify-between items-baseline">
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">TICKET ID</p>
+                            <p class="text-2xl font-bold text-blue-300 font-mono">${issue.ticketId}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded text-white text-sm font-bold" style="background-color: ${getSeverityColor(issue.issue.severity)}">${issue.issue.severity}</span>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        ${issue.issue.photoLinks.map((link, idx) => {
-                            const fileId = extractDriveFileId(link);
-                            const thumb = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w800` : link;
-                            const viewer = fileId ? `https://drive.google.com/file/d/${fileId}/view` : link;
-                            return `
-                                <a href="${viewer}" target="_blank" rel="noopener noreferrer"
-                                   onclick="event.preventDefault(); openPhotoLightbox('${fileId || ''}', '${viewer}')"
-                                   class="group relative block rounded-lg overflow-hidden border border-slate-600/40 hover:border-amber-400/60 bg-slate-800/40 transition-all aspect-square cursor-zoom-in">
-                                    <img src="${thumb}" alt="Photo ${idx + 1}" loading="lazy"
-                                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                         onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs p-2 text-center\\'><i class=\\'fas fa-file-image text-2xl mb-2\\'></i>Preview unavailable<span class=\\'text-amber-400 mt-1\\'>Click to open</span></div>'">
-                                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-2">
-                                        <span class="text-white text-xs font-semibold"><i class="fas fa-search-plus mr-1"></i>Click to enlarge</span>
-                                    </div>
-                                </a>`;
-                        }).join('')}
+
+                    <!-- Basic Info -->
+                    <div class="space-y-3 border-t border-slate-700 pt-4">
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">RESIDENT</p>
+                            <p class="text-slate-100 text-sm">${issue.resident.name || '—'}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">LOCATION</p>
+                            <p class="text-slate-100 text-sm">${issue.location.tower || '—'}${issue.location.flat ? ' / Flat ' + issue.location.flat : ''}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">CATEGORY</p>
+                            <p class="text-slate-100 text-sm">${issue.issue.category || '—'}${issue.issue.subcategory ? ' • ' + issue.issue.subcategory : ''}</p>
+                        </div>
                     </div>
-                </div>` : ''}
+
+                    <!-- Timeline Info -->
+                    <div class="grid grid-cols-3 gap-3 border-t border-slate-700 pt-4">
+                        <div class="text-center">
+                            <p class="text-xs text-slate-400 mb-2">REPORTED</p>
+                            <p class="text-sm text-slate-100">${new Date(issue.dateReported).toLocaleDateString('en-IN')}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-xs text-slate-400 mb-2">DAYS OPEN</p>
+                            <p class="text-sm font-bold text-amber-400">${daysOpen}d</p>
+                        </div>
+                        ${slaOn ? `
+                        <div class="text-center">
+                            <p class="text-xs text-slate-400 mb-2">SLA STATUS</p>
+                            <p class="text-sm font-bold ${breached ? 'text-red-400' : 'text-emerald-400'}">${breached ? '⚠️ Breached' : '✓ On Track'}</p>
+                        </div>` : ''}
+                    </div>
+
+                    <!-- Description -->
+                    <div class="border-t border-slate-700 pt-4">
+                        <p class="text-xs text-slate-400 mb-2">DESCRIPTION</p>
+                        <p class="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">${issue.issue.description || 'No description provided'}</p>
+                    </div>
+
+                    <!-- Work Status -->
+                    <div class="border-t border-slate-700 pt-4">
+                        <p class="text-xs text-slate-400 mb-2">WORK STATUS</p>
+                        <div class="space-y-2 text-sm">
+                            <p><span class="text-slate-400">Current status:</span> <span style="background-color: ${statusColor}" class="text-white px-2 py-0.5 rounded font-bold text-xs uppercase ml-1">${issue.builder.status || 'ASSIGNED'}</span></p>
+                            <p><span class="text-slate-400">Last updated:</span> <span class="text-slate-100">${statusTime}</span></p>
+                            <p><span class="text-slate-400">Assigned vendor:</span> <span class="text-slate-100">${issue.builder.assignedVendor || 'Not assigned'}</span></p>
+                            <p><span class="text-slate-400">Latest comment:</span> <span class="text-slate-100 whitespace-pre-wrap">${issue.builder.comment || 'No comments yet'}</span></p>
+                        </div>
+                    </div>
+
+                    <!-- Photos -->
+                    <div class="border-t border-slate-700 pt-4">
+                        ${issue.issue.photoLinks && issue.issue.photoLinks.length > 0 ? `
+                            <div class="flex justify-between items-center mb-3">
+                                <p class="text-xs text-slate-400 uppercase tracking-wider gold-accent">
+                                    <i class="fas fa-paperclip mr-1"></i>Attachments (${issue.issue.photoLinks.length})
+                                </p>
+                                ${(((window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl) || '') ? `
+                                    <a href="${(window.IRP_CLIENT_CONFIG || {}).attachmentFolderUrl}"
+                                       target="_blank" rel="noopener noreferrer"
+                                       class="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
+                                        <i class="fab fa-google-drive"></i> Open Drive folder
+                                    </a>` : ''}
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                ${issue.issue.photoLinks.map((link, idx) => {
+                                    const fileId = extractDriveFileId(link);
+                                    const thumb = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w800` : link;
+                                    const viewer = fileId ? `https://drive.google.com/file/d/${fileId}/view` : link;
+                                    return `
+                                        <a href="${viewer}" target="_blank" rel="noopener noreferrer"
+                                           onclick="event.preventDefault(); openPhotoLightbox('${fileId || ''}', '${viewer}')"
+                                           class="group relative block rounded-lg overflow-hidden border border-slate-600/40 hover:border-amber-400/60 bg-slate-800/40 transition-all aspect-square cursor-zoom-in">
+                                            <img src="${thumb}" alt="Photo ${idx + 1}" loading="lazy"
+                                                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                 onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs p-2 text-center\\'><i class=\\'fas fa-file-image text-2xl mb-2\\'></i>Preview unavailable<span class=\\'text-amber-400 mt-1\\'>Click to open</span></div>'">
+                                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-2">
+                                                <span class="text-white text-xs font-semibold"><i class="fas fa-search-plus mr-1"></i>Click to enlarge</span>
+                                            </div>
+                                        </a>`;
+                                }).join('')}
+                            </div>
+                        ` : `
+                            <p class="text-xs text-slate-400 mb-3">PHOTOS</p>
+                            <p class="text-xs text-slate-500 italic">No photos attached</p>
+                        `}
+                    </div>
+                </div>
             `;
 
+            document.getElementById('detailsContent').innerHTML = detailedContent;
             document.getElementById('detailsModal').classList.remove('hidden');
         }
 
