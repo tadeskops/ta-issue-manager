@@ -759,8 +759,18 @@
         // parity with existing UI, but the edit textarea uses `.value =`
         // and cancel/save resets use textContent-driven DOM replacement,
         // so the edit path itself never inserts unescaped user text.
+        //
+        // Refresh-safety: while a description is being edited, the 30 s
+        // auto-refresh interval and the manual Refresh button MUST NOT
+        // call renderPending() — that rewrites pendingGrid.innerHTML and
+        // drops the open <textarea>, losing whatever the user was
+        // typing. `activeDescEdits` tracks ticket IDs currently in edit
+        // mode; loadData() bails early while the set is non-empty.
         // ================================================================
         const DESC_MAX = 2000;
+        const activeDescEdits = new Set();
+
+        function _isEditingAnyDescription() { return activeDescEdits.size > 0; }
 
         function _findPendingIssue(ticketId) {
             return (pendingIssues || []).find(i => String(i.ticketId) === String(ticketId));
@@ -779,6 +789,7 @@
             const safeId = String(ticketId).replace(/[^A-Za-z0-9_-]/g, '_');
             const box = document.getElementById('descBox-' + safeId);
             if (!box) return;
+            activeDescEdits.add(String(ticketId));
             const current = issue.issue.description || '';
             box.innerHTML = `
                 <textarea id="descEdit-${safeId}" rows="4" maxlength="${DESC_MAX}"
@@ -814,6 +825,7 @@
             const safeId = String(ticketId).replace(/[^A-Za-z0-9_-]/g, '_');
             const box = document.getElementById('descBox-' + safeId);
             if (!box) return;
+            activeDescEdits.delete(String(ticketId));
             _renderDescReadOnly(box, issue.issue.description || '');
         }
 
@@ -840,11 +852,14 @@
                 // pending-approval and rejected rows.
                 await API.updateIssueDescription(ticketId, next, 'PENDING_REVIEW');
                 issue.issue.description = next;
+                activeDescEdits.delete(String(ticketId));
                 _renderDescReadOnly(box, next);
                 showToast('Description updated', 'success');
             } catch (e) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-save mr-1"></i>Save';
+                // Keep ticket in activeDescEdits so the retry attempt isn't
+                // clobbered by a background refresh — user is still editing.
                 showToast('Failed to update: ' + ((e && e.message) || e || 'unknown error'), 'error');
             }
         }
@@ -974,7 +989,22 @@
             };
         }
 
-        async function loadData() {
+        async function loadData(opts) {
+            const silent = !!(opts && opts.silent);
+            // Guard: never blow away an open description <textarea>. The
+            // 30 s auto-refresh interval passes {silent:true}; if the user
+            // is mid-edit we just skip this tick and try again next
+            // interval. Manual Refresh (from the button) is silent:false
+            // so we tell the user we're deferring instead of silently
+            // ignoring their click.
+            if (_isEditingAnyDescription()) {
+                if (silent) {
+                    console.debug('committee: auto-refresh skipped, edit in progress on', Array.from(activeDescEdits));
+                } else {
+                    showToast('Refresh paused — Save or Cancel the description edit first', 'error');
+                }
+                return;
+            }
             try {
                 const pending = await API.getPendingIssues();
                 const live = await API.getLiveIssues('ALL');
@@ -990,7 +1020,7 @@
                 renderClosed();
                 updateKPIs(metrics);
 
-                showToast('✓ Data refreshed!', 'success');
+                if (!silent) showToast('✓ Data refreshed!', 'success');
             } catch (error) {
                 // Surface the real error instead of silently swapping in mock
                 // data — mock data hides backend/permission failures and makes
@@ -1814,7 +1844,7 @@
             icon.style.animation = autoRefreshEnabled ? 'spin 2s linear infinite' : 'none';
             
             if (autoRefreshEnabled) {
-                autoRefreshInterval = setInterval(loadData, 30000);
+                autoRefreshInterval = setInterval(() => loadData({ silent: true }), 30000);
                 showToast('✓ Auto-refresh enabled', 'success');
             } else {
                 clearInterval(autoRefreshInterval);
@@ -1833,7 +1863,7 @@
 
         // Initial load
         loadData();
-        autoRefreshInterval = setInterval(loadData, 30000);
+        autoRefreshInterval = setInterval(() => loadData({ silent: true }), 30000);
     </script>
 </body>
 </html>
