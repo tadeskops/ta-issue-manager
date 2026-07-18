@@ -7,33 +7,47 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Premium branding colors */
-        :root {
-            --primary: #1a1f2e;
-            --accent: #d4af37;
-            --light: #f5f7fa;
-            --border: #2a3142;
+        /* Keyframe used by the AUTO refresh icon (inline animation
+           style). Committee dashboard declares the same keyframe;
+           without this the icon stays still. */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
         }
-        
+
+        /* Premium branding colors — kept in sync with committee-dashboard.html
+           so the theme.html light/medium overrides target the same tokens. */
+        :root {
+            --primary: #1a1f2e;      /* Deep navy */
+            --accent: #d4af37;       /* Luxury gold */
+            --light: #f5f7fa;        /* Soft white */
+            --border: #2a3142;       /* Subtle borders */
+            --text-primary: #ffffff;
+            --text-secondary: #b0b9c8;
+        }
+
         body {
             background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
-            color: #ffffff;
+            color: var(--text-primary);
         }
-        
+
         .premium-card {
             background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
             border: 1px solid rgba(212, 175, 55, 0.2);
             backdrop-filter: blur(10px);
         }
-        
-        .gold-accent {
-            color: #d4af37;
+
+        .gold-accent  { color: var(--accent); }
+        .gold-border  { border-color: rgba(212, 175, 55, 0.3); }
+
+        /* Subtle gold glow on hover — mirrors committee-dashboard so KPI
+           cards and other .premium-hover elements light up identically. */
+        .premium-hover { transition: all 0.3s ease; }
+        .premium-hover:hover {
+            border-color: rgba(212, 175, 55, 0.6);
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.15);
         }
-        
-        .gold-border {
-            border-color: rgba(212, 175, 55, 0.3);
-        }
-        
+
         /* Card hover glow — orange accent on the active issue cards. */
         #issuesGrid .issue-row:hover {
             border-left: 3px solid rgb(217, 119, 6) !important;
@@ -84,8 +98,11 @@
 
     <!-- Main Container -->
     <div class="max-w-7xl mx-auto p-6">
-        <!-- KPI Cards Row - Compact Premium Design -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <!-- KPI Cards Row - Compact Premium Design.
+             Grid auto-collapses to md:grid-cols-3 when the SLA card is
+             stripped (see FEATURE_SLA branch further down) so the row
+             stays balanced instead of leaving an empty 4th column. -->
+        <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
             <!-- Assigned to Me Card -->
             <div class="premium-card premium-hover rounded-lg px-4 py-3 border border-slate-700 flex items-center gap-3">
                 <div class="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
@@ -147,15 +164,15 @@
                           them in one shot when connectivity returns.
                         -->
                         <button id="draftModeToggle" type="button" onclick="toggleDraftMode()"
-                            class="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-lg bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 transition-all border border-slate-500/30 hover:border-slate-400/50"
-                            title="Toggle Draft Mode — stage status updates locally, then Save Changes to flush all at once">
-                            <i class="fas fa-pen-nib mr-1"></i><span id="draftModeLabel">Draft OFF</span>
+                            title="When ON, status updates from the modal are staged locally and flushed together via the Save Changes bar."
+                            class="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-all whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 text-slate-200 border-slate-500/40">
+                            <i class="fas fa-toggle-off mr-1.5"></i><span id="draftModeLabel">Draft Mode</span>
                         </button>
-                        <button onclick="toggleAutoRefresh()" class="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-lg bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 transition-all border border-slate-500/30 hover:border-slate-400/50" title="Toggle 30s auto-refresh">
-                            <i class="fas fa-sync mr-1" id="refreshIcon" style="animation: spin 2s linear infinite"></i><span id="refreshStatus">AUTO</span>
+                        <button onclick="toggleAutoRefresh()" class="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-all whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 text-slate-200 border-slate-500/40" title="Toggle 30s auto-refresh">
+                            <i class="fas fa-sync mr-1.5" id="refreshIcon" style="animation: spin 2s linear infinite"></i><span id="refreshStatus">AUTO</span>
                         </button>
-                        <button onclick="loadData()" class="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-xs sm:text-sm transition-all border border-blue-400/30 whitespace-nowrap">
-                            <i class="fas fa-sync-alt mr-1 sm:mr-2"></i>Refresh
+                        <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-semibold text-sm transition-all border border-amber-400/30 whitespace-nowrap">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
                         </button>
                     </div>
                 </div>
@@ -377,6 +394,14 @@
                     const card = slaCard.closest('.premium-card');
                     if (card) card.remove();
                 }
+                // Rebalance the KPI grid: 3 cards → md:grid-cols-3 (no
+                // empty 4th column). Committee dashboard has tabs so it
+                // never hits this branch; here we own the layout.
+                const kpiGrid = document.getElementById('kpiGrid');
+                if (kpiGrid) {
+                    kpiGrid.classList.remove('md:grid-cols-4');
+                    kpiGrid.classList.add('md:grid-cols-3');
+                }
                 const slaTh = document.querySelector('table thead th:nth-child(8)');
                 if (slaTh && /SLA/i.test(slaTh.textContent || '')) slaTh.remove();
             }
@@ -499,12 +524,16 @@
             const lbl = document.getElementById('draftModeLabel');
             if (!btn || !lbl) return;
             const on = BuilderBatch.isEnabled();
-            lbl.textContent = on ? 'Draft ON' : 'Draft OFF';
-            // Amber when ON so it's visually distinct from other header buttons.
-            btn.className = 'px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-lg transition-all border ' +
+            lbl.textContent = on ? 'Draft Mode: ON' : 'Draft Mode';
+            // Match committee-dashboard's toggle: same base classes, only
+            // the fill/border/icon shift when Draft Mode is ON. Amber-gold
+            // matches the page's primary accent (Refresh button gradient).
+            btn.className = 'px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-all whitespace-nowrap ' +
                 (on
                     ? 'bg-amber-600/80 hover:bg-amber-500 text-white border-amber-400/60'
-                    : 'bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 border-slate-500/30 hover:border-slate-400/50');
+                    : 'bg-slate-700/40 hover:bg-slate-700/60 text-slate-200 border-slate-500/40');
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = 'fas ' + (on ? 'fa-toggle-on' : 'fa-toggle-off') + ' mr-1.5';
         }
 
         function renderBatchBar() {
