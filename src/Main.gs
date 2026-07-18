@@ -23,8 +23,10 @@ const SHEETS = {
     CLOSED_ISSUES:   "CLOSED_ISSUES",
     CATEGORY_MASTER: "CATEGORY_MASTER",
     DASHBOARD:       "DASHBOARD",
-    // Spreadsheet-side views maintained by formula; no code reader yet.
-    BUILDER_VIEW:    "BUILDER_VIEW",
+    // BUILDER_VIEW was a formula-side view of LIVE_ISSUES with no code
+    // reader — removed 2026-07-19. The builder dashboard reads LIVE_ISSUES
+    // directly via getLiveIssues() (see L1301). The BUILDER_VIEW tab on
+    // the spreadsheet can be deleted or left empty; nothing depends on it.
     ARCHIVES_ISSUES: "ARCHIVES_ISSUES"
 };
 

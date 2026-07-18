@@ -112,19 +112,18 @@
 
 ---
 
-## 5. Google Sheet Schema (9 tabs)
+## 5. Google Sheet Schema (8 tabs)
 
 | # | Tab                  | Purpose                                                                                                                 |
 | - | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | 1 | `Form Responses 1` | Raw form intake (auto-populated by Google Forms)                                                                        |
 | 2 | `PENDING_REVIEW`   | Issues**currently** awaiting committee approval. Rows leave this sheet on approve/reject (strict move).           |
-| 3 | `LIVE_ISSUES`      | Approved, active issues (builder updates here). Rows leave on close.                                                    |
-| 4 | `BUILDER_VIEW`     | Spreadsheet-side formula view of`LIVE_ISSUES` for the builder — no code reader                                       |
-| 5 | `ARCHIVES_ISSUES`  | **Rejected** issues (moved here from `PENDING_REVIEW` on reject). Read-only from the app.                       |
-| 6 | `CLOSED_ISSUES`    | Resolved, archived issues. Layout =`LIVE_COL` + 4 closure columns `[reason, closedDate, closedBy, resolutionDays]`. |
-| 7 | `CATEGORY_MASTER`  | Dropdown values                                                                                                         |
-| 8 | `DASHBOARD`        | Formula-only metric tab                                                                                                 |
-| 9 | `CONFIG`           | Runtime config: identity, assets, feature flags, tunables                                                               |
+| 3 | `LIVE_ISSUES`      | Approved, active issues (builder updates here). Rows leave on close. **Builder dashboard reads this directly** via `getLiveIssues()` — no intermediate view sheet. |
+| 4 | `ARCHIVES_ISSUES`  | **Rejected** issues (moved here from `PENDING_REVIEW` on reject). Read-only from the app.                       |
+| 5 | `CLOSED_ISSUES`    | Resolved, archived issues. Layout =`LIVE_COL` + 4 closure columns `[reason, closedDate, closedBy, resolutionDays]`. |
+| 6 | `CATEGORY_MASTER`  | Dropdown values                                                                                                         |
+| 7 | `DASHBOARD`        | Formula-only metric tab                                                                                                 |
+| 8 | `CONFIG`           | Runtime config: identity, assets, feature flags, tunables                                                               |
 
 `SHEET_ID` is hardcoded in [src/Main.gs](src/Main.gs#L4); all sheet names live in the `SHEETS` constant.
 
