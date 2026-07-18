@@ -598,7 +598,11 @@
         // ================================================================
         const PendingBatch = (() => {
             const KEY_PREFIX = 'IRP_COMMITTEE_BATCH_v1:';
-            let enabled = false;
+            // Default ON — batch review is now the primary workflow.
+            // Users who explicitly toggled it OFF have `enabled: false`
+            // persisted in localStorage; `_restore()` respects that.
+            // Users who never touched the toggle see the ON default.
+            let enabled = true;
             let store = new Map(); // ticketId -> item
 
             function _key() {
