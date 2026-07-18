@@ -137,6 +137,20 @@
                 <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
                     <h2 class="text-lg sm:text-xl font-bold text-slate-100 gold-accent"><i class="fas fa-tasks mr-2 sm:mr-3"></i>My Tasks</h2>
                     <div class="flex flex-wrap gap-2">
+                        <!--
+                          Draft Mode toggle. When ON, status updates
+                          from the modal are staged locally (per-email
+                          in localStorage) and flushed together via
+                          Save Changes on the floating batch bar. This
+                          mirrors the committee dashboard so a builder
+                          can queue several fixes on-site and commit
+                          them in one shot when connectivity returns.
+                        -->
+                        <button id="draftModeToggle" type="button" onclick="toggleDraftMode()"
+                            class="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-lg bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 transition-all border border-slate-500/30 hover:border-slate-400/50"
+                            title="Toggle Draft Mode — stage status updates locally, then Save Changes to flush all at once">
+                            <i class="fas fa-pen-nib mr-1"></i><span id="draftModeLabel">Draft OFF</span>
+                        </button>
                         <button onclick="toggleAutoRefresh()" class="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-lg bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 transition-all border border-slate-500/30 hover:border-slate-400/50" title="Toggle 30s auto-refresh">
                             <i class="fas fa-sync mr-1" id="refreshIcon" style="animation: spin 2s linear infinite"></i><span id="refreshStatus">AUTO</span>
                         </button>
@@ -280,6 +294,31 @@
     <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-4 right-4 px-6 py-3 rounded shadow-lg text-white font-bold hidden z-50"></div>
 
+    <!--
+      Draft Mode floating action bar (hidden by default). Appears only
+      when Draft Mode is ON *and* the buffer has staged updates. Sits
+      centered along the bottom so it never overlaps the toast at the
+      right, matching the committee dashboard's position.
+    -->
+    <div id="batchBar" class="fixed bottom-4 left-1/2 -translate-x-1/2 hidden z-40
+                              bg-slate-900/95 backdrop-blur border border-amber-500/60
+                              rounded-xl shadow-2xl px-4 py-3 flex items-center gap-4">
+        <div class="flex items-center gap-2 text-sm">
+            <i class="fas fa-layer-group text-amber-400"></i>
+            <span class="text-slate-200"><span id="batchCount" class="font-bold text-amber-300">0</span> unsaved change<span id="batchPlural">s</span></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="batchDiscardBtn" type="button" onclick="discardBuilderBatch()"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-500/50 transition-all">
+                <i class="fas fa-undo mr-1"></i>Discard
+            </button>
+            <button id="batchSaveBtn" type="button" onclick="saveBuilderBatch()"
+                class="px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white border border-emerald-400/40 transition-all">
+                <i class="fas fa-save mr-1"></i>Save Changes
+            </button>
+        </div>
+    </div>
+
     <?!= include('src/partials/api') ?>
     <?!= include('src/partials/pdf-report') ?>
     <script>
@@ -298,6 +337,15 @@
                 // Committee members may view this page too (read-only intent).
                 const el = document.getElementById('userEmail');
                 if (el) el.textContent = u.email;
+                // Draft Mode buffer is per-user (localStorage key includes
+                // the email) so init happens as soon as we know who's here.
+                try {
+                    BuilderBatch.init(u.email);
+                    renderDraftToggle();
+                    renderBatchBar();
+                } catch (bootErr) {
+                    console.warn('BuilderBatch init failed:', bootErr);
+                }
             } catch (e) {
                 console.error('Auth check failed:', e);
                 location.href = 'index.html';
@@ -354,6 +402,181 @@
         // the "Data refreshed!" toast to avoid noise.
         let autoRefreshEnabled = true;
         let autoRefreshInterval = null;
+
+        // Which cards are currently expanded. Refreshes rebuild
+        // `#issuesGrid.innerHTML` which would otherwise collapse every
+        // open card; renderIssuesTable() re-applies expanded state
+        // from this Set after painting. Also survives filter changes.
+        const expandedCards = new Set();
+
+        // === Draft Mode / batch buffer =================================
+        //
+        // Per-user localStorage buffer for pending status updates. When
+        // Draft Mode is ON, confirmStatusUpdate() stages an entry here
+        // instead of calling the API immediately; the batchBar shows
+        // the count with Save / Discard controls. saveBuilderBatch()
+        // flushes all entries via a single server commitBatch({op:
+        // 'update_status'...}) call under one ScriptLock so partial
+        // network failures can't leave the sheet half-written.
+        //
+        // Storage key intentionally scoped by user email so two
+        // builders sharing a browser profile don't clobber each other.
+        const BuilderBatch = (() => {
+            const KEY_PREFIX = 'IRP_BUILDER_BATCH_v1:';
+            const DRAFT_KEY_PREFIX = 'IRP_BUILDER_DRAFT_ON_v1:';
+            let email = '';
+            let items = [];        // {ticketId, status, vendor, comment, prevStatus, prevVendor, prevComment, stagedAt}
+            let enabled = false;
+
+            function _key()      { return KEY_PREFIX      + (email || '_'); }
+            function _draftKey() { return DRAFT_KEY_PREFIX + (email || '_'); }
+            function _persist() {
+                try { localStorage.setItem(_key(), JSON.stringify(items)); } catch (e) { /* quota */ }
+            }
+            function _restore() {
+                try {
+                    const raw = localStorage.getItem(_key());
+                    items = raw ? (JSON.parse(raw) || []) : [];
+                } catch (e) { items = []; }
+                try {
+                    enabled = localStorage.getItem(_draftKey()) === '1';
+                } catch (e) { enabled = false; }
+            }
+            return {
+                init(userEmail) {
+                    email = (userEmail || '').toLowerCase();
+                    _restore();
+                },
+                isEnabled() { return enabled; },
+                setEnabled(v) {
+                    enabled = !!v;
+                    try { localStorage.setItem(_draftKey(), enabled ? '1' : '0'); } catch (e) { /* noop */ }
+                },
+                // Add or replace the staged entry for a ticket. Only one
+                // entry per ticket — the most recent value wins.
+                stage(entry) {
+                    if (!entry || !entry.ticketId) return;
+                    const now = new Date().toISOString();
+                    const existing = items.findIndex(i => i.ticketId === entry.ticketId);
+                    const rec = Object.assign({}, entry, { stagedAt: now });
+                    if (existing >= 0) items[existing] = rec;
+                    else items.push(rec);
+                    _persist();
+                },
+                unstage(ticketId) {
+                    items = items.filter(i => i.ticketId !== ticketId);
+                    _persist();
+                },
+                get(ticketId) { return items.find(i => i.ticketId === ticketId) || null; },
+                has(ticketId) { return !!items.find(i => i.ticketId === ticketId); },
+                list() { return items.slice(); },
+                count() { return items.length; },
+                clear() { items = []; _persist(); },
+                // Post-save cleanup: keep only entries whose ticketId is
+                // in `failedIds` so the user can retry just those.
+                keepOnly(failedIds) {
+                    const keep = new Set((failedIds || []).map(String));
+                    items = items.filter(i => keep.has(String(i.ticketId)));
+                    _persist();
+                }
+            };
+        })();
+
+        function toggleDraftMode() {
+            const next = !BuilderBatch.isEnabled();
+            BuilderBatch.setEnabled(next);
+            renderDraftToggle();
+            renderBatchBar();
+            renderIssuesTable();
+            showToast(next
+                ? 'Draft Mode ON — status updates will be staged until you Save Changes'
+                : 'Draft Mode OFF — status updates commit immediately',
+                'success');
+        }
+
+        function renderDraftToggle() {
+            const btn = document.getElementById('draftModeToggle');
+            const lbl = document.getElementById('draftModeLabel');
+            if (!btn || !lbl) return;
+            const on = BuilderBatch.isEnabled();
+            lbl.textContent = on ? 'Draft ON' : 'Draft OFF';
+            // Amber when ON so it's visually distinct from other header buttons.
+            btn.className = 'px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-lg transition-all border ' +
+                (on
+                    ? 'bg-amber-600/80 hover:bg-amber-500 text-white border-amber-400/60'
+                    : 'bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 border-slate-500/30 hover:border-slate-400/50');
+        }
+
+        function renderBatchBar() {
+            const bar = document.getElementById('batchBar');
+            if (!bar) return;
+            const n = BuilderBatch.count();
+            const on = BuilderBatch.isEnabled();
+            if (!on || n === 0) { bar.classList.add('hidden'); return; }
+            bar.classList.remove('hidden');
+            const cnt = document.getElementById('batchCount');
+            const plu = document.getElementById('batchPlural');
+            if (cnt) cnt.textContent = String(n);
+            if (plu) plu.textContent = n === 1 ? '' : 's';
+        }
+
+        async function saveBuilderBatch() {
+            const staged = BuilderBatch.list();
+            if (staged.length === 0) return;
+            const saveBtn = document.getElementById('batchSaveBtn');
+            const discardBtn = document.getElementById('batchDiscardBtn');
+            if (saveBtn) saveBtn.disabled = true;
+            if (discardBtn) discardBtn.disabled = true;
+            try {
+                const payload = staged.map(s => ({
+                    op: 'update_status',
+                    ticketId: s.ticketId,
+                    status: s.status,
+                    comment: s.comment || '',
+                    vendor: s.vendor || ''
+                }));
+                const res = await API.call('commitBatch', { items: payload });
+                const results = (res && res.results) || [];
+                const okCount = (res && typeof res.okCount === 'number')
+                    ? res.okCount
+                    : results.filter(r => r.success).length;
+                const failed = results.filter(r => !r.success);
+                // Keep only failed entries in the buffer so the user can retry.
+                BuilderBatch.keepOnly(failed.map(f => f.ticketId));
+                if (failed.length === 0) {
+                    showToast('✓ Saved ' + okCount + ' update' + (okCount === 1 ? '' : 's'), 'success');
+                } else {
+                    showToast('⚠ Saved ' + okCount + ', ' + failed.length + ' failed — kept in buffer', 'warning');
+                    console.warn('commitBatch failures:', failed);
+                }
+                await loadData({ silent: true });
+            } catch (e) {
+                showToast('✕ Batch save failed: ' + (e && e.message || e), 'error');
+                console.error('saveBuilderBatch error:', e);
+            } finally {
+                if (saveBtn) saveBtn.disabled = false;
+                if (discardBtn) discardBtn.disabled = false;
+                renderBatchBar();
+                renderIssuesTable();
+            }
+        }
+
+        function discardBuilderBatch() {
+            const n = BuilderBatch.count();
+            if (n === 0) return;
+            if (!confirm('Discard ' + n + ' staged update' + (n === 1 ? '' : 's') + '?')) return;
+            BuilderBatch.clear();
+            renderBatchBar();
+            renderIssuesTable();
+            showToast('Discarded ' + n + ' staged update' + (n === 1 ? '' : 's'), 'success');
+        }
+
+        function undoStagedBuilder(ticketId) {
+            BuilderBatch.unstage(ticketId);
+            renderBatchBar();
+            renderIssuesTable();
+        }
+        // ===============================================================
 
         // Populate a Sort dropdown from the shared SORT_ORDER catalog
         // exposed by pdf-report.html. Falls back to a minimal severity
@@ -518,6 +741,9 @@
                 updateKPIs();
                 if (!silent) showToast('📋 Using mock data (API unavailable)', 'success');
             }
+            // Batch bar is driven by localStorage, not by fetched data,
+            // so it must survive a failed load too.
+            try { renderBatchBar(); } catch (e) { /* noop */ }
         }
 
         function toggleAutoRefresh() {
@@ -544,10 +770,30 @@
             if (content.style.maxHeight && content.style.maxHeight !== '0px') {
                 content.style.maxHeight = '0px';
                 icon.style.transform = 'rotate(0deg)';
+                expandedCards.delete(ticketId);
             } else {
                 content.style.maxHeight = content.scrollHeight + 'px';
                 icon.style.transform = 'rotate(180deg)';
+                expandedCards.add(ticketId);
             }
+        }
+
+        // Re-open every card that was expanded before the last render.
+        // Called at the end of renderIssuesTable() so an auto-refresh
+        // (or a filter change) never collapses cards the user is
+        // actively reading.
+        function _restoreExpandedCards() {
+            expandedCards.forEach(ticketId => {
+                const safe = ticketId.replace(/[^A-Za-z0-9_-]/g, '_');
+                const content = document.querySelector(`.issue-content-${safe}`);
+                const icon = document.querySelector(`.toggle-icon-${safe}`);
+                if (!content || !icon) return;
+                // scrollHeight is 0 before layout in some engines; a
+                // large max value keeps CSS transitions intact while
+                // ensuring the panel is fully open.
+                content.style.maxHeight = (content.scrollHeight || 9999) + 'px';
+                icon.style.transform = 'rotate(180deg)';
+            });
         }
 
         function renderIssuesTable() {
@@ -566,6 +812,12 @@
             grid.innerHTML = filtered.map(issue => {
                 const ticketId = issue.ticketId;
                 const safeId = ticketId.replace(/[^A-Za-z0-9_-]/g, '_');
+                // Check whether this ticket has a Draft Mode pending
+                // update. When staged, the row is rendered with an
+                // amber "Will change to X" preview pill and the Update
+                // Status button is replaced with Undo so the builder
+                // can back out before flushing the batch.
+                const staged = BuilderBatch.get(ticketId);
                 const statusColor = getStatusColor(issue.builder.status);
                 const sevColor = getSeverityColor(issue.issue.severity);
                 const breached = slaOn && issue.sla && issue.sla.breached;
@@ -575,10 +827,31 @@
 
                 const sevBadge   = `<span class="px-2.5 py-1 rounded-full text-white text-[10px] sm:text-xs font-bold uppercase tracking-wider whitespace-nowrap shadow" style="background-color: ${sevColor}">${issue.issue.severity}</span>`;
                 const statePill  = `<span class="px-2.5 py-1 rounded-full text-white text-[10px] sm:text-xs font-bold whitespace-nowrap uppercase tracking-wider shadow" style="background-color: ${statusColor}">${status}</span>`;
+                const stagedPill = staged
+                    ? `<span class="px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold whitespace-nowrap uppercase tracking-wider shadow bg-amber-500/90 text-slate-900 border border-amber-300" title="Staged for next Save Changes"><i class="fas fa-hourglass-half mr-1"></i>Will → ${staged.status}</span>`
+                    : '';
                 const chevron    = `<button onclick="toggleIssueCard('${ticketId}', event)" class="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-slate-600/60 text-amber-300 transition-colors flex-shrink-0" title="Expand"><i class="fas fa-chevron-down toggle-icon-${safeId} transition-transform" style="transform: rotate(0deg)"></i></button>`;
 
-                const updateBtn = `<button onclick="selectBuilderRow('${ticketId}');openStatusModal('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow"><i class="fas fa-edit"></i><span>Update Status</span></button>`;
+                const updateBtn = staged
+                    ? `<button onclick="undoStagedBuilder('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition-colors shadow" title="Remove this update from the draft buffer"><i class="fas fa-rotate-left"></i><span>Undo Staged</span></button>`
+                    : `<button onclick="selectBuilderRow('${ticketId}');openStatusModal('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow"><i class="fas fa-edit"></i><span>Update Status</span></button>`;
                 const viewBtn   = `<button onclick="selectBuilderRow('${ticketId}');openDetailsModal('${ticketId}')" class="px-3 py-1.5 inline-flex items-center gap-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors shadow"><i class="fas fa-eye"></i><span>View Details</span></button>`;
+
+                // Staged preview block, shown only when Draft Mode
+                // captured pending changes for this ticket. Renders
+                // vendor / comment overrides so the builder can verify
+                // before Save Changes.
+                const stagedPreview = staged
+                    ? `<div class="border border-amber-400/50 bg-amber-500/10 rounded-lg p-3">
+                            <p class="text-[10px] text-amber-300 uppercase tracking-wider font-bold mb-1">
+                                <i class="fas fa-pen-nib mr-1"></i>Draft (unsaved)
+                            </p>
+                            <p class="text-sm text-amber-100"><strong>New status:</strong> ${staged.status}</p>
+                            ${staged.vendor ? `<p class="text-sm text-amber-100"><strong>Vendor:</strong> ${staged.vendor}</p>` : ''}
+                            ${staged.comment ? `<p class="text-sm text-amber-100 whitespace-pre-wrap"><strong>Comment:</strong> ${staged.comment}</p>` : ''}
+                            <p class="text-[10px] text-amber-300/80 mt-1">Staged ${new Date(staged.stagedAt).toLocaleTimeString()} — will commit on Save Changes.</p>
+                        </div>`
+                    : '';
 
                 const slaRow = (slaOn && issue.sla)
                     ? `<div>
@@ -617,12 +890,13 @@
                     </div>` : '';
 
                 return `
-                    <div class="premium-card rounded-xl overflow-hidden border ${breached ? 'border-red-700/40 bg-red-950/10' : 'border-slate-700 hover:border-amber-500/50'} transition-all issue-row" id="row-${ticketId}" style="border-left: 3px solid transparent;">
+                    <div class="premium-card rounded-xl overflow-hidden border ${staged ? 'border-amber-400/70 bg-amber-950/10 ring-1 ring-amber-400/30' : (breached ? 'border-red-700/40 bg-red-950/10' : 'border-slate-700 hover:border-amber-500/50')} transition-all issue-row" id="row-${ticketId}" style="border-left: 3px solid transparent;">
                         <!-- COLLAPSED HEADER: title + status + severity + chevron + meta sub-row -->
                         <div class="bg-gradient-to-r from-slate-800/30 to-slate-700/20 px-4 py-3 cursor-pointer hover:bg-slate-800/40 transition-colors" onclick="toggleIssueCard('${ticketId}', event)">
                             <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                                 <h3 class="text-sm sm:text-base font-bold text-slate-100 leading-snug sm:flex-1 min-w-0 break-words">${window.titleWithTicketId(issue)}</h3>
-                                <div class="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-auto">
+                                <div class="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-auto flex-wrap">
+                                    ${stagedPill}
                                     ${statePill}
                                     ${sevBadge}
                                     ${chevron}
@@ -648,6 +922,7 @@
                                     </p>
                                     <p class="text-slate-300 text-sm leading-relaxed bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">${desc}</p>
                                 </div>
+                                ${stagedPreview}
                                 ${photosBlock}
                                 ${slaRow ? `<div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${slaRow}</div>` : ''}
                                 <div class="pt-3 border-t border-slate-700/50">
@@ -664,6 +939,14 @@
                     </div>
                 `;
             }).join('');
+
+            // Prune expandedCards entries whose tickets are no longer
+            // in the filtered view, then re-open the rest — this is
+            // what keeps expanded cards from collapsing during a
+            // 30 s auto-refresh or a status-filter change.
+            const visible = new Set(filtered.map(f => f.ticketId));
+            expandedCards.forEach(id => { if (!visible.has(id)) expandedCards.delete(id); });
+            _restoreExpandedCards();
         }
 
         function updateKPIs() {
@@ -713,11 +996,18 @@
             `;
 
             document.getElementById('currentStatusDisplay').textContent = issue.builder.status || 'ASSIGNED';
-            document.getElementById('newStatus').value = '';
-            document.getElementById('vendorName').value = issue.builder.assignedVendor || '';
-            document.getElementById('workComment').value = issue.builder.comment || '';
-            document.getElementById('charCount').textContent = (issue.builder.comment || '').length;
-            
+            // If this ticket already has a staged Draft Mode entry,
+            // pre-fill the form with those pending values so editing
+            // the draft is friction-free.
+            const staged = BuilderBatch.get(ticketId);
+            const preStatus  = (staged && staged.status)  || '';
+            const preVendor  = (staged && staged.vendor)  || issue.builder.assignedVendor || '';
+            const preComment = (staged && staged.comment) || issue.builder.comment || '';
+            document.getElementById('newStatus').value = preStatus;
+            document.getElementById('vendorName').value = preVendor;
+            document.getElementById('workComment').value = preComment;
+            document.getElementById('charCount').textContent = preComment.length;
+
             document.getElementById('statusModal').classList.remove('hidden');
         }
 
@@ -736,11 +1026,28 @@
                 return;
             }
 
+            // Draft Mode: stage locally, close modal, refresh grid so
+            // the amber preview pill appears without hitting the API.
+            // The batch is flushed later via Save Changes.
+            if (BuilderBatch.isEnabled()) {
+                BuilderBatch.stage({
+                    ticketId: currentTicketId,
+                    status: newStatus,
+                    vendor: vendor,
+                    comment: comment
+                });
+                closeModal('statusModal');
+                renderBatchBar();
+                renderIssuesTable();
+                showToast('✓ Update staged — click Save Changes to commit', 'success');
+                return;
+            }
+
             try {
                 await API.updateBuilderStatus(currentTicketId, newStatus, comment, vendor);
                 closeModal('statusModal');
                 showToast('✓ Status updated successfully!', 'success');
-                loadData();
+                loadData({ silent: true });
             } catch (error) {
                 showToast('✕ Error: ' + error.message, 'error');
             }
@@ -901,7 +1208,7 @@
                 });
                 closeModal('deleteModal');
                 showToast('✓ Issue deleted successfully!', 'success');
-                loadData();
+                loadData({ silent: true });
             } catch (error) {
                 showToast('✕ Error: ' + error.message, 'error');
             }

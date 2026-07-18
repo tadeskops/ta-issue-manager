@@ -915,9 +915,10 @@ function updateIssueDescription(ticketId, description, sheetName, userEmail) {
  *
  * payload shape (server-side):
  *   items: [
- *     { op: "approve", ticketId, severity },
- *     { op: "reject",  ticketId, reason   },
- *     { op: "delete",  ticketId, sheet    }
+ *     { op: "approve",       ticketId, severity },
+ *     { op: "reject",        ticketId, reason   },
+ *     { op: "delete",        ticketId, sheet    },
+ *     { op: "update_status", ticketId, status, comment, vendor }
  *   ]
  *
  * Returns:
@@ -937,6 +938,10 @@ function commitBatch(items, userEmail) {
 
         const lock = LockService.getScriptLock();
         lock.waitLock(20000);
+        // Per-item role gate. Committee can do anything; builders can
+        // only stage update_status ops (their draft-mode buffer).
+        let callerRole = "UNKNOWN";
+        try { callerRole = getUserRole(userEmail || ""); } catch (_e) { /* noop */ }
         const results = [];
         try {
             for (let i = 0; i < items.length; i++) {
@@ -947,12 +952,25 @@ function commitBatch(items, userEmail) {
                 try {
                     if (!ticketId) {
                         out = { success: false, error: "Missing ticketId" };
+                    } else if (callerRole !== "COMMITTEE" && op !== "update_status") {
+                        out = { success: false, error: "Op '" + op + "' not permitted for role " + callerRole };
                     } else if (op === "approve") {
                         out = approveIssue(ticketId, userEmail || "", it.severity);
                     } else if (op === "reject") {
                         out = rejectIssue(ticketId, it.reason || "", userEmail || "");
                     } else if (op === "delete") {
                         out = deleteIssue(ticketId, it.sheet || SHEETS.PENDING_REVIEW);
+                    } else if (op === "update_status") {
+                        // Builder Draft Mode — stage per-ticket status
+                        // transitions (ASSIGNED -> IN_PROGRESS -> WORK_COMPLETED)
+                        // plus optional vendor / comment updates.
+                        out = updateBuilderStatus(
+                            ticketId,
+                            it.status || "",
+                            it.comment || "",
+                            it.vendor || "",
+                            it.closureDate || null
+                        );
                     } else {
                         out = { success: false, error: "Unsupported op: " + op };
                     }

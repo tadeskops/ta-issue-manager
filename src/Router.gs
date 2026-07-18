@@ -423,7 +423,11 @@ function isActionAllowed_(action, role) {
         "getLiveIssues", "updateBuilderStatus", "closeIssue", "reopenIssue",
         "getFormResponses", "getIssuesWithStatus", "getSubmittedIssues",
         "validateUserAccess", "getDashboardMetrics", "getClientConfig",
-        "getReportPhotoB64", "commitFullReportPdf"
+        "getReportPhotoB64", "commitFullReportPdf",
+        // Builders may commit batches too, but the server-side
+        // commitBatch() enforces that non-COMMITTEE roles can only
+        // dispatch op="update_status" (per-item role gate).
+        "commitBatch"
     ];
     const RESIDENT_ALLOWED = [
         "submitIssue", "getCategoryMaster", "getIssuesWithStatus",
