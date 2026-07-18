@@ -919,47 +919,6 @@
             }
         }
 
-        // Mock data for local testing
-        const mockPendingIssues = [
-            {
-                ticketId: 'SUB-2026-0087',
-                resident: { name: 'Ahmed Al Mansoori', email: 'ahmed.mansoori@example.com' },
-                location: { tower: 'Tower A', flat: '1502' },
-                issue: { category: 'HVAC/Cooling', subcategory: 'AC Unit', severity: 'HIGH', description: 'AC not cooling properly in master bedroom' },
-                dateReported: '2026-05-08',
-                sla: { daysRemaining: 5, breached: false }
-            },
-            {
-                ticketId: 'SUB-2026-0088',
-                resident: { name: 'Fatima Al Naqbi', email: 'fatima.naqbi@example.com' },
-                location: { tower: 'Tower B', flat: '2308' },
-                issue: { category: 'Plumbing', subcategory: 'Leak', severity: 'CRITICAL', description: 'Water leak from ceiling in guest bedroom' },
-                dateReported: '2026-05-09',
-                sla: { daysRemaining: 2, breached: false }
-            }
-        ];
-
-        const mockActiveIssues = [
-            {
-                ticketId: 'TKT-00001',
-                resident: { name: 'Mohammed Al Mazrouei', email: 'mohammed.mazrouei@example.com' },
-                location: { tower: 'Tower C', flat: '3102' },
-                issue: { category: 'Civil', subcategory: 'Cracks', severity: 'MEDIUM', description: 'Cracks in bathroom tiles' },
-                dateReported: '2026-04-28',
-                builder: { status: 'IN_PROGRESS', lastUpdated: '2026-05-10' },
-                sla: { daysRemaining: 8, breached: false }
-            },
-            {
-                ticketId: 'TKT-00002',
-                resident: { name: 'Layla Al Suwaidi', email: 'layla.suwaidi@example.com' },
-                location: { tower: 'Tower D', flat: '1805' },
-                issue: { category: 'Security/Locks', subcategory: 'Door Lock', severity: 'HIGH', description: 'Main door lock not functioning' },
-                dateReported: '2026-04-15',
-                builder: { status: 'ASSIGNED', lastUpdated: '2026-05-09' },
-                sla: { daysRemaining: -3, breached: true }
-            }
-        ];
-
         document.getElementById('userEmail').textContent = (window.IRP_USER && window.IRP_USER.email) || '…';
         
         // Load initial data

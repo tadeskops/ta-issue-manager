@@ -631,37 +631,6 @@
             return (Date.now() - d.getTime()) <= days * 24 * 60 * 60 * 1000;
         }
 
-        // Mock data for local testing
-        const mockBuilderIssues = [
-            {
-                ticketId: 'TKT-00001',
-                resident: { name: 'Mohammed Al Mazrouei', email: 'mohammed.mazrouei@example.com' },
-                location: { tower: 'Tower C', flat: '3102' },
-                issue: { category: 'Civil', severity: 'MEDIUM', description: 'Cracks in bathroom tiles' },
-                dateReported: '2026-04-28',
-                builder: { status: 'ASSIGNED' },
-                sla: { daysRemaining: 8, breached: false }
-            },
-            {
-                ticketId: 'TKT-00002',
-                resident: { name: 'Layla Al Suwaidi', email: 'layla.suwaidi@example.com' },
-                location: { tower: 'Tower D', flat: '1805' },
-                issue: { category: 'Security/Locks', severity: 'HIGH', description: 'Main door lock not functioning' },
-                dateReported: '2026-04-15',
-                builder: { status: 'IN_PROGRESS' },
-                sla: { daysRemaining: -3, breached: true }
-            },
-            {
-                ticketId: 'TKT-00003',
-                resident: { name: 'Sara Al Dhaheri', email: 'sara.dhaheri@example.com' },
-                location: { tower: 'Tower A', flat: '501' },
-                issue: { category: 'Plumbing', severity: 'MEDIUM', description: 'Slow drainage in master bathroom' },
-                dateReported: '2026-05-02',
-                builder: { status: 'WORK_COMPLETED' },
-                sla: { daysRemaining: 12, breached: false }
-            }
-        ];
-
         document.getElementById('userEmail').textContent = (window.IRP_USER && window.IRP_USER.email) || '…';
 
         // (Initial load is triggered at the bottom of this script after
@@ -740,13 +709,21 @@
                 updateKPIs();
                 if (!silent) showToast('✓ Data refreshed!', 'success');
             } catch (error) {
-                console.warn('API Error, loading mock data:', error.message);
-                // Fallback to mock data for local testing
-                allIssues = mockBuilderIssues.map(normalizeIssueData);
-
+                // Surface the real error instead of silently swapping in
+                // mock data — fake rows hide backend/permission failures
+                // and make it look like the dashboard "works" with fake
+                // content. Match committee-dashboard error semantics.
+                console.error('Builder dashboard load failed:', error);
+                allIssues = [];
                 renderIssuesTable();
                 updateKPIs();
-                if (!silent) showToast('📋 Using mock data (API unavailable)', 'success');
+
+                const msg = (error && error.message) || String(error);
+                let hint = '';
+                if (/permission|not have access|denied|openById|cannot open the issues spreadsheet|cannot access spreadsheet/i.test(msg)) {
+                    hint = ' — your Google account may not have access to the spreadsheet. Ask the admin to run syncRoleAccessNow() (or share the issues sheet with you as Viewer).';
+                }
+                showToast('Could not load issues: ' + msg + hint, 'error');
             }
             // Batch bar is driven by localStorage, not by fetched data,
             // so it must survive a failed load too.
