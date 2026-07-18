@@ -133,12 +133,17 @@
 
         <!-- Issues Table -->
         <div class="premium-card rounded-xl overflow-hidden border border-slate-700">
-            <div class="p-6 border-b gold-border">
-                <div class="flex justify-between items-center gap-3 mb-3">
-                    <h2 class="text-xl font-bold text-slate-100 gold-accent"><i class="fas fa-tasks mr-3"></i>My Tasks</h2>
-                    <button onclick="loadData()" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all border border-blue-400/30 whitespace-nowrap">
-                        <i class="fas fa-sync-alt mr-2"></i>Refresh
-                    </button>
+            <div class="p-4 sm:p-6 border-b gold-border">
+                <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
+                    <h2 class="text-lg sm:text-xl font-bold text-slate-100 gold-accent"><i class="fas fa-tasks mr-2 sm:mr-3"></i>My Tasks</h2>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="toggleAutoRefresh()" class="px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold rounded-lg bg-slate-600/50 hover:bg-slate-500/70 text-slate-100 transition-all border border-slate-500/30 hover:border-slate-400/50" title="Toggle 30s auto-refresh">
+                            <i class="fas fa-sync mr-1" id="refreshIcon" style="animation: spin 2s linear infinite"></i><span id="refreshStatus">AUTO</span>
+                        </button>
+                        <button onclick="loadData()" class="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold text-xs sm:text-sm transition-all border border-blue-400/30 whitespace-nowrap">
+                            <i class="fas fa-sync-alt mr-1 sm:mr-2"></i>Refresh
+                        </button>
+                    </div>
                 </div>
                 <div class="flex flex-wrap gap-2 items-center">
                     <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold"><i class="fas fa-filter mr-1 gold-accent"></i>Status</label>
@@ -148,12 +153,16 @@
                         <option value="IN_PROGRESS">In Progress</option>
                         <option value="WORK_COMPLETED">Work Completed</option>
                     </select>
-                    <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold ml-2"><i class="fas fa-calendar-day mr-1 gold-accent"></i>Date Reported</label>
+                    <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold sm:ml-2"><i class="fas fa-calendar-day mr-1 gold-accent"></i>Date</label>
                     <select id="dateFilter" onchange="filterByDate(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
                         <option value="ALL">All Time</option>
                         <option value="7">Last 7 Days</option>
                         <option value="30">Last 30 Days</option>
                         <option value="90">Last 90 Days</option>
+                    </select>
+                    <label class="text-[11px] text-slate-400 uppercase tracking-wider font-bold sm:ml-2"><i class="fas fa-arrow-down-wide-short mr-1 gold-accent"></i>Sort</label>
+                    <select id="issuesSort" onchange="setIssuesSort(this.value)" class="border border-slate-500/50 bg-slate-700/30 text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                        <!-- Populated at bootstrap from window.IRP_REPORT.SORT_ORDER -->
                     </select>
                 </div>
             </div>
@@ -229,14 +238,17 @@
     </div>
 
     <!-- Modal: View Issue Details -->
-    <div id="detailsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 class="text-2xl font-bold mb-4">📄 Issue Details</h2>
-            <div id="detailsContent" class="space-y-4">
+    <div id="detailsModal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-700">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl sm:text-2xl font-bold text-amber-300 flex items-center gap-2"><i class="fas fa-file-lines"></i>Issue Details</h2>
+                <button onclick="closeModal('detailsModal')" class="text-slate-400 hover:text-white text-2xl leading-none" aria-label="Close">&times;</button>
+            </div>
+            <div id="detailsContent" class="space-y-4 text-slate-200">
                 <!-- Details populated by JS -->
             </div>
             <div class="mt-6">
-                <button onclick="closeModal('detailsModal')" class="w-full bg-gray-500 text-white py-2 rounded hover:bg-gray-600 font-bold">
+                <button onclick="closeModal('detailsModal')" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-100 py-2.5 rounded-lg font-bold transition border border-slate-600">
                     Close
                 </button>
             </div>
@@ -244,21 +256,21 @@
     </div>
 
     <!-- Modal: Delete Issue -->
-    <div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded shadow-lg p-6 w-full max-w-md">
+    <div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-md border border-slate-700">
             <div class="mb-4 text-center">
-                <i class="fas fa-exclamation-triangle text-5xl text-red-500 mb-2"></i>
-                <h2 class="text-2xl font-bold text-red-600">Delete Issue?</h2>
+                <i class="fas fa-exclamation-triangle text-5xl text-red-400 mb-2"></i>
+                <h2 class="text-2xl font-bold text-red-400">Delete Issue?</h2>
             </div>
-            <div id="deleteModalDetails" class="bg-gray-50 p-4 rounded mb-4 space-y-2 text-sm">
+            <div id="deleteModalDetails" class="bg-slate-900/60 border border-slate-700/60 p-4 rounded-lg mb-4 space-y-2 text-sm text-slate-200">
                 <!-- Details populated by JS -->
             </div>
-            <p class="text-gray-600 mb-4 text-center">This action cannot be undone. The issue and all associated data will be permanently deleted.</p>
+            <p class="text-slate-400 mb-4 text-center text-sm">This action cannot be undone. The issue and all associated data will be permanently deleted.</p>
             <div class="flex gap-3">
-                <button onclick="confirmDelete()" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded font-bold transition-colors">
+                <button onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-lg font-bold transition-colors">
                     <i class="fas fa-trash mr-2"></i>Delete Issue
                 </button>
-                <button onclick="closeModal('deleteModal')" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded font-bold transition-colors">
+                <button onclick="closeModal('deleteModal')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-100 py-2.5 rounded-lg font-bold transition-colors border border-slate-600">
                     Cancel
                 </button>
             </div>
@@ -331,6 +343,52 @@
         let currentTicketId = null;
         let builderStatusFilter = '';
         let builderDateFilter = 'ALL';
+        // Grid sort order — shares the SORT_ORDER catalog with the PDF
+        // report partial (pdf-report.html) so on-screen ordering matches
+        // the exported report when both use their defaults. Default is
+        // severity worst-first (Critical → High → Medium → Low → blank).
+        let issuesSort = 'severity-desc';
+        // Auto-refresh toggle, mirrored from committee dashboard so
+        // builders get the same control (pause while updating a status
+        // in the modal, resume when done). Silent refreshes suppress
+        // the "Data refreshed!" toast to avoid noise.
+        let autoRefreshEnabled = true;
+        let autoRefreshInterval = null;
+
+        // Populate a Sort dropdown from the shared SORT_ORDER catalog
+        // exposed by pdf-report.html. Falls back to a minimal severity
+        // toggle if the report partial hasn't loaded yet.
+        function _populateSortSelect(id, current) {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const opts = (window.IRP_REPORT && Array.isArray(window.IRP_REPORT.SORT_ORDER))
+                ? window.IRP_REPORT.SORT_ORDER
+                : [
+                    { key: 'severity-desc', label: 'Severity: Critical → Low (default)' },
+                    { key: 'severity-asc',  label: 'Severity: Low → Critical' }
+                  ];
+            sel.innerHTML = opts.map(o =>
+                '<option value="' + o.key + '"' + (o.key === current ? ' selected' : '') + '>' + o.label + '</option>'
+            ).join('');
+        }
+
+        function setIssuesSort(v) { issuesSort = String(v || 'severity-desc'); renderIssuesTable(); }
+
+        // Sort a shallow copy of `list` via the shared catalog. Contained
+        // fallback so a missing partial never breaks the grid.
+        function _sortIssues(list, key) {
+            if (window.IRP_REPORT && typeof window.IRP_REPORT.sortIssuesByChoice === 'function') {
+                return window.IRP_REPORT.sortIssuesByChoice(list, key);
+            }
+            const RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+            const rank = i => {
+                const r = RANK[String(((i || {}).issue || {}).severity || '').toUpperCase()];
+                return r == null ? 999 : r;
+            };
+            const arr = (list || []).slice();
+            arr.sort((a, b) => (key === 'severity-asc' ? rank(b) - rank(a) : rank(a) - rank(b)));
+            return arr;
+        }
 
         // Returns true when the issue's dateReported falls inside the chosen
         // window. range is 'ALL' (no filter) or a day-count string ('7','30','90').
@@ -375,9 +433,11 @@
         ];
 
         document.getElementById('userEmail').textContent = (window.IRP_USER && window.IRP_USER.email) || '…';
-        
-        // Load initial data
-        window.addEventListener('load', loadData);
+
+        // (Initial load is triggered at the bottom of this script after
+        // all helpers are defined; see _populateSortSelect + loadData
+        // call there. Removed the duplicate 'load' listener that used
+        // to fire loadData twice.)
 
         // Auto-update character count
         document.getElementById('workComment').addEventListener('input', function() {
@@ -416,7 +476,21 @@
             };
         }
 
-        async function loadData() {
+        async function loadData(opts) {
+            const silent = !!(opts && opts.silent);
+            // Guard: don't blow away the Update Status modal while the
+            // builder is filling it out. The modal is a discrete UI so
+            // a simple "modal open?" check suffices — no need for the
+            // per-textarea edit set the committee dashboard uses.
+            const statusModalOpen = !document.getElementById('statusModal').classList.contains('hidden');
+            if (statusModalOpen) {
+                if (silent) {
+                    console.debug('builder: auto-refresh skipped, status modal is open');
+                } else {
+                    showToast('Refresh paused — close the Update Status modal first', 'warning');
+                }
+                return;
+            }
             try {
                 const liveP   = API.getLiveIssues('BUILDER');
                 const closedP = API.getClosedIssues();
@@ -434,15 +508,30 @@
 
                 renderIssuesTable();
                 updateKPIs();
-                showToast('✓ Data refreshed!', 'success');
+                if (!silent) showToast('✓ Data refreshed!', 'success');
             } catch (error) {
                 console.warn('API Error, loading mock data:', error.message);
                 // Fallback to mock data for local testing
                 allIssues = mockBuilderIssues.map(normalizeIssueData);
-                
+
                 renderIssuesTable();
                 updateKPIs();
-                showToast('📋 Using mock data (API unavailable)', 'success');
+                if (!silent) showToast('📋 Using mock data (API unavailable)', 'success');
+            }
+        }
+
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+            document.getElementById('refreshStatus').textContent = autoRefreshEnabled ? 'AUTO' : 'OFF';
+            const icon = document.getElementById('refreshIcon');
+            if (icon) icon.style.animation = autoRefreshEnabled ? 'spin 2s linear infinite' : 'none';
+            if (autoRefreshEnabled) {
+                autoRefreshInterval = setInterval(() => loadData({ silent: true }), 30000);
+                showToast('✓ Auto-refresh enabled', 'success');
+            } else {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                showToast('✗ Auto-refresh disabled', 'success');
             }
         }
 
@@ -463,10 +552,11 @@
 
         function renderIssuesTable() {
             const grid = document.getElementById('issuesGrid');
-            const filtered = allIssues.filter(i => {
+            const filteredRaw = allIssues.filter(i => {
                 if (builderStatusFilter && String(i.builder.status || 'ASSIGNED').toUpperCase() !== builderStatusFilter) return false;
                 return passesDateFilter(i, builderDateFilter);
             });
+            const filtered = _sortIssues(filteredRaw, issuesSort);
             if (!filtered || filtered.length === 0) {
                 grid.innerHTML = '<div class="col-span-full p-6 text-center text-slate-500">No issues to show</div>';
                 return;
@@ -676,36 +766,36 @@
             const daysOpen = Math.floor((new Date() - new Date(issue.dateReported)) / (1000 * 60 * 60 * 24));
 
             document.getElementById('detailsContent').innerHTML = `
-                <div class="bg-blue-50 p-4 rounded">
-                    <h3 class="font-bold text-lg mb-2">📍 Issue Information</h3>
-                    <p><strong>Ticket ID:</strong> <span class="font-mono text-blue-600 font-bold">${issue.ticketId}</span></p>
-                    <p><strong>Category:</strong> ${issue.issue.category}</p>
-                    <p><strong>Sub-Category:</strong> ${issue.issue.subcategory || '—'}</p>
-                    <p><strong>Severity:</strong> <span style="color: ${getSeverityColor(issue.issue.severity)}" class="font-bold">${issue.issue.severity}</span></p>
-                    <p><strong>Description:</strong> ${issue.issue.description}</p>
+                <div class="bg-slate-900/60 border border-blue-500/20 p-4 rounded-lg">
+                    <h3 class="font-bold text-base sm:text-lg mb-2 text-blue-300"><i class="fas fa-info-circle mr-2"></i>Issue Information</h3>
+                    <p><strong class="text-slate-400">Ticket ID:</strong> <span class="font-mono text-amber-300 font-bold">${issue.ticketId}</span></p>
+                    <p><strong class="text-slate-400">Category:</strong> ${issue.issue.category}</p>
+                    <p><strong class="text-slate-400">Sub-Category:</strong> ${issue.issue.subcategory || '—'}</p>
+                    <p><strong class="text-slate-400">Severity:</strong> <span style="color: ${getSeverityColor(issue.issue.severity)}" class="font-bold">${issue.issue.severity}</span></p>
+                    <p><strong class="text-slate-400">Description:</strong> ${issue.issue.description}</p>
                 </div>
 
-                <div class="bg-green-50 p-4 rounded">
-                    <h3 class="font-bold text-lg mb-2">👤 Resident Information</h3>
-                    <p><strong>Name:</strong> ${issue.resident.name}</p>
-                    <p><strong>Location:</strong> ${issue.location.tower} / ${issue.location.flat}</p>
+                <div class="bg-slate-900/60 border border-emerald-500/20 p-4 rounded-lg">
+                    <h3 class="font-bold text-base sm:text-lg mb-2 text-emerald-300"><i class="fas fa-user mr-2"></i>Resident Information</h3>
+                    <p><strong class="text-slate-400">Name:</strong> ${issue.resident.name}</p>
+                    <p><strong class="text-slate-400">Location:</strong> ${issue.location.tower} / ${issue.location.flat}</p>
                 </div>
 
-                <div class="bg-yellow-50 p-4 rounded">
-                    <h3 class="font-bold text-lg mb-2">⏱️ Timeline Information</h3>
-                    <p><strong>Reported:</strong> ${new Date(issue.dateReported).toLocaleDateString('en-IN')}</p>
-                    <p><strong>Days Open:</strong> ${daysOpen} days</p>
+                <div class="bg-slate-900/60 border border-amber-500/20 p-4 rounded-lg">
+                    <h3 class="font-bold text-base sm:text-lg mb-2 text-amber-300"><i class="fas fa-clock mr-2"></i>Timeline Information</h3>
+                    <p><strong class="text-slate-400">Reported:</strong> ${new Date(issue.dateReported).toLocaleDateString('en-IN')}</p>
+                    <p><strong class="text-slate-400">Days Open:</strong> ${daysOpen} days</p>
                     ${__slaOn() ? `
-                    <p><strong>SLA Due Date:</strong> ${new Date(issue.sla.dueDate).toLocaleDateString('en-IN')}</p>
-                    <p><strong>Days Remaining:</strong> <span class="${issue.sla.breached ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}">${issue.sla.daysRemaining} days</span></p>` : ''}
+                    <p><strong class="text-slate-400">SLA Due Date:</strong> ${new Date(issue.sla.dueDate).toLocaleDateString('en-IN')}</p>
+                    <p><strong class="text-slate-400">Days Remaining:</strong> <span class="${issue.sla.breached ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}">${issue.sla.daysRemaining} days</span></p>` : ''}
                 </div>
 
-                <div class="bg-orange-50 p-4 rounded">
-                    <h3 class="font-bold text-lg mb-2">🔧 Work Status</h3>
-                    <p><strong>Current Status:</strong> <span style="background-color: ${getStatusColor(issue.builder.status)}" class="text-white px-2 py-1 rounded font-bold">${issue.builder.status}</span></p>
-                    <p><strong>Last Updated:</strong> ${statusTime}</p>
-                    <p><strong>Assigned Vendor:</strong> ${issue.builder.assignedVendor || 'Not assigned'}</p>
-                    <p><strong>Latest Comment:</strong> ${issue.builder.comment || 'No comments yet'}</p>
+                <div class="bg-slate-900/60 border border-orange-500/20 p-4 rounded-lg">
+                    <h3 class="font-bold text-base sm:text-lg mb-2 text-orange-300"><i class="fas fa-wrench mr-2"></i>Work Status</h3>
+                    <p><strong class="text-slate-400">Current Status:</strong> <span style="background-color: ${getStatusColor(issue.builder.status)}" class="text-white px-2 py-0.5 rounded font-bold text-xs">${issue.builder.status}</span></p>
+                    <p><strong class="text-slate-400">Last Updated:</strong> ${statusTime}</p>
+                    <p><strong class="text-slate-400">Assigned Vendor:</strong> ${issue.builder.assignedVendor || 'Not assigned'}</p>
+                    <p><strong class="text-slate-400">Latest Comment:</strong> ${issue.builder.comment || 'No comments yet'}</p>
                 </div>
 
                 ${issue.issue.photoLinks && issue.issue.photoLinks.length > 0 ? `
@@ -794,10 +884,10 @@
             currentTicketId = ticketId;
 
             document.getElementById('deleteModalDetails').innerHTML = `
-                <p class="text-gray-800"><strong>Ticket ID:</strong> <span class="text-blue-600 font-bold">${ticketDisplay}</span></p>
-                <p class="text-gray-800"><strong>Resident:</strong> ${issue.resident.name}</p>
-                <p class="text-gray-800"><strong>Location:</strong> ${issue.location.tower}/${issue.location.flat}</p>
-                <p class="text-gray-800"><strong>Category:</strong> ${issue.issue.category}</p>
+                <p><strong class="text-slate-400">Ticket ID:</strong> <span class="text-amber-300 font-mono font-bold">${ticketDisplay}</span></p>
+                <p><strong class="text-slate-400">Resident:</strong> ${issue.resident.name}</p>
+                <p><strong class="text-slate-400">Location:</strong> ${issue.location.tower}/${issue.location.flat}</p>
+                <p><strong class="text-slate-400">Category:</strong> ${issue.issue.category}</p>
             `;
 
             document.getElementById('deleteModal').classList.remove('hidden');
@@ -893,10 +983,15 @@
             API.signOut();
         }
 
-        // Initial load
+        // Initial load — populate the Sort dropdown from the shared
+        // catalog (needs pdf-report.html included above; safe to call
+        // even if the partial hasn't finished parsing — falls back to
+        // the minimal two-option severity toggle), then fetch data.
+        _populateSortSelect('issuesSort', issuesSort);
         loadData();
-        // Auto-refresh every 30 seconds
-        setInterval(loadData, 30000);
+        // Auto-refresh every 30 seconds (silent so we don't fire a
+        // toast on every tick). Cleared / restored by toggleAutoRefresh.
+        autoRefreshInterval = setInterval(() => loadData({ silent: true }), 30000);
     </script>
 </body>
 </html>

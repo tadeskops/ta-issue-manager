@@ -81,6 +81,22 @@
             <div id="authStatus" class="text-center text-slate-300 text-sm">
                 <i class="fas fa-spinner fa-spin mr-2 text-amber-400"></i>Checking Google sign-in…
             </div>
+            <!-- Role-aware dashboard picker. Hidden by default; shown for
+                 accounts that have more than one dashboard available
+                 (e.g. COMMITTEE members can open either the Committee
+                 workspace or the Builder view). Populated in
+                 applyAuthenticatedUser(). Default option is what
+                 goDashboard() will open when the primary button is
+                 clicked. -->
+            <div id="dashboardChoiceWrap" class="hidden">
+                <label for="dashboardChoice" class="block text-[10px] text-slate-400 uppercase tracking-widest mb-1.5 text-center">
+                    <i class="fas fa-layer-group text-amber-400 mr-1"></i>Choose a dashboard
+                </label>
+                <select id="dashboardChoice" onchange="onDashboardChoiceChanged()"
+                        class="w-full bg-slate-800/60 border border-slate-600 text-slate-100 text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 backdrop-blur">
+                    <!-- <option>s injected by applyAuthenticatedUser -->
+                </select>
+            </div>
             <button id="primaryAction" onclick="goDashboard()" class="hidden w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-bold py-3 rounded-lg transition-all border border-amber-400/30 shadow-lg hover:shadow-xl text-sm uppercase tracking-wider">
                 <i class="fas fa-sign-in-alt mr-2"></i><span id="primaryLabel">Open Dashboard</span>
             </button>
@@ -171,9 +187,34 @@
             // (with ?page=...) lives on the OUTER browser address bar, not
             // just inside the Apps Script iframe. Without this, a refresh
             // re-runs doGet with no page param and lands back on /login.
+            // Multi-role accounts see a dropdown (Committee / Builder);
+            // honor its current value if visible, otherwise fall back to
+            // the role's natural home.
+            const sel  = document.getElementById('dashboardChoice');
+            const wrap = document.getElementById('dashboardChoiceWrap');
+            const wantExplicit = (sel && wrap && !wrap.classList.contains('hidden'))
+                ? String(sel.value || '').toLowerCase() : '';
+            if (wantExplicit === 'committee' || wantExplicit === 'builder') {
+                openTop(pageUrl(wantExplicit));
+                return;
+            }
             if (u.role === 'COMMITTEE') openTop(pageUrl('committee'));
             else if (u.role === 'BUILDER') openTop(pageUrl('builder'));
             else location.reload();
+        }
+
+        // Called when the user picks a different dashboard in the
+        // dropdown. Refreshes the primary button label so the CTA
+        // reads e.g. "Open Builder Dashboard" instead of Committee.
+        function onDashboardChoiceChanged() {
+            const sel   = document.getElementById('dashboardChoice');
+            const label = document.getElementById('primaryLabel');
+            if (!sel || !label) return;
+            const map = {
+                committee: 'Open Committee Dashboard',
+                builder:   'Open Builder Dashboard'
+            };
+            label.textContent = map[String(sel.value || '').toLowerCase()] || 'Open Dashboard';
         }
 
         function applyAuthenticatedUser(u) {
@@ -183,16 +224,31 @@
             const switchBtn = document.getElementById('switchAcct');
             const signInBtn = document.getElementById('signInBtn');
             const submitBtn = document.getElementById('submitBtn');
+            const choiceWrap= document.getElementById('dashboardChoiceWrap');
+            const choiceSel = document.getElementById('dashboardChoice');
             window.IRP_USER = u;
             try { localStorage.setItem('IRP_LAST_USER', JSON.stringify({ email: u.email, role: u.role, ts: Date.now() })); } catch(e) {}
             if (signInBtn) signInBtn.classList.add('hidden');
             if (switchBtn) switchBtn.classList.remove('hidden');
             if (u.role === 'COMMITTEE') {
                 statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Technical Committee)';
+                // Committee accounts can also open the Builder view (the
+                // builder page's Router.gs entry accepts both COMMITTEE
+                // and BUILDER). Surface a dropdown so committee members
+                // can pick which workspace to open; Committee is default.
+                if (choiceSel && choiceWrap) {
+                    choiceSel.innerHTML =
+                        '<option value="committee">Committee Dashboard (default)</option>' +
+                        '<option value="builder">Builder Dashboard</option>';
+                    choiceSel.value = 'committee';
+                    choiceWrap.classList.remove('hidden');
+                }
                 label.textContent = 'Open Committee Dashboard';
                 btn.classList.remove('hidden');
             } else if (u.role === 'BUILDER') {
                 statusEl.innerHTML = '<i class="fas fa-check-circle text-green-400 mr-2"></i>Signed in as <b>' + u.email + '</b> (Builder)';
+                // Builders only see their own workspace — no dropdown.
+                if (choiceWrap) choiceWrap.classList.add('hidden');
                 label.textContent = 'Open Builder Dashboard';
                 btn.classList.remove('hidden');
             } else if (u.role === 'RESIDENT') {
